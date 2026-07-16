@@ -113,6 +113,13 @@ internals as a client-agnostic **orchestration core** with two frontends:
 Non-goal for v1: being a general-purpose gateway (auth, multi-tenant, billing).
 Single user, local-first.
 
+*External validation:* Kwok et al.'s **TurboAgent**
+([arXiv:2607.05391](https://arxiv.org/abs/2607.05391)) independently arrived
+at the same boundary — a transparent inference-time proxy between OpenAI-API
+clients (incl. Claude Code) and providers, with a companion web UI for live
+verifier/progress monitoring — and demonstrated it works with unmodified
+harnesses, including running whole benchmarks through it.
+
 ---
 
 ## 3. Roles in the ensemble
@@ -199,7 +206,20 @@ observation in the trajectory (hallucinated environment state).
 Schema validation of tool-call JSON / diff formats. Auto-repair via
 constrained re-ask to a small model before bothering the referee.
 
-### 5.6 Session monitors — FM-1.4, FM-2.1, FM-1.5
+### 5.6 Progress-curve monitor — FM-X.2, FM-2.3, FM-3.1
+The continuous verifier score (§6) evaluated on trajectory *prefixes* acts as
+a task-progress estimator: Kwok et al. show verifier scores rise
+near-monotonically on successful trajectories (Spearman step-order
+correlation 0.848) and stay flat or erratic on failing ones (0.769). Score a
+cheap verifier pass every M executor steps and watch the curve:
+- flat/declining over a window → stall or thrash (FM-X.2, FM-2.3) → referee
+- high plateau near contract completion → supports the completion gate
+- the live curve is streamed to the control plane as a per-task progress
+  meter — the user's earliest intervention signal (§7.1).
+Caution: the paper's success/fail correlation gap is modest (+0.08), so this
+monitor triggers *review*, never automatic hard action.
+
+### 5.7 Session monitors — FM-1.4, FM-2.1, FM-1.5
 On the reconstructed session: sudden context-prefix shrinkage (client
 truncation → warn user), conversation restarts, and turn-count/termination
 watchdogs.
@@ -211,17 +231,56 @@ token 500 instead of token 8,000 is where much of the cost saving lives.
 
 ## 6. Cross-model verification policy
 
+Scoring mechanics adopt **LLM-as-a-Verifier** (Kwok et al., Stanford/UC
+Berkeley/NVIDIA, [arXiv:2607.05391](https://arxiv.org/abs/2607.05391)):
+instead of asking the verifier for a discrete pass/fail or 1–5 score, prompt
+it for a score on a 1–20 scale and compute the **expectation over the scoring
+token's logprob distribution**, yielding a continuous reward in [0, 1].
+Discrete judge scores tie 27% of the time on hard comparisons; the continuous
+formulation eliminates ties and raises pairwise verification accuracy
+(73.1% → 77.5% on Terminal-Bench in the paper). Our verifier pool is local or
+logprob-exposing APIs (vLLM/Ollama, DeepSeek), so logits are available; the
+paper's two-stage workaround covers providers that hide them.
+
+Verification effort has three tunable axes ("verification scaling"), which
+give the risk tiers concrete knobs:
+
+- **G** — score-token granularity (1–20 scale beats coarse scales)
+- **K** — repeated evaluations, averaged (variance ↓ as 1/K)
+- **C** — criteria decomposition: score each contract constraint / failure
+  dimension separately and ensemble, rather than one monolithic "is it
+  correct?" (75.2–76.4% single-criterion → 78.3% ensembled). Our FM-keyed
+  contract checklist *is* the decomposition — each constraint and relevant
+  FM mode is a criterion.
+
+Policy:
+
 - Verifier model ≠ executor model **family** (uncorrelated failure priors).
+  Validated by the paper's SWE-Bench result: a verifier selecting among
+  candidates from *different model families* (78.2%) beat every individual
+  model in the pool (best: 76.8%).
 - Verification is **evidence-based**: verifier receives the contract, the
   output, and trajectory observations (test output, tool results) — and must
   cite evidence for "pass". An unevidenced pass is itself an FM-3.3 event.
 - Verification depth is **risk-tiered** to control cost:
-  - *lite* (small model, contract checklist only) — trivial/low-risk units
-  - *standard* (mid model + evidence citation) — default
-  - *adversarial* (verifier explicitly prompted to refute; optionally 2–3
-    judge votes) — high-risk units, prior failures on this task, or
-    user-flagged.
+  - *lite* — small model, contract checklist only, G=20, K=1
+  - *standard* (default) — mid model + evidence citation, G=20, K=3–8,
+    C = contract constraints
+  - *adversarial* — verifier explicitly prompted to refute; K≥8, full
+    criteria decomposition, optionally a second verifier family — for
+    high-risk units, prior failures on this task, or user-flagged work.
 - Verifier disagreement → referee, never silent acceptance.
+
+### 6.1 Best-of-N across models (un-deferred)
+
+Best-of-N sampling across model families was deferred in v0.0 on cost
+grounds; the paper's **Probabilistic Pivot Tournament (PPT)** makes it
+tractable: rank N candidates with O(N·k) pairwise verifications instead of
+O(N²), using a random ring pass (cancels the verifier's positional bias) to
+pick top-k pivots, then comparing all candidates against pivots only. Adopt
+PPT as the referee's mechanism when it samples multiple candidate repairs,
+and as an opt-in "tournament mode" for hard units (user-triggered or
+budget-permitting).
 
 ---
 
@@ -235,7 +294,10 @@ without a checkpoint the user could have intercepted.*
 Local web UI (+ CLI equivalents) attached to the orchestration core:
 
 - **Live trace view**: task tree (plan → units → attempts), per-node model,
-  tokens, $, FM events with evidence spans; streaming output per node.
+  tokens, $, FM events with evidence spans; streaming output per node; a
+  per-task **progress meter** driven by the continuous verifier score on
+  trajectory prefixes (§5.6) — so a stalling task is visible before it burns
+  budget or commits broken state.
 - **Pause / resume**: global, or scoped to one branch of the task graph.
   Pause points are graph-node boundaries (guaranteed) plus stream
   cancellation (best-effort immediate).
@@ -332,7 +394,20 @@ turn arrives.
   tolerate before it must move to optimistic streaming + retract-on-fail?
 - Verifier calibration: measure verifier false-pass rate against seeded
   failures before trusting risk-tiering (guard against FM-3.3 in our own
-  verifier).
-- Multi-executor parallelism (best-of-N sampling across models) is deferred:
-  strong quality lever, but conflicts with cost efficiency until routing
-  priors exist to justify it.
+  verifier). Kwok et al.'s results use Gemini 2.5 Flash / Qwen 3.6 35B as
+  verifiers; we must confirm Gemma-class models retain enough of the
+  continuous-scoring advantage, or route verification to a mid-tier model.
+- Best-of-N is now in scope via PPT (§6.1), but *when* to spend on N>1
+  candidates (always for hard units? only on referee escalation?) needs
+  empirical routing priors.
+
+## 12. References
+
+- Cemri, Pan, Yang et al., *Why Do Multi-Agent LLM Systems Fail?* (MAST),
+  [arXiv:2503.13657](https://arxiv.org/abs/2503.13657) — failure taxonomy
+  (imported in [`docs/failure-taxonomy.md`](docs/failure-taxonomy.md)).
+- Kwok et al., *LLM-as-a-Verifier: A General-Purpose Verification Framework*,
+  [arXiv:2607.05391](https://arxiv.org/abs/2607.05391) — continuous
+  logprob-based verification, verification-scaling axes (G/K/C),
+  Probabilistic Pivot Tournament, verifier-score-as-progress (VOC),
+  TurboAgent proxy.
