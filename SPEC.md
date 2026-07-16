@@ -238,9 +238,16 @@ it for a score on a 1–20 scale and compute the **expectation over the scoring
 token's logprob distribution**, yielding a continuous reward in [0, 1].
 Discrete judge scores tie 27% of the time on hard comparisons; the continuous
 formulation eliminates ties and raises pairwise verification accuracy
-(73.1% → 77.5% on Terminal-Bench in the paper). Our verifier pool is local or
-logprob-exposing APIs (vLLM/Ollama, DeepSeek), so logits are available; the
-paper's two-stage workaround covers providers that hide them.
+(73.1% → 77.5% on Terminal-Bench in the paper). Logit access constrains
+provider choice: **NanoGPT was tested empirically (2026-07-16) and does not
+return logprobs** — it accepts `logprobs`/`top_logprobs` without error but
+returns `logprobs: null` for DeepSeek V3.2, GLM-4.6, and Gemma 3 27B in both
+documented parameter styles. Therefore NanoGPT-served models are executors
+and stage-1 reasoners only; the scoring pass runs on a logprob-exposing
+backend (local vLLM/SGLang/llama.cpp, or direct provider APIs that return
+logprobs), per the paper's two-stage workaround (Appendix B.6: closed model
+writes the reasoning, open model's logits produce the continuous score —
+recovers +5.2 pts over the closed model's own discrete scores, zero ties).
 
 Verification effort has three tunable axes ("verification scaling"), which
 give the risk tiers concrete knobs:
