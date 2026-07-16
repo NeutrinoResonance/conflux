@@ -251,7 +251,17 @@ case, so the field is stripped in NanoGPT's response normalization layer, not
 by the upstreams. Their docs claim pass-through ("forwards the request to
 providers that support returning token-level log probabilities"; response
 schema lists `logprobs` "returned where supported") — worth a support ticket,
-but do not design against it. Therefore NanoGPT-served models are executors
+but do not design against it.
+
+Provider logprobs matrix (tested 2026-07-16 unless noted):
+
+| Backend | logprobs | Notes |
+|---|---|---|
+| NanoGPT | ✗ | null across 5 model families, 15 pinned providers, both endpoints |
+| Ollama Cloud | ✗ | null on OpenAI-compat endpoint; native `/api/chat` has no logprob fields at all (engine limitation) |
+| OpenCode Zen | ✓ | full top-20 per generated token; verified end-to-end with the 1–20 scoring recipe on `deepseek-v4-flash-free`. Paid models untested (workspace API credits at zero) |
+| DeepInfra / Novita / SiliconFlow direct | ✓ (docs) | vLLM-based; untested by us |
+| Local vLLM / SGLang / llama.cpp | ✓ | reference path for the verifier scoring pass | Therefore NanoGPT-served models are executors
 and stage-1 reasoners only; the scoring pass runs on a logprob-exposing
 backend (local vLLM/SGLang/llama.cpp, or direct provider APIs that return
 logprobs), per the paper's two-stage workaround (Appendix B.6: closed model
