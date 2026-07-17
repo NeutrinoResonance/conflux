@@ -9,7 +9,7 @@ import json
 import re
 
 from .config import Config
-from .providers import ChatResult, Client
+from .providers import ChatResult, Client, chat_chain
 
 _PROMPT = """Extract the explicit requirements from the task below as a JSON \
 array of short, individually checkable constraints (strings). Include format \
@@ -22,10 +22,9 @@ Task:
 
 
 async def extract(client: Client, cfg: Config, task: str) -> tuple[list[str], ChatResult | None]:
-    model = cfg.model(cfg.utility)
     try:
-        res = await client.chat(
-            model,
+        res, _ = await chat_chain(
+            client, cfg, cfg.utility,
             [{"role": "user", "content": _PROMPT.format(task=task[:6000])}],
             max_tokens=800,
             temperature=0.0,

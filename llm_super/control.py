@@ -17,6 +17,7 @@ class ControlState:
     contract_enabled: bool = True
     contract_skip_once: bool = False   # skip checklist for the next turn only
     sandbox_backend: str | None = None  # None = models.yaml default; "off" disables
+    plan_mode: str = "auto"            # auto | on (always plan) | off (never)
     history: list[str] = field(default_factory=list)
 
     def consume_contract_enabled(self) -> bool:
@@ -36,6 +37,7 @@ HELP = """llm-super in-band commands (never forwarded to models):
   !checklist on|off    enable/disable contract checklist extraction
   !checklist skip      skip the checklist for the NEXT turn only, then re-enable
   !sandbox local|gcloud|off|auto   where to execute code for verification
+  !plan auto|on|off    task decomposition for large prompts (auto = size heuristic)
   !help                this message"""
 
 
@@ -59,7 +61,8 @@ def handle(text: str, state: ControlState, model_names: list[str]) -> str | None
             f"executor={'auto' if not state.forced_executor else state.forced_executor} "
             f"budget={'default' if state.budget_usd is None else f'${state.budget_usd:.2f}'} "
             f"checklist={checklist} "
-            f"sandbox={state.sandbox_backend or 'auto'}"
+            f"sandbox={state.sandbox_backend or 'auto'} "
+            f"plan={state.plan_mode}"
         )
     if cmd == "pause":
         state.paused = True
@@ -92,6 +95,11 @@ def handle(text: str, state: ControlState, model_names: list[str]) -> str | None
             state.contract_enabled, state.contract_skip_once = True, True
             return "checklist will be skipped for the next turn, then re-enabled"
         return "usage: !checklist on|off|skip"
+    if cmd == "plan":
+        if arg in ("auto", "on", "off"):
+            state.plan_mode = arg
+            return f"planning mode set to {arg}"
+        return "usage: !plan auto|on|off"
     if cmd == "sandbox":
         if arg in ("local", "gcloud", "off"):
             state.sandbox_backend = arg

@@ -32,6 +32,7 @@ models:
     price_in_per_m: 0.28
     price_out_per_m: 0.42
     failure_priors: [FM-X.1, FM-3.1]
+    fallbacks: [deepseek-v4-pro-go]
   glm-5.2:
     provider: nous
     id: z-ai/glm-5.2
@@ -41,6 +42,7 @@ models:
     price_in_per_m: 0.35
     price_out_per_m: 1.40
     failure_priors: [FM-X.2, FM-2.3]
+    fallbacks: [glm-5.2-go]
   kimi-k2.6:
     provider: nous
     id: moonshotai/kimi-k2.6
@@ -51,6 +53,7 @@ models:
     price_in_per_m: 0.40
     price_out_per_m: 1.60
     failure_priors: []
+    fallbacks: [kimi-k2.6-go]
   qwen-3.7-plus:
     provider: nous
     id: qwen/qwen3.7-plus
@@ -60,6 +63,47 @@ models:
     top_logprobs_max: 5        # Alibaba upstream rejects >5
     price_in_per_m: 0.30
     price_out_per_m: 1.20
+    failure_priors: []
+    fallbacks: [qwen-3.7-plus-go]
+
+  # ---- fallback channel: OpenCode Go subscription (flat-rate) ----
+  deepseek-v4-pro-go:
+    provider: opencode-go
+    id: deepseek-v4-pro
+    family: deepseek
+    roles: [executor, verifier]
+    logprobs: true
+    top_logprobs_max: 5        # top-20 trips a gateway JSON-escaping bug
+    price_in_per_m: 0.0        # covered by subscription
+    price_out_per_m: 0.0
+    failure_priors: [FM-X.1, FM-3.1]
+  glm-5.2-go:
+    provider: opencode-go
+    id: glm-5.2
+    family: glm
+    roles: [executor]
+    logprobs: false            # chosen-token only on Go
+    price_in_per_m: 0.0
+    price_out_per_m: 0.0
+    failure_priors: [FM-X.2, FM-2.3]
+  kimi-k2.6-go:
+    provider: opencode-go
+    id: kimi-k2.6
+    family: kimi
+    roles: [executor]          # empty logprob alts on Go
+    logprobs: false
+    price_in_per_m: 0.0
+    price_out_per_m: 0.0
+    failure_priors: []
+  qwen-3.7-plus-go:
+    provider: opencode-go
+    id: qwen3.7-plus
+    family: qwen
+    roles: [executor, verifier]
+    logprobs: true
+    top_logprobs_max: 5
+    price_in_per_m: 0.0
+    price_out_per_m: 0.0
     failure_priors: []
 
   # ---- small / cheap (contract extraction, lite verification) ----
@@ -73,12 +117,15 @@ models:
     price_in_per_m: 0.08
     price_out_per_m: 0.16
     failure_priors: [FM-X.5, FM-X.7]
+    fallbacks: [qwen-3.7-plus-go]   # utility calls must survive a Nous outage
 
 routing:
   default_executor: deepseek-v4-pro
-  utility: gemma-4-31b          # contract extraction, classification
-  verifier_pool: [qwen-3.7-plus, kimi-k2.6, gemma-4-31b, deepseek-v4-pro]
-  # verifier is chosen from the pool with family != executor family
+  utility: gemma-4-31b          # contract extraction, classification, planning
+  verifier_pool: [qwen-3.7-plus, kimi-k2.6, gemma-4-31b, deepseek-v4-pro,
+                  qwen-3.7-plus-go, deepseek-v4-pro-go]
+  # verifiers are tried in pool order, skipping the executor's family; a
+  # provider failure fails over to the next eligible entry
 
 execution:
   backend: local              # local | gcloud | off  (override per-session with !sandbox)
@@ -92,3 +139,6 @@ supervision:
   max_repairs: 2                # structural-change rule: after N repairs, escalate
   budget_usd_per_task: 0.50
   trailer: true                 # append supervisor summary to responses
+  turn_timeout_s: 1800          # hard wall-clock cap per supervised turn
+  plan_threshold_chars: 1200    # tasks longer than this are considered for decomposition
+  max_plan_units: 6

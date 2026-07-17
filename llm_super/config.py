@@ -27,6 +27,7 @@ class Model:
     price_in_per_m: float
     price_out_per_m: float
     failure_priors: tuple[str, ...] = ()
+    fallbacks: tuple[str, ...] = ()
 
     def cost(self, tokens_in: int, tokens_out: int) -> float:
         return (tokens_in * self.price_in_per_m + tokens_out * self.price_out_per_m) / 1e6
@@ -47,6 +48,9 @@ class Supervision:
     max_repairs: int = 2
     budget_usd_per_task: float = 0.50
     trailer: bool = True
+    turn_timeout_s: float = 1800.0
+    plan_threshold_chars: int = 1200
+    max_plan_units: int = 6
 
 
 @dataclass
@@ -68,13 +72,31 @@ class Config:
     def provider_for(self, model: Model) -> Provider:
         return self.providers[model.provider]
 
+    def eligible_verifiers(self, executor_family: str) -> list[Model]:
+        """Cross-family rule: verifier family must differ from the executor's.
+        Ordered by pool priority; callers fail over down the list."""
+        out = [
+            self.models[name]
+            for name in self.verifier_pool
+            if self.models[name].family != executor_family
+            and self.models[name].logprobs
+            and "verifier" in self.models[name].roles
+        ]
+        if not out:
+            raise RuntimeError(f"no logprobs-capable verifier outside family {executor_family!r}")
+        return out
+
     def pick_verifier(self, executor_family: str) -> Model:
-        """Cross-family rule: verifier family must differ from the executor's."""
-        for name in self.verifier_pool:
-            m = self.models[name]
-            if m.family != executor_family and m.logprobs and "verifier" in m.roles:
-                return m
-        raise RuntimeError(f"no logprobs-capable verifier outside family {executor_family!r}")
+        return self.eligible_verifiers(executor_family)[0]
+
+    def executor_chain(self, name: str) -> list[Model]:
+        """The model plus its declared fallbacks (deduped, existing only)."""
+        chain, seen = [], set()
+        for n in (name, *self.models[name].fallbacks):
+            if n in self.models and n not in seen:
+                chain.append(self.models[n])
+                seen.add(n)
+        return chain
 
 
 def load(path: str | Path = "models.yaml") -> Config:
@@ -97,6 +119,7 @@ def load(path: str | Path = "models.yaml") -> Config:
             price_in_per_m=float(spec.get("price_in_per_m", 0.0)),
             price_out_per_m=float(spec.get("price_out_per_m", 0.0)),
             failure_priors=tuple(spec.get("failure_priors", ())),
+            fallbacks=tuple(spec.get("fallbacks", ())),
         )
         if models[name].provider not in providers:
             raise ValueError(f"model {name!r} references unknown provider {models[name].provider!r}")

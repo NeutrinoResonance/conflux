@@ -8,6 +8,7 @@ text (optimistic token-by-token streaming is a later milestone).
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import time
@@ -124,14 +125,66 @@ async def chat_completions(request: Request):
                               cost_usd=res.cost_usd)
         return _sse(res.text, model_name) if stream else JSONResponse(_completion_body(res.text, model_name))
 
-    # Supervised mode.
-    report = await state["orch"].run_turn(session, messages)
-    text = report.text
-    if cfg.supervision.trailer:
-        text += report.trailer()
-    if report.escalated and not report.text:
-        text = f"[llm-super] {report.escalated}"
-    return _sse(text, model_name) if stream else JSONResponse(_completion_body(text, model_name))
+    # Supervised mode (bounded by a hard wall-clock timeout).
+    timeout = cfg.supervision.turn_timeout_s
+
+    def render(report) -> str:
+        text = report.text
+        if cfg.supervision.trailer:
+            text += report.trailer()
+        if report.escalated and not report.text:
+            text = f"[llm-super] {report.escalated}"
+        return text
+
+    if not stream:
+        try:
+            report = await asyncio.wait_for(
+                state["orch"].run_turn(session, messages), timeout)
+        except asyncio.TimeoutError:
+            state["trace"].record(session, "-", "turn_timeout", timeout_s=timeout)
+            return JSONResponse(_completion_body(
+                f"[llm-super] turn exceeded the {timeout:.0f}s wall-clock limit "
+                "and was stopped; partial work is in the trace (!status, /admin/events)",
+                model_name))
+        return JSONResponse(_completion_body(render(report), model_name))
+
+    # Streaming: long supervised turns need keepalives or clients drop the
+    # connection. SSE comment lines are ignored by OpenAI-compatible clients.
+    cid = f"chatcmpl-{uuid.uuid4().hex[:24]}"
+
+    def chunk(delta: dict, finish: str | None = None) -> str:
+        return "data: " + json.dumps({
+            "id": cid, "object": "chat.completion.chunk",
+            "created": int(time.time()), "model": model_name,
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
+        }) + "\n\n"
+
+    async def gen():
+        task = asyncio.create_task(state["orch"].run_turn(session, messages))
+        start = time.monotonic()
+        yield chunk({"role": "assistant"})
+        while True:
+            done, _ = await asyncio.wait({task}, timeout=15.0)
+            if done:
+                break
+            if time.monotonic() - start > timeout:
+                task.cancel()
+                yield chunk({"content": f"[llm-super] turn exceeded the "
+                             f"{timeout:.0f}s wall-clock limit and was stopped"})
+                yield chunk({}, "stop")
+                yield "data: [DONE]\n\n"
+                return
+            yield ": keepalive\n\n"
+        try:
+            text = render(task.result())
+        except Exception as e:
+            text = f"[llm-super] turn failed: {e}"
+        for i in range(0, len(text), 512):
+            yield chunk({"content": text[i: i + 512]})
+        yield chunk({}, "stop")
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
 
 
 @app.get("/v1/models")

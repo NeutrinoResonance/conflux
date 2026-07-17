@@ -44,6 +44,25 @@ def _opencode_key(provider: str) -> str:
     raise KeyResolutionError(f"no API key for {provider!r} in {OPENCODE_AUTH}")
 
 
+def try_refresh(key_source: str, timeout: float = 60.0) -> bool:
+    """Attempt to refresh an expired credential. Hermes re-mints its agent
+    key as a side effect of `hermes auth status <provider>`; other schemes
+    have no refresh path. Returns True if a refresh was performed."""
+    scheme, _, arg = key_source.partition(":")
+    if scheme != "hermes":
+        return False
+    import subprocess
+
+    try:
+        proc = subprocess.run(
+            ["hermes", "auth", "status", arg],
+            capture_output=True, timeout=timeout, text=True,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return proc.returncode == 0 and "logged in" in (proc.stdout + proc.stderr)
+
+
 def resolve(key_source: str) -> str:
     """Resolve a models.yaml key_source spec to a bearer token."""
     scheme, _, arg = key_source.partition(":")

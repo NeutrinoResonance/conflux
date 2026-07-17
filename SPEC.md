@@ -233,7 +233,29 @@ local|gcloud|off|auto`; config in `models.yaml` `execution:`. The checklist
 stage is likewise user-toggleable (`!checklist on|off|skip` — skip affects
 only the next turn).
 
-### 5.8 Session monitors — FM-1.4, FM-2.1, FM-1.5
+### 5.8 Durability layer (implemented)
+Built for intense tasks and hostile conditions; every mechanism below was
+validated against a real mid-session Nous outage + credential expiry:
+
+- **Fallback chains** (`models.yaml fallbacks:`): executor, utility
+  (contract/planner), and verifier calls all fail over across providers —
+  a full primary-provider outage completes turns on the flat-rate channel.
+- **Per-provider circuit breaker**: 2 consecutive failures open the circuit
+  for 120s; calls skip the dead provider instantly instead of every stage
+  independently re-probing it (which multiplied into >10-min stalls).
+- **Credential self-healing**: a 401 from a Hermes-sourced provider triggers
+  `hermes auth status <provider>` (re-mints the daily agent key), then
+  retries — throttled to once per 5 min.
+- **Task decomposition**: prompts over a size threshold *or* with visible
+  multi-deliverable structure (≥3 enumerated items) are planned into 2–6
+  units, each supervised (execute→monitor→sandbox→verify→repair) with unit-
+  scoped verification, then synthesized. Weak units are reported, not fatal;
+  only pause/budget/outage aborts remaining units.
+- **Parallel verification**: criteria are judged concurrently.
+- **Turn wall-clock timeout** (default 30 min) and SSE keepalives so clients
+  survive long supervised turns.
+
+### 5.9 Session monitors — FM-1.4, FM-2.1, FM-1.5
 On the reconstructed session: sudden context-prefix shrinkage (client
 truncation → warn user), conversation restarts, and turn-count/termination
 watchdogs.

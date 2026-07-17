@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .config import Config, Model
-from .providers import Client
+from .providers import Client, ProviderError
 
 DEFAULT_CRITERIA = [
     "Specification: does the response satisfy every explicit constraint of the task "
@@ -159,15 +159,40 @@ class Verifier:
                 "match the observed behavior?"
             )
         repeats = repeats or sup.verify_repeats
-        model: Model = self.cfg.pick_verifier(executor_family)
+
+        # Durability: fail over through every eligible cross-family verifier
+        # before giving up — a single provider outage must not leave work
+        # unverified (that would be our own FM-3.2).
+        candidates = self.cfg.eligible_verifiers(executor_family)
+        last_error: Exception | None = None
+        for model in candidates:
+            try:
+                return await self._verify_with(
+                    model, task, output, contract, criteria, repeats, evidence, scale
+                )
+            except ProviderError as e:
+                last_error = e
+        raise last_error if last_error else RuntimeError("no verifier available")
+
+    async def _verify_with(
+        self,
+        model: Model,
+        task: str,
+        output: str,
+        contract: list[str],
+        criteria: list[str],
+        repeats: int,
+        evidence: str | None,
+        scale: int,
+    ) -> VerifyReport:
+        sup = self.cfg.supervision
 
         contract_text = "\n".join(f"- {c}" for c in contract) if contract else "(none extracted)"
-        scores: list[CriterionScore] = []
         cost = 0.0
         tokens = 0
-        worst: CriterionScore | None = None
 
-        for criterion in criteria:
+        async def score_criterion(criterion: str) -> CriterionScore:
+            nonlocal cost, tokens
             expected_sum = 0.0
             point_last = 1
             continuous_all = True
@@ -207,17 +232,19 @@ class Verifier:
                 point_last = point
                 continuous_all = continuous_all and continuous
                 tail = res.text.rsplit("<score>", 1)[0][-500:]
-
-            cs = CriterionScore(
+            return CriterionScore(
                 criterion=criterion.split(":")[0],
                 expected=expected_sum / repeats,
                 point=point_last,
                 continuous=continuous_all,
                 reasoning_tail=tail,
             )
-            scores.append(cs)
-            if worst is None or cs.expected < worst.expected:
-                worst = cs
+
+        # Criteria are independent judgments — run them concurrently.
+        import asyncio
+
+        scores = list(await asyncio.gather(*(score_criterion(c) for c in criteria)))
+        worst = min(scores, key=lambda c: c.expected)
 
         norm = (sum(c.expected for c in scores) / len(scores) - 1) / (scale - 1)
         passed = norm >= sup.pass_threshold

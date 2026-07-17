@@ -5,13 +5,14 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
 
 from .config import Config, Model
-from .keys import resolve
+from .keys import resolve, try_refresh
 
 # Some gateways emit unescaped control chars inside reasoning text.
 _CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
@@ -33,10 +34,44 @@ class ProviderError(RuntimeError):
         super().__init__(f"{model}: HTTP {status}: {body[:300]}")
 
 
+async def chat_chain(client: "Client", cfg: Config, model_name: str,
+                     messages: list[dict[str, Any]], **kw) -> tuple[ChatResult, Model]:
+    """Call a model, failing over through its models.yaml fallback chain."""
+    last: Exception | None = None
+    for model in cfg.executor_chain(model_name):
+        try:
+            return await client.chat(model, messages, **kw), model
+        except ProviderError as e:
+            last = e
+    raise last if last else ProviderError(model_name, 0, "empty chain")
+
+
+@dataclass
+class _Breaker:
+    fails: int = 0
+    open_until: float = 0.0
+
+
 class Client:
-    def __init__(self, cfg: Config, timeout: float = 300.0):
+    """Provider client with retries and a per-provider circuit breaker.
+
+    Without the breaker, a flaky provider gets independently re-probed by
+    every stage (executor, contract, planner, each verifier criterion) and
+    their retry loops multiply into minutes of stall. After BREAK_AFTER
+    consecutive failures a provider is skipped instantly for BREAK_FOR
+    seconds; fallback chains route around it."""
+
+    BREAK_AFTER = 2
+    BREAK_FOR = 120.0
+
+    def __init__(self, cfg: Config, timeout: float | httpx.Timeout | None = None):
         self.cfg = cfg
-        self._http = httpx.AsyncClient(timeout=timeout)
+        self._http = httpx.AsyncClient(
+            timeout=timeout if timeout is not None
+            else httpx.Timeout(connect=10.0, read=240.0, write=30.0, pool=10.0)
+        )
+        self._breakers: dict[str, _Breaker] = {}
+        self._last_key_refresh: dict[str, float] = {}
 
     async def aclose(self) -> None:
         await self._http.aclose()
@@ -61,8 +96,17 @@ class Client:
             body["logprobs"] = True
             body["top_logprobs"] = model.top_logprobs_max
 
+        breaker = self._breakers.setdefault(provider.name, _Breaker())
+        if time.monotonic() < breaker.open_until:
+            raise ProviderError(
+                model.name, 0,
+                f"circuit open for provider {provider.name} "
+                f"({breaker.fails} recent failures); using fallbacks",
+            )
+
         last_exc: Exception | None = None
-        for attempt in range(3):  # transient 5xx/timeouts are routine on aggregators
+        data = None
+        for attempt in range(2):  # transient 5xx/timeouts are routine on aggregators
             if attempt:
                 await asyncio.sleep(1.5 * attempt)
             try:
@@ -86,11 +130,28 @@ class Client:
             if resp.status_code >= 500:
                 last_exc = ProviderError(model.name, resp.status_code, json.dumps(data))
                 continue
+            if resp.status_code in (401, 403):
+                # Expired credential (the Nous agent key rotates ~daily).
+                # Self-heal: trigger the provider's refresh path once per
+                # cooldown, then retry the request with the new key.
+                now = time.monotonic()
+                if now - self._last_key_refresh.get(provider.name, 0) > 300:
+                    self._last_key_refresh[provider.name] = now
+                    refreshed = await asyncio.to_thread(try_refresh, provider.key_source)
+                    if refreshed:
+                        continue
+                raise ProviderError(model.name, resp.status_code, json.dumps(data))
             if resp.status_code != 200 or "choices" not in data:
+                # other 4xx: our request is wrong for this provider — don't
+                # retry, and don't punish the provider's breaker for it
                 raise ProviderError(model.name, resp.status_code, json.dumps(data))
             break
         else:
+            breaker.fails += 1
+            if breaker.fails >= self.BREAK_AFTER:
+                breaker.open_until = time.monotonic() + self.BREAK_FOR
             raise last_exc if last_exc else ProviderError(model.name, 0, "exhausted retries")
+        breaker.fails = 0
 
         choice = data["choices"][0]
         content = (choice.get("message") or {}).get("content") or ""
