@@ -262,11 +262,25 @@ tr:last-child td { border-bottom: none; }
           <option value="off">off</option>
         </select>
       </label>
-      <label>ensemble
-        <select id="ensembleSel" title="best-of-N model families + verified fusion; ~N+1x cost">
-          <option value="0">off</option><option value="2">2</option>
+      <label>strategy
+        <select id="strategySel" title="how answers are produced: one routed model / the history-ranked best / top-of-N candidates / set-union merge of N / synthesized fusion of N">
+          <option value="single">single</option>
+          <option value="exploit">exploit (ranking best)</option>
+          <option value="best">best-of-N</option>
+          <option value="union">union-of-N</option>
+          <option value="fuse">fuse-of-N</option>
+        </select>
+      </label>
+      <label>N
+        <select id="ensembleSel" title="candidates for best/union/fuse; ~Nx-N+1x cost">
+          <option value="2">2</option>
           <option value="3">3</option><option value="4">4</option>
         </select>
+      </label>
+      <label>cutoff
+        <input id="cutoffInp" type="number" step="0.05" min="0.05" max="1"
+               placeholder="off" style="width:60px"
+               title="short-circuit: first candidate the verifier scores ≥ this wins immediately; others are cancelled">
       </label>
     </div>
     <div class="controls" style="margin-top:8px">
@@ -368,7 +382,9 @@ $("#budgetInp").onchange = e => post("budget", e.target.value);
 $("#checklistSel").onchange = e => post("checklist", e.target.value);
 $("#sandboxSel").onchange = e => post("sandbox", e.target.value);
 $("#planSel").onchange = e => post("plan", e.target.value);
+$("#strategySel").onchange = e => post("strategy", e.target.value);
 $("#ensembleSel").onchange = e => post("ensemble", e.target.value);
+$("#cutoffInp").onchange = e => post("cutoff", e.target.value);
 
 function tile(k, v, small) {
   return `<div class="tile"><div class="k">${esc(k)}</div>
@@ -400,7 +416,13 @@ function renderStatus(st, cfgModels) {
   $("#checklistSel").value = st.checklist || "on";
   $("#sandboxSel").value = st.sandbox || "auto";
   $("#planSel").value = st.plan || "auto";
-  $("#ensembleSel").value = String(st.ensemble || 0);
+  $("#strategySel").value = st.strategy || "single";
+  const multi = ["best", "union", "fuse"].includes(st.strategy);
+  $("#ensembleSel").disabled = !multi;
+  $("#ensembleSel").value = String(multi ? (st.ensemble || 3) : 2);
+  $("#cutoffInp").disabled = !multi;
+  if (document.activeElement !== $("#cutoffInp"))
+    $("#cutoffInp").value = st.cutoff ?? "";
   $("#breakList").innerHTML = (st.breakpoints || []).length
     ? st.breakpoints.map(b =>
         `<span class="badge">${esc(b)} <a href="#" style="text-decoration:none"
@@ -413,7 +435,9 @@ function renderStatus(st, cfgModels) {
     tile("spent (recent)", "$" + (st.recent_spend ?? 0).toFixed(3)) +
     tile("checklist", esc(st.checklist || "on")) +
     tile("sandbox", esc(st.sandbox || "auto")) +
-    tile("plan", esc(st.plan || "auto"));
+    tile("plan", esc(st.plan || "auto")) +
+    tile("strategy", esc((st.strategy || "single") + (multi ? " ×" + st.ensemble : "")),
+         st.cutoff != null && multi ? "cutoff " + st.cutoff : "");
 }
 
 // expand/collapse state survives the 2s re-render
@@ -905,10 +929,63 @@ function renderRouting(r) {
       `<input type="text" style="width:100%" value="${esc(s.verifier_pool.join(", "))}"
         onchange="setRouting('verifier_pool', this.value)">`,
   };
+  routingData = r;
+  const chip = (m, name, i, len) =>
+    `<span class="badge" title="${esc(r.models[name] ? r.models[name].provider : "?")}">` +
+    `${esc(name)} <small>${esc(r.models[name] ? r.models[name].provider : "?")}</small>` +
+    (i > 1 ? ` <a href="#" onclick="chainMove('${m}',${i - 1},-1);return false" title="try earlier">◀</a>` : "") +
+    (i < len - 1 ? ` <a href="#" onclick="chainMove('${m}',${i - 1},1);return false" title="try later">▶</a>` : "") +
+    ` <a href="#" onclick="chainDrop('${m}',${i - 1});return false" title="remove">×</a></span>`;
+  const chainRows = names.map(m => {
+    const fb = r.models[m].fallbacks || [];
+    const chain = [m, ...fb];
+    const addable = names.filter(n => n !== m && !fb.includes(n));
+    return `<div class="fname">${esc(m)}</div><div class="fval">` +
+      `<span class="badge" title="primary — always tried first">` +
+      `${esc(m)} <small>${esc(r.models[m].provider)}</small></span>` +
+      chain.slice(1).map((n, i) => " → " + chip(m, n, i + 1, chain.length)).join("") +
+      ` <select onchange="chainAdd('${m}', this.value); this.value=''">` +
+      `<option value="">+ fallback…</option>` +
+      addable.map(n => `<option>${esc(n)}</option>`).join("") +
+      `</select></div><span></span><span></span>`;
+  }).join("");
   $("#routing").innerHTML = `<div class="settings-grid">` +
     Object.keys(ROUTING_LABELS).map(k =>
       `<div class="fname">${ROUTING_LABELS[k]}</div><div class="fval">${controls[k]}</div><span></span><span></span>`
-    ).join("") + `</div>`;
+    ).join("") + `</div>` +
+    `<details id="chainsBox"${chainsOpen ? " open" : ""}
+       ontoggle="chainsOpen = this.open">
+      <summary style="cursor:pointer;color:var(--muted);margin-top:8px">
+        provider rotation — per-model failover order (first entry always runs first)</summary>
+      <div class="settings-grid" style="margin-top:6px">${chainRows}</div>
+    </details>`;
+}
+let routingData = null;
+let chainsOpen = false;
+async function chainSet(model, chain) {
+  if (document.activeElement) document.activeElement.blur();
+  const resp = await fetch("/admin/routing", {method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({patch: {fallbacks: {[model]: chain}}})});
+  if (!resp.ok) flash("chain: ✗ " + ((await resp.json()).error || resp.status));
+  else flash("rotation for " + model + " updated (runtime only)");
+  renderRouting(await fetch("/admin/routing").then(r => r.json()));
+}
+function chainMove(model, i, d) {
+  const c = (routingData.models[model].fallbacks || []).slice();
+  const j = i + d;
+  if (j < 0 || j >= c.length) return;
+  [c[i], c[j]] = [c[j], c[i]];
+  chainSet(model, c);
+}
+function chainDrop(model, i) {
+  const c = (routingData.models[model].fallbacks || []).slice();
+  c.splice(i, 1);
+  chainSet(model, c);
+}
+function chainAdd(model, name) {
+  if (!name) return;
+  chainSet(model, (routingData.models[model].fallbacks || []).concat([name]));
 }
 async function setRouting(key, value) {
   if (key === "verifier_pool")

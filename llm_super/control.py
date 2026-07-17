@@ -18,10 +18,29 @@ class ControlState:
     contract_skip_once: bool = False   # skip checklist for the next turn only
     sandbox_backend: str | None = None  # None = models.yaml default; "off" disables
     plan_mode: str = "auto"            # auto | on (always plan) | off (never)
-    ensemble_n: int = 0                # >=2: best-of-N families + fusion (§6.1)
+    # Answer strategy (§6.1): how a plain turn produces its answer.
+    #   single  — one supervised executor (forced > learned > static routing)
+    #   exploit — strictly the best-ranked executor from outcome history
+    #   best    — N families in parallel, return the top-scoring candidate
+    #   union   — N families, merge ALL distinct valid content (set union)
+    #   fuse    — N families, synthesize keeping the strongest elements
+    strategy: str = "single"
+    ensemble_n: int = 0                # N for the multi-candidate strategies
+    cutoff: float | None = None        # short-circuit: first candidate the
+    # verifier scores >= cutoff wins immediately; remaining ones are cancelled
     breakpoints: list[str] = field(default_factory=list)
     # rules: "fm:<FM-ID>" | "budget:<usd>" | "escalation" (SPEC §7.1)
     history: list[str] = field(default_factory=list)
+
+    def multi_mode(self) -> str:
+        """Active multi-candidate mode ("best"/"union"/"fuse") or "".
+        A bare ensemble_n >= 2 with strategy "single" counts as "fuse" —
+        that keeps the original !ensemble semantics."""
+        if self.strategy in ("best", "union", "fuse") and self.ensemble_n >= 2:
+            return self.strategy
+        if self.strategy == "single" and self.ensemble_n >= 2:
+            return "fuse"
+        return ""
 
     def consume_contract_enabled(self) -> bool:
         """Whether the *current* turn should extract a contract checklist."""
@@ -58,7 +77,13 @@ HELP = """llm-super in-band commands (never forwarded to models):
   !checklist skip      skip the checklist for the NEXT turn only, then re-enable
   !sandbox local|gcloud|off|auto   where to execute code for verification
   !plan auto|on|off    task decomposition for large prompts (auto = size heuristic)
-  !ensemble <2-4>|off  best-of-N across model families + verified fusion (costly)
+  !strategy single|exploit|best <2-4>|union <2-4>|fuse <2-4>
+                       how answers are produced: one routed model / the
+                       history-ranked best model / top-of-N candidates /
+                       set-union merge of N / synthesized fusion of N
+  !cutoff <0-1>|off    short-circuit multi-candidate turns: first candidate
+                       verified at or above this score wins immediately
+  !ensemble <2-4>|off  alias for !strategy fuse <N> (the original §6.1 mode)
   !break fm:<FM-ID> | budget:<usd> | escalation   add a breakpoint (pause when hit)
   !break list / !break clear [rule]               show / remove breakpoints
   !checkpoints         list resumable checkpoints for this conversation
@@ -91,7 +116,9 @@ def handle(text: str, state: ControlState, model_names: list[str],
             f"checklist={checklist} "
             f"sandbox={state.sandbox_backend or 'auto'} "
             f"plan={state.plan_mode} "
-            f"ensemble={'off' if not state.ensemble_n else state.ensemble_n} "
+            f"strategy={state.strategy}"
+            f"{f' n={state.ensemble_n}' if state.multi_mode() else ''} "
+            f"cutoff={'off' if state.cutoff is None else f'{state.cutoff:.2f}'} "
             f"breakpoints={','.join(state.breakpoints) or 'none'}"
         )
     if cmd == "pause":
@@ -138,9 +165,53 @@ def handle(text: str, state: ControlState, model_names: list[str],
             state.sandbox_backend = None
             return "code execution backend returned to models.yaml default"
         return "usage: !sandbox local|gcloud|off|auto"
+    if cmd == "strategy":
+        mode, _, nstr = arg.partition(" ")
+        if mode in ("single", "exploit"):
+            state.strategy, state.ensemble_n = mode, 0
+            return ("strategy: one supervised executor per turn "
+                    "(forced > learned > static routing)" if mode == "single"
+                    else "strategy: exploit — every turn uses the best-ranked "
+                         "executor from outcome history (!strategy single to undo)")
+        if mode in ("best", "union", "fuse"):
+            try:
+                n = int(nstr or state.ensemble_n or 3)
+            except ValueError:
+                return "usage: !strategy best|union|fuse <2-4>"
+            if not 2 <= n <= 4:
+                return "usage: !strategy best|union|fuse <2-4>"
+            state.strategy, state.ensemble_n = mode, n
+            desc = {
+                "best": f"run {n} model families in parallel, verify each, "
+                        "return the top-scoring candidate",
+                "union": f"run {n} model families, merge every distinct valid "
+                         "element from all candidates (set union), verify the merge",
+                "fuse": f"run {n} model families, synthesize a fused answer "
+                        "keeping the strongest elements, verify the fusion",
+            }[mode]
+            return (f"strategy: {mode} — {desc} — roughly "
+                    f"{n + (0 if mode == 'best' else 1)}x the usual cost"
+                    + ("" if state.cutoff is None else
+                       f"; cutoff {state.cutoff:.2f} may end turns early"))
+        return "usage: !strategy single | exploit | best <2-4> | union <2-4> | fuse <2-4>"
+    if cmd == "cutoff":
+        if arg == "off":
+            state.cutoff = None
+            return "short-circuit cutoff off — all candidates always run to completion"
+        try:
+            v = float(arg)
+        except ValueError:
+            return "usage: !cutoff <0-1> | off"
+        if not 0 < v <= 1:
+            return "usage: !cutoff <0-1> | off"
+        state.cutoff = v
+        return (f"short-circuit cutoff set to {v:.2f} — in best/union/fuse "
+                "turns the first candidate the verifier scores at or above "
+                "this wins immediately and the rest are cancelled")
     if cmd == "ensemble":
         if arg in ("off", "0"):
             state.ensemble_n = 0
+            state.strategy = "single"
             return "ensemble mode off"
         try:
             n = int(arg)
@@ -149,6 +220,7 @@ def handle(text: str, state: ControlState, model_names: list[str],
         if not 2 <= n <= 4:
             return "usage: !ensemble <2-4> | off"
         state.ensemble_n = n
+        state.strategy = "fuse"
         return (f"ensemble mode: every plain turn samples {n} model families "
                 "in parallel, verifies each, and returns a verified fusion — "
                 f"roughly {n + 1}x the usual cost (!ensemble off to stop)")

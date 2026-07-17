@@ -103,6 +103,23 @@ class Config:
     def pick_verifier(self, executor_family: str) -> Model:
         return self.eligible_verifiers(executor_family)[0]
 
+    def set_fallbacks(self, name: str, fallbacks: list[str]) -> None:
+        """Runtime reorder/replace of a model's provider-rotation chain
+        (the model itself is always first; see executor_chain). In-memory
+        only — models.yaml stays the on-disk source of truth."""
+        import dataclasses
+        m = self.model(name)
+        seen: set[str] = set()
+        clean: list[str] = []
+        for n in fallbacks:
+            if n == name or n in seen:
+                continue
+            if n not in self.models:
+                raise ValueError(f"unknown fallback model {n!r} for {name!r}")
+            seen.add(n)
+            clean.append(n)
+        self.models[name] = dataclasses.replace(m, fallbacks=tuple(clean))
+
     def executor_chain(self, name: str) -> list[Model]:
         """The model plus its declared fallbacks (deduped, existing only)."""
         chain, seen = [], set()

@@ -392,20 +392,38 @@ tractable: rank N candidates with O(N·k) pairwise verifications instead of
 O(N²), using a random ring pass (cancels the verifier's positional bias) to
 pick top-k pivots, then comparing all candidates against pivots only.
 
-*Implemented (pointwise variant) as ensemble mode* — `!ensemble <2-4>`
-(dashboard: Steering → ensemble): each plain turn samples N model families
-in parallel (family choice reuses the referee's repair-prior ordering),
-cross-family verifies each candidate, then **fuses**: the candidates and
-their reviewer scores become the prompt for a combined answer, which is
-itself verified and must out-score the best candidate to win — otherwise
-the best candidate is returned and the rejection is traced. Every stage is
+*Implemented (pointwise variant) as user-selectable answer strategies* —
+`!strategy` (dashboard: Steering → strategy). Every plain turn produces its
+answer by one of five modes:
+
+- **single** (default): one supervised executor — forced (`!use`) >
+  learned routing > static default.
+- **exploit**: strictly the best-ranked executor from outcome history
+  (`model_stats`), ignoring `min_samples` and the learned toggle — "just
+  use the ranking winner".
+- **best `<2-4>`**: N model families in parallel (family choice reuses the
+  referee's repair-prior ordering), each candidate cross-family verified;
+  the top-scoring candidate is returned as-is. ~N× cost.
+- **union `<2-4>`**: as `best`, then a merge prompt demanding the **set
+  union** — every distinct valid element from ANY candidate, deduplicated,
+  contradictions resolved toward demonstrable correctness. ~(N+1)× cost.
+- **fuse `<2-4>`**: as `best`, then a synthesis prompt keeping the
+  strongest elements of each candidate (`!ensemble <2-4>` remains as an
+  alias for this original mode). ~(N+1)× cost.
+
+Merged answers (union/fuse) are themselves verified and must out-score the
+best candidate to win — otherwise the best candidate is returned and the
+rejection is traced. `!cutoff <0-1>` adds a verifier **short-circuit** to
+the multi-candidate modes: the first candidate scoring at or above the
+cutoff wins immediately and pending candidate tasks are cancelled (note:
+already-in-flight provider calls may still bill). Every stage is
 budget-gated; total provider outage degrades to the normal supervised
 unit. Ranking uses pointwise continuous scores (no ties, so no pairwise
 tournament is needed); PPT remains the upgrade path if pairwise comparison
 ever proves more discriminating than pointwise at equal cost. This also
 answers "can outputs of several models form the next prompt" generally:
-unit outputs already feed dependent units and synthesis (§5.8), and
-ensemble mode does it for N answers to the *same* task.
+unit outputs already feed dependent units and synthesis (§5.8), and the
+union/fuse strategies do it for N answers to the *same* task.
 
 ---
 
@@ -419,10 +437,13 @@ without a checkpoint the user could have intercepted.*
 Local web UI (+ CLI equivalents) attached to the orchestration core.
 *Implemented (first cut) at `/` on the proxy:* status tiles, steering
 controls (pause/resume, executor forcing, budget, checklist, sandbox, plan
-mode — same semantics as the !commands), breakpoint rules (add/clear from
-the Steering panel or `!break`), a Routing panel (runtime overrides for
-default/utility/referee/trivial executors, learned routing, verifier pool —
-`/admin/routing`; models.yaml persists), a Load-balancing panel
+mode, answer strategy + N + short-circuit cutoff — same semantics as the
+!commands), breakpoint rules (add/clear from the Steering panel or
+`!break`), a Routing panel (runtime overrides for
+default/utility/referee/trivial executors, learned routing, verifier pool,
+and per-model **provider rotation chains** — each model's ordered failover
+list, reorderable/editable per model — `/admin/routing`; models.yaml
+persists), a Load-balancing panel
 (`/admin/balance`: per-provider 5h/week/month window usage vs the limits
 declared in `providers.<name>.limits`, with subscription channels re-priced
 at nominal twin rates, "≈ N requests left" estimates matching how the Go

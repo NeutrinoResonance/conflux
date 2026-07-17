@@ -105,9 +105,19 @@ class Orchestrator:
         self.history = history or History(":memory:")
 
     def _route_executor(self) -> str:
-        """Forced > learned (best recent avg score, min sample size) > static."""
+        """Forced > exploit > learned (best recent avg score, min sample
+        size) > static. Exploit (!strategy exploit) is the user saying
+        "just use the ranking winner": it takes the best-scoring executor
+        with ANY history, ignoring min_samples and the learned toggle."""
         if self.control.forced_executor:
             return self.control.forced_executor
+        if self.control.strategy == "exploit":
+            eligible = {n for n, m in self.cfg.models.items() if "executor" in m.roles}
+            ranked = [row for row in self.history.stats()
+                      if row["model"] in eligible and row["turns"] >= 1
+                      and (row["avg_score"] or 0) > 0]
+            if ranked:
+                return max(ranked, key=lambda r: r["avg_score"] or 0)["model"]
         if self.cfg.learned_routing:
             eligible = {n for n, m in self.cfg.models.items() if "executor" in m.roles}
             best = None
@@ -393,11 +403,17 @@ class Orchestrator:
         budget: Budget,
         log,
     ) -> UnitResult:
-        """Best-of-N across model families, then fusion: each candidate is
-        independently produced and cross-family verified (the continuous
+        """Multi-candidate strategies (§6.1). N model families produce
+        candidates in parallel, each cross-family verified (the continuous
         score replaces §6.1's pairwise tournament — pointwise scores don't
-        tie); the candidates AND their scores then become the prompt for a
-        fused answer, which must out-score the best candidate to win."""
+        tie). Then, by mode: "best" returns the top-scoring candidate;
+        "union"/"fuse" send the candidates AND their scores through a merge
+        prompt whose result must out-score the best candidate to win. A
+        cutoff (!cutoff) lets the verifier short-circuit: the first
+        candidate scoring >= cutoff wins on the spot and pending candidate
+        tasks are cancelled (in-flight provider calls may still bill)."""
+        mode = self.control.multi_mode() or "fuse"
+        cutoff = self.control.cutoff
         n = max(2, self.control.ensemble_n)
         primary = self._route_executor()
         names = [primary]
@@ -406,7 +422,7 @@ class Orchestrator:
             if len(names) >= n:
                 break
             names.append(cand)
-        log("ensemble_start", models=names)
+        log("ensemble_start", models=names, mode=mode, cutoff=cutoff)
 
         async def one(name: str):
             executed = await self._execute(
@@ -430,8 +446,21 @@ class Orchestrator:
                 cost_usd=rep.cost_usd)
             return (m, res, rep)
 
-        scored = [r for r in await asyncio.gather(*(one(nm) for nm in names))
-                  if r is not None]
+        tasks = [asyncio.ensure_future(one(nm)) for nm in names]
+        scored, short_circuited = [], False
+        for fut in asyncio.as_completed(tasks):
+            r = await fut
+            if r is None:
+                continue
+            scored.append(r)
+            if cutoff is not None and r[2].score >= cutoff:
+                cancelled = [t for t in tasks if not t.done() and t.cancel()]
+                if cancelled:
+                    await asyncio.gather(*cancelled, return_exceptions=True)
+                log("short_circuit", model=r[0].name, score=r[2].score,
+                    cutoff=cutoff, cancelled=len(cancelled))
+                short_circuited = True
+                break
         if not scored:
             # every candidate died — degrade to the normal supervised unit
             log("ensemble_degraded", reason="no verified candidates")
@@ -441,15 +470,25 @@ class Orchestrator:
 
         best_m, best_res, best_rep = max(scored, key=lambda t: t[2].score)
         winner = best_m.name
-        if len(scored) >= 2 and not budget.exhausted:
+        merge_style = {
+            "union": "Merge them into ONE answer to the ORIGINAL request "
+                     "that is the UNION of the candidates: include every "
+                     "distinct, valid element that appears in ANY candidate "
+                     "(deduplicate overlap; nothing correct may be dropped), "
+                     "and resolve contradictions in favor of demonstrable "
+                     "correctness.",
+            "fuse": "Fuse them into ONE answer to the ORIGINAL request that "
+                    "is at least as good as the best candidate: keep the "
+                    "strongest elements of each, resolve disagreements in "
+                    "favor of demonstrable correctness, and drop redundancy.",
+        }
+        if (mode in merge_style and not short_circuited
+                and len(scored) >= 2 and not budget.exhausted):
             fusion_prompt = (
                 f"{len(scored)} independent solutions to the same task "
                 "follow, each produced by a different model and scored by an "
-                "independent reviewer (0-1). Fuse them into ONE answer to "
-                "the ORIGINAL request that is at least as good as the best "
-                "candidate: keep the strongest elements of each, resolve "
-                "disagreements in favor of demonstrable correctness, and "
-                "drop redundancy.\n\n" + "\n\n".join(
+                f"independent reviewer (0-1). {merge_style[mode]}\n\n"
+                + "\n\n".join(
                     f"[candidate {i+1} — {m.name}, reviewer score "
                     f"{rep.score:.2f}]\n{res.text[:8000]}"
                     for i, (m, res, rep) in enumerate(scored))
@@ -472,17 +511,18 @@ class Orchestrator:
                     log("verify", model=frep.verifier, cost_usd=frep.cost_usd,
                         score=frep.score, passed=frep.passed,
                         stage="ensemble-fusion")
-                    # the fused answer must EARN the win — a fusion that
+                    # the merged answer must EARN the win — a merge that
                     # scores below the best candidate is discarded
                     if frep.score >= best_rep.score:
                         best_res, best_rep = fres, frep
-                        winner = f"fusion({fm.name})"
+                        winner = f"{'union' if mode == 'union' else 'fusion'}({fm.name})"
                     else:
                         log("ensemble_fusion_rejected", fusion_score=frep.score,
-                            best_candidate=best_m.name, score=best_rep.score)
+                            best_candidate=best_m.name, score=best_rep.score,
+                            mode=mode)
                 except Exception as e:
                     log("verify_error", error=str(e)[:300])
-        log("ensemble_winner", model=winner, score=best_rep.score,
+        log("ensemble_winner", model=winner, score=best_rep.score, mode=mode,
             candidates={m.name: round(rep.score, 3) for m, _, rep in scored})
 
         events = run_monitors(best_res.text, task_text)
@@ -491,7 +531,7 @@ class Orchestrator:
                 confidence=ev.confidence, evidence=ev.evidence)
         return UnitResult(
             text=best_res.text,
-            attempts=len(scored) + (1 if winner.startswith("fusion") else 0),
+            attempts=len(scored) + (1 if "(" in winner else 0),
             verify=best_rep, fm_events=sorted({ev.fm_id for ev in events}),
             escalated="" if best_rep.passed else
             f"ensemble best score {best_rep.score:.2f} below the quality bar",
@@ -696,7 +736,7 @@ class Orchestrator:
                     cost_usd=pres.cost_usd if pres else 0)
 
         if not units:
-            if self.control.ensemble_n >= 2:
+            if self.control.multi_mode():
                 unit = await self._ensemble_turn(
                     session, task_id, messages, task_text, constraints,
                     budget, log)

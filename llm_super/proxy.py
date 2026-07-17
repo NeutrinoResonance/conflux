@@ -299,6 +299,8 @@ async def admin_status():
         "sandbox": c.sandbox_backend or "auto",
         "plan": c.plan_mode,
         "ensemble": c.ensemble_n,
+        "strategy": c.strategy,
+        "cutoff": c.cutoff,
         "breakpoints": list(c.breakpoints),
         "models": list(state["cfg"].models),
         "recent_spend": round(sum(e.get("cost_usd") or 0 for e in recent), 4),
@@ -338,6 +340,30 @@ async def admin_control(request: Request):
             return JSONResponse({"error": "ensemble must be 0 (off) or 2-4"},
                                 status_code=400)
         c.ensemble_n = n
+        if n and c.strategy not in ("best", "union", "fuse"):
+            c.strategy = "fuse"
+        if not n and c.strategy in ("best", "union", "fuse"):
+            c.strategy = "single"
+    elif field == "strategy":
+        if value not in ("single", "exploit", "best", "union", "fuse"):
+            return JSONResponse({"error": f"bad strategy {value!r}"}, status_code=400)
+        c.strategy = value
+        if value in ("single", "exploit"):
+            c.ensemble_n = 0
+        elif c.ensemble_n < 2:
+            c.ensemble_n = 3
+    elif field == "cutoff":
+        if value in ("", None, "off"):
+            c.cutoff = None
+        else:
+            try:
+                v = float(value)
+            except (TypeError, ValueError):
+                return JSONResponse({"error": f"bad cutoff {value!r}"}, status_code=400)
+            if not 0 < v <= 1:
+                return JSONResponse({"error": "cutoff must be in (0, 1]"},
+                                    status_code=400)
+            c.cutoff = v
     elif field == "break_add":
         rule = str(value or "").strip()
         valid = (rule == "escalation"
@@ -379,7 +405,8 @@ async def admin_routing():
             "verifier_pool": list(cfg.verifier_pool),
         },
         "models": {name: {"roles": list(m.roles), "family": m.family,
-                          "logprobs": m.logprobs}
+                          "logprobs": m.logprobs, "provider": m.provider,
+                          "fallbacks": list(m.fallbacks)}
                    for name, m in cfg.models.items()},
     }
 
@@ -417,6 +444,21 @@ async def admin_routing_set(request: Request):
                     {"error": f"unknown models in pool: {', '.join(bad) or '(empty)'}"},
                     status_code=400)
             cfg.verifier_pool = names
+        elif key == "fallbacks":
+            # value: {model_name: [ordered fallback names]} — the model's
+            # provider-rotation order (model itself always runs first)
+            if not isinstance(value, dict):
+                return JSONResponse({"error": "fallbacks must be a mapping"},
+                                    status_code=400)
+            try:
+                for mname, chain in value.items():
+                    if mname not in cfg.models:
+                        raise ValueError(f"unknown model {mname!r}")
+                    if not isinstance(chain, list):
+                        raise ValueError(f"chain for {mname!r} must be a list")
+                    cfg.set_fallbacks(mname, [str(x) for x in chain])
+            except ValueError as e:
+                return JSONResponse({"error": str(e)}, status_code=400)
         else:
             return JSONResponse({"error": f"unknown field {key!r}"},
                                 status_code=400)
