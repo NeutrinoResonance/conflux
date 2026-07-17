@@ -429,7 +429,14 @@ at nominal twin rates, "≈ N requests left" estimates matching how the Go
 docs express limits, and live circuit/cooldown state), task cards with
 verification score bars, a per-task "⧉ request" quick-copy (the exact
 request text — locator for editing/rewinding that message in the client,
-and the checkpoint-resume key when resent verbatim), failure-mode badges
+and the checkpoint-resume key when resent verbatim), an **edit history**
+per conversation (every divergence of the incoming message prefix — a
+client-side edit or rewind — is detected against the last recorded
+request, stored as a numbered branch with old→new text, and shown above
+the task list and via `!edits`; superseded branches' turns and payloads
+remain in the trace, so nothing edited away is lost; caveat: sessions are
+keyed by the first user message, so editing that one starts a new
+session), failure-mode badges
 with cross-turn advisories, escalation callouts, per-model outcome stats,
 and the raw event feed; 2s polling, light/dark.
 Remaining from the full vision below: per-node streaming output and

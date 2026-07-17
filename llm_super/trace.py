@@ -107,6 +107,21 @@ class Trace:
         )
         self._conn.commit()
 
+    def last_client_request(self, session: str) -> list[dict] | None:
+        """The previous turn's full message prefix — the baseline for
+        detecting client-side edits/rewinds (history.diff_prefix)."""
+        row = self._conn.execute(
+            "SELECT payload FROM exchanges WHERE session=? AND "
+            "kind='client_request' ORDER BY id DESC LIMIT 1",
+            (session,)).fetchone()
+        if not row:
+            return None
+        try:
+            msgs = json.loads(row[0]).get("messages")
+        except (json.JSONDecodeError, AttributeError):
+            return None
+        return msgs if isinstance(msgs, list) else None
+
     def exchanges(self, task: str | None = None, session: str | None = None,
                   n: int = 100) -> list[dict[str, Any]]:
         q = ("SELECT id, ts, session, task, kind, model, payload FROM exchanges")

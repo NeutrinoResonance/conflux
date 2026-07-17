@@ -30,6 +30,38 @@ def similarity(a: str, b: str) -> float:
     return len(wa & wb) / len(wa | wb)
 
 
+def _msg_text(m: dict) -> str:
+    c = m.get("content")
+    if isinstance(c, list):  # OpenAI content-parts form
+        return " ".join(str(p.get("text", "")) for p in c if isinstance(p, dict))
+    return str(c or "")
+
+
+def diff_prefix(old: list[dict], new: list[dict]) -> dict[str, Any] | None:
+    """Compare the previous conversation prefix with the incoming one.
+
+    Returns None for the normal cases — continuation (old is a strict
+    prefix of new) and identical resend (the checkpoint-resume flow) — and
+    a divergence record otherwise:
+    - "edit": a message at `position` was replaced (the client edited and
+      resent — or rewrote history wholesale, e.g. compaction; either way
+      the branch forked there)
+    - "rewind": the conversation was truncated at `position` with nothing
+      new yet.
+    Caveat: sessions are keyed by the FIRST user message, so editing that
+    message starts a new session and cannot be detected here."""
+    o = [(m.get("role", ""), _msg_text(m)) for m in old]
+    n = [(m.get("role", ""), _msg_text(m)) for m in new]
+    for i in range(min(len(o), len(n))):
+        if o[i] != n[i]:
+            return {"kind": "edit", "position": i, "role": n[i][0],
+                    "old": o[i][1], "new": n[i][1]}
+    if len(n) < len(o):
+        return {"kind": "rewind", "position": len(n), "role": o[len(n)][0],
+                "old": o[len(n)][1], "new": ""}
+    return None
+
+
 class History:
     def __init__(self, path: str | Path = "traces.db"):
         self._conn = sqlite3.connect(str(path), check_same_thread=False)
@@ -54,6 +86,22 @@ class History:
                 score_sum REAL DEFAULT 0,
                 attempts_sum INTEGER DEFAULT 0,
                 fm_count INTEGER DEFAULT 0
+            )"""
+        )
+        # Edit history: every detected divergence of the conversation prefix
+        # (client-side edit/rewind). Each divergence starts a new branch;
+        # the superseded branch's turns and payloads stay in the trace, so
+        # this table is the map back to them.
+        self._conn.execute(
+            """CREATE TABLE IF NOT EXISTS edits (
+                session TEXT NOT NULL,
+                branch INTEGER NOT NULL,
+                ts REAL NOT NULL,
+                kind TEXT NOT NULL,          -- edit | rewind
+                position INTEGER NOT NULL,   -- 0-based message index
+                role TEXT,
+                old_text TEXT,
+                new_text TEXT
             )"""
         )
         # Repair outcomes: which (model, strategy) fixed which failure mode.
@@ -111,6 +159,28 @@ class History:
             (model, score or 0.0, attempts, fm_count),
         )
         self._conn.commit()
+
+    def record_edit(self, session: str, kind: str, position: int, role: str,
+                    old_text: str, new_text: str) -> int:
+        """Store a detected prefix divergence; returns the new branch no."""
+        cur = self._conn.execute(
+            "SELECT COALESCE(MAX(branch), 0) + 1 FROM edits WHERE session=?",
+            (session,))
+        branch = int(cur.fetchone()[0])
+        self._conn.execute(
+            "INSERT INTO edits VALUES (?,?,?,?,?,?,?,?)",
+            (session, branch, time.time(), kind, position, role,
+             old_text[:2000], new_text[:2000]))
+        self._conn.commit()
+        return branch
+
+    def edits(self, session: str, n: int = 50) -> list[dict[str, Any]]:
+        cur = self._conn.execute(
+            "SELECT branch, ts, kind, position, role, old_text, new_text "
+            "FROM edits WHERE session=? ORDER BY branch DESC LIMIT ?",
+            (session, n))
+        cols = [c[0] for c in cur.description]
+        return list(reversed([dict(zip(cols, r)) for r in cur.fetchall()]))
 
     def record_repair(self, model: str, fm_ids: list[str], strategy: str,
                       success: bool) -> None:

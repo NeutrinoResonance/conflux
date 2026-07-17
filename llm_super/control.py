@@ -63,11 +63,13 @@ HELP = """llm-super in-band commands (never forwarded to models):
   !break list / !break clear [rule]               show / remove breakpoints
   !checkpoints         list resumable checkpoints for this conversation
   !rewind <unit#>|all  forget a completed unit (or all) so resending re-runs it
+  !edits               show this conversation's edit/rewind history (branches)
   !help                this message"""
 
 
 def handle(text: str, state: ControlState, model_names: list[str],
-           checkpoints=None, session: str | None = None) -> str | None:
+           checkpoints=None, session: str | None = None,
+           history=None) -> str | None:
     """If `text` is a control command, apply it and return the reply.
     Returns None for normal (non-control) messages."""
     stripped = text.strip()
@@ -197,6 +199,24 @@ def handle(text: str, state: ControlState, model_names: list[str],
                 lines.append(f"    {mark} unit {i+1}: {u['description'][:90]}")
         return ("checkpoints (resend the same request to resume; "
                 "!rewind <unit#> to re-run a unit):\n" + "\n".join(lines))
+    if cmd == "edits":
+        if history is None or session is None:
+            return "edit history unavailable in this context"
+        rows = history.edits(session)
+        if not rows:
+            return "no edits detected in this conversation"
+        import time as _time
+        lines = []
+        for r in rows:
+            age_m = (_time.time() - r["ts"]) / 60
+            what = (f"message {r['position'] + 1} ({r['role']}) edited: "
+                    f"\"{(r['old_text'] or '')[:70]}\" → \"{(r['new_text'] or '')[:70]}\""
+                    if r["kind"] == "edit" else
+                    f"rewound to before message {r['position'] + 1} "
+                    f"(dropped: \"{(r['old_text'] or '')[:70]}\")")
+            lines.append(f"- branch {r['branch']} · {age_m:.0f}m ago · {what}")
+        return ("edit history (each divergence forked a branch; superseded "
+                "turns remain in the trace):\n" + "\n".join(lines))
     if cmd == "rewind":
         if checkpoints is None or session is None:
             return "rewind unavailable in this context"

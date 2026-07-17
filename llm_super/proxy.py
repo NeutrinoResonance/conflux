@@ -170,7 +170,8 @@ async def chat_completions(request: Request):
     # In-band control commands short-circuit everything.
     reply = handle(_last_user_text(messages), control, list(cfg.models),
                    checkpoints=state["checkpoints"],
-                   session=_session_id(messages))
+                   session=_session_id(messages),
+                   history=state["history"])
     if reply is not None:
         state["trace"].record(_session_id(messages), "-", "control", command=_last_user_text(messages))
         return _sse(reply, model_name) if stream else JSONResponse(_completion_body(reply, model_name))
@@ -432,6 +433,12 @@ async def admin_events(n: int = 50):
 async def admin_stats():
     """Per-model outcome stats (feeds learned routing)."""
     return state["history"].stats()
+
+
+@app.get("/admin/edits")
+async def admin_edits(session: str):
+    """Edit/rewind history for a conversation (branch divergences)."""
+    return state["history"].edits(session)
 
 
 @app.get("/admin/balance")

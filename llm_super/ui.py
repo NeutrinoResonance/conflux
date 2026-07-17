@@ -286,6 +286,7 @@ tr:last-child td { border-bottom: none; }
 
   <section>
     <h2 id="tasksHeading">Tasks</h2>
+    <div id="edits"></div>
     <div id="tasks"></div>
   </section>
 
@@ -573,6 +574,27 @@ function renderTasks(events) {
       el.innerHTML = msgCache.get(task);
     }
   }
+}
+
+// Edit history: divergences of the conversation prefix — each one forked a
+// branch; the superseded branch's turns remain in the task list below.
+function renderEdits(rows) {
+  if (!rows || !rows.length) { $("#edits").innerHTML = ""; return; }
+  const items = rows.map(r => {
+    const when = new Date(r.ts * 1000).toLocaleTimeString();
+    const what = r.kind === "edit"
+      ? `message ${r.position + 1} (${esc(r.role)}) edited:
+         <s title="${esc(r.old_text)}">${esc((r.old_text || "").slice(0, 70))}</s>
+         → <span title="${esc(r.new_text)}">${esc((r.new_text || "").slice(0, 70))}</span>`
+      : `rewound to before message ${r.position + 1}
+         (dropped: <s title="${esc(r.old_text)}">${esc((r.old_text || "").slice(0, 70))}</s>)`;
+    return `<div class="node"><span class="t">${when}</span>
+      ✏️ <b>branch ${r.branch}</b> · ${what}</div>`;
+  }).join("");
+  $("#edits").innerHTML = `<div class="card">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:6px">
+      edit history — each divergence forked a branch; superseded turns stay listed below (!edits in-band)</div>
+    ${items}</div>`;
 }
 
 function renderStats(rows) {
@@ -1055,6 +1077,10 @@ async function refresh() {
     renderLibrary();
     renderRetention(ret);
     renderRouting(rt);
+    renderEdits(sel.session
+      ? await fetch(`/admin/edits?session=${encodeURIComponent(sel.session)}`)
+          .then(r => r.json())
+      : []);
     renderTasks(evs);
     renderStats(stats);
     renderEfficiency(eff);

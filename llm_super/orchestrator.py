@@ -25,7 +25,7 @@ from . import sandbox
 from .checkpoint import Checkpoints, turn_key
 from .config import Config, Model
 from .control import ControlState
-from .history import History, similarity
+from .history import History, diff_prefix, similarity
 from .monitors import FMEvent, run_monitors, run_session_monitors
 from .providers import ChatResult, Client, ProviderError
 from .trace import Trace
@@ -357,6 +357,30 @@ class Orchestrator:
             evidence=best_evidence, executor=best_executor,
         )
 
+    # ---------- edit history (SPEC §7.1) ----------
+
+    def _note_edit(self, session: str, messages: list[dict], log) -> None:
+        """Record when the incoming prefix diverges from the last one seen —
+        the client edited or rewound history. Must run BEFORE the new
+        request is recorded (it needs the previous prefix as baseline).
+        Bookkeeping only: the superseded branch's turns stay in the trace,
+        and this maps back to them. Never allowed to break a turn."""
+        try:
+            prev = self.trace.last_client_request(session)
+            if not prev:
+                return
+            d = diff_prefix(prev, messages)
+            if not d:
+                return
+            branch = self.history.record_edit(
+                session, d["kind"], d["position"], d["role"],
+                d["old"], d["new"])
+            log("edit", edit_kind=d["kind"], position=d["position"],
+                branch=branch, role=d["role"], old_preview=d["old"][:150],
+                new_preview=d["new"][:150])
+        except Exception:
+            pass
+
     # ---------- ensemble turn (SPEC §6.1, opt-in via !ensemble) ----------
 
     async def _ensemble_turn(
@@ -494,6 +518,7 @@ class Orchestrator:
             self.trace.record(session, task_id, kind, **kw)
 
         reqlog.set_context(self.trace, session, task_id)
+        self._note_edit(session, messages, log)
         self.trace.record_exchange(session, task_id, "client_request", None, body)
         log("agent_turn", model=chain[0].name, task_preview=task_text[:200],
             n_messages=len(messages))
@@ -588,6 +613,7 @@ class Orchestrator:
             self.trace.record(session, task_id, kind, **kw)
 
         reqlog.set_context(self.trace, session, task_id)
+        self._note_edit(session, messages, log)
         self.trace.record_exchange(session, task_id, "client_request", None,
                                    {"messages": messages})
         log("turn_start", model=executor_name, prompt_chars=len(task_text),
