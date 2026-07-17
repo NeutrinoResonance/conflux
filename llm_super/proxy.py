@@ -21,6 +21,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from . import ui
 
 from . import export as export_mod
+from . import retention
 from .checkpoint import Checkpoints
 from .config import load
 from .control import ControlState, handle
@@ -49,11 +50,27 @@ async def lifespan(app: FastAPI):
         control=control,
         history=history,
         library=library,
+        trace_path=trace_path,
         orch=Orchestrator(cfg, client, trace, control,
                           checkpoints=Checkpoints(trace_path),
                           history=history),
     )
+
+    async def retention_loop():
+        while True:
+            try:
+                report = await asyncio.to_thread(
+                    retention.prune, trace_path, library.retention_settings())
+                if any(report["deleted"].values()):
+                    trace.record("-", "-", "retention_prune", **report["deleted"],
+                                 reclaimed_bytes=report["reclaimed_bytes"])
+            except Exception:
+                pass  # retention must never take the proxy down
+            await asyncio.sleep(3600)
+
+    task = asyncio.create_task(retention_loop())
     yield
+    task.cancel()
     await client.aclose()
 
 
@@ -373,6 +390,30 @@ async def admin_library_action(request: Request):
     except (KeyError, ValueError) as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     return JSONResponse({"error": f"unknown action {action!r}"}, status_code=400)
+
+
+@app.get("/admin/retention")
+async def admin_retention():
+    return {
+        "settings": state["library"].retention_settings(),
+        "stats": retention.stats(state["trace_path"]),
+    }
+
+
+@app.post("/admin/retention")
+async def admin_retention_set(request: Request):
+    b = await request.json()
+    state["library"].set_retention(b.get("patch", {}))
+    return await admin_retention()
+
+
+@app.post("/admin/prune")
+async def admin_prune():
+    report = await asyncio.to_thread(
+        retention.prune, state["trace_path"], state["library"].retention_settings())
+    state["trace"].record("-", "-", "retention_prune", **report["deleted"],
+                          reclaimed_bytes=report["reclaimed_bytes"])
+    return report
 
 
 @app.post("/admin/export")

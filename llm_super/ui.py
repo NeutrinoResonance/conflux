@@ -277,6 +277,11 @@ tr:last-child td { border-bottom: none; }
   </section>
 
   <section>
+    <h2>Retention <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">— global; 0 days = keep forever</span></h2>
+    <div id="retention"></div>
+  </section>
+
+  <section>
     <h2>Model outcomes</h2>
     <div id="stats"></div>
   </section>
@@ -713,6 +718,53 @@ async function doExport(scope) {
     : `✓ ${r.name} — ${(r.bytes/1024).toFixed(1)}KB from ${(r.raw_bytes/1024).toFixed(1)}KB (${Math.round(100*r.bytes/r.raw_bytes)}%) · ${r.encryption} · ${r.location}`;
 }
 
+// ---- retention ----
+const RETENTION_LABELS = {
+  exchanges_days: "message payloads (days)",
+  events_days: "trace events (days)",
+  turns_days: "turn history (days)",
+  vacuum: "reclaim disk space (VACUUM)",
+};
+function renderRetention(r) {
+  const af = document.activeElement;
+  if (af && af.closest("#retention")) return;  // don't clobber live edits
+  const s = r.settings, st = r.stats;
+  const fields = Object.keys(RETENTION_LABELS).map(k => {
+    const v = s[k];
+    const control = k === "vacuum"
+      ? `<select onchange="setRetention('${k}',this.value==='true')">
+           <option value="true"${v?" selected":""}>true</option>
+           <option value="false"${!v?" selected":""}>false</option></select>`
+      : `<input type="number" min="0" step="1" value="${esc(v)}"
+           onchange="setRetention('${k}',Number(this.value))">`;
+    return `<div class="fname">${RETENTION_LABELS[k]}</div><div class="fval">${control}</div><span></span><span></span>`;
+  }).join("");
+  const tbl = Object.entries(st.tables).map(([t, v]) =>
+    `${t}: ${v.rows} rows${v.oldest_days ? ` (oldest ${v.oldest_days}d)` : ""}`).join(" · ");
+  $("#retention").innerHTML = `<div class="settings-grid">${fields}</div>
+    <div class="exportbar">
+      <button onclick="pruneNow()">Prune now</button>
+      <span style="color:var(--muted);font-size:12px">
+        db ${(st.db_bytes/1048576).toFixed(1)}MB · ${tbl} · auto-prunes hourly</span>
+    </div>
+    <div class="export-result" id="pruneResult"></div>`;
+}
+async function setRetention(key, value) {
+  await fetch("/admin/retention", {method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({patch: {[key]: value}})});
+  flash("retention: " + key + " set");
+}
+async function pruneNow() {
+  $("#pruneResult").textContent = "pruning…";
+  const r = await fetch("/admin/prune", {method: "POST"}).then(r => r.json());
+  const d = r.deleted || {};
+  $("#pruneResult").textContent =
+    `✓ deleted ${Object.entries(d).map(([t,n]) => `${t}:${n}`).join(" ")} · ` +
+    `reclaimed ${(r.reclaimed_bytes/1024).toFixed(0)}KB` +
+    (r.vacuumed === false ? " (vacuum deferred: db busy)" : "");
+}
+
 // Full-payload viewer: fetched on demand, never polled.
 const msgShown = new Set();
 const msgCache = new Map();
@@ -773,17 +825,19 @@ async function toggleMessages(ev, task) {
 let libraryRendered = false;
 async function refresh() {
   try {
-    const [st, evs, stats, lib] = await Promise.all([
+    const [st, evs, stats, lib, ret] = await Promise.all([
       fetch("/admin/status").then(r => r.json()),
       fetch("/admin/events?n=300").then(r => r.json()),
       fetch("/admin/stats").then(r => r.json()),
       fetch("/admin/library").then(r => r.json()),
+      fetch("/admin/retention").then(r => r.json()),
     ]);
     library = lib;
     if (!library.projects.find(p => p.id === sel.project)) sel = {project: "default", session: null};
     renderStatus(st, st.models || []);
     renderSidebar();
     renderLibrary();
+    renderRetention(ret);
     renderTasks(evs);
     renderStats(stats);
     renderEvents(evs);

@@ -161,6 +161,29 @@ class Library:
         base.update(self.project_overrides(pid))
         return base
 
+    # ---- retention settings (global; stored beside the extraction default) ----
+
+    def retention_settings(self) -> dict[str, Any]:
+        from .retention import DEFAULT_RETENTION
+
+        cur = self._conn.execute(
+            "SELECT value FROM app_settings WHERE key='retention'")
+        row = cur.fetchone()
+        base = dict(DEFAULT_RETENTION)
+        if row:
+            base.update(json.loads(row[0]))
+        return base
+
+    def set_retention(self, patch: dict[str, Any]) -> None:
+        from .retention import DEFAULT_RETENTION
+
+        cur = self.retention_settings()
+        cur.update({k: v for k, v in patch.items() if k in DEFAULT_RETENTION})
+        self._conn.execute(
+            "INSERT OR REPLACE INTO app_settings VALUES ('retention', ?)",
+            (json.dumps(cur),))
+        self._conn.commit()
+
     # ---- sessions ----
 
     def touch_session(self, session: str, title: str) -> None:

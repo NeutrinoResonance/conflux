@@ -35,6 +35,11 @@ def main() -> None:
     ls = sub.add_parser("sessions", help="list stored conversations")
     ls.add_argument("--db", default="traces.db")
 
+    pr = sub.add_parser("prune", help="apply retention policy to the trace db now")
+    pr.add_argument("--db", default="traces.db")
+    pr.add_argument("--dry-run", action="store_true",
+                    help="show current table stats without deleting")
+
     args = p.parse_args()
     if args.cmd == "serve":
         import socket
@@ -86,6 +91,23 @@ def main() -> None:
         for s in Library(args.db).sessions():
             print(f"{s['session'][:12]}  [{s['project_id']}]  turns={s['turns']}  "
                   f"{(s['title'] or '')[:60]}")
+    elif args.cmd == "prune":
+        from . import retention
+        from .library import Library
+
+        settings = Library(args.db).retention_settings()
+        st = retention.stats(args.db)
+        print(f"db: {st['db_bytes']/1024:.0f}KB | " + " | ".join(
+            f"{t}: {v['rows']} rows"
+            + (f" (oldest {v['oldest_days']}d)" if v["oldest_days"] else "")
+            for t, v in st["tables"].items()))
+        if args.dry_run:
+            print("retention:", settings)
+        else:
+            rep = retention.prune(args.db, settings)
+            print("deleted:", rep["deleted"],
+                  f"| reclaimed {rep['reclaimed_bytes']/1024:.0f}KB"
+                  + ("" if rep.get("vacuumed", True) else " (vacuum deferred: db busy)"))
 
 
 async def _probe(config_path: str) -> None:
