@@ -27,6 +27,26 @@ def main() -> None:
 
     args = p.parse_args()
     if args.cmd == "serve":
+        import socket
+        import sys
+
+        # Fail loudly if the port is taken — a silently-failed bind while an
+        # old server keeps answering is a debugging trap (stale code served).
+        probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # match uvicorn's bind semantics, or TIME_WAIT sockets from a
+        # recently-stopped server false-positive this check
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            probe.bind((args.host, args.port))
+        except OSError:
+            sys.exit(
+                f"llm-super: port {args.port} on {args.host} is already in use.\n"
+                f"Another llm-super (or something else) is running there — "
+                f"find it with: lsof -i :{args.port}"
+            )
+        finally:
+            probe.close()
+
         import uvicorn
 
         from . import proxy

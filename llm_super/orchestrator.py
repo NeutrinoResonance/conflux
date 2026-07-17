@@ -483,9 +483,12 @@ class Orchestrator:
                 f"One unit of a larger task. Judge ONLY this unit's scope: "
                 f"{unit.description}"
             )
+            def unit_log(kind: str, **kw):
+                log(kind, unit=i + 1, **kw)  # tag for the dashboard's unit tree
+
             async with sem:
                 r = await self._supervised_unit(
-                    session, task_id, unit_msgs, unit_task, [], budget, log)
+                    session, task_id, unit_msgs, unit_task, [], budget, unit_log)
             log("unit_done", unit=i + 1, attempts=r.attempts,
                 score=r.verify.score if r.verify else None, escalated=r.escalated)
             completed[i] = r
@@ -643,10 +646,13 @@ def _tool_transcript(messages: list[dict], limit: int = 12) -> str | None:
 
 
 def _looks_multipart(task: str) -> bool:
-    """Cheap structural signal that a task has several separable deliverables."""
+    """Cheap structural signal that a task has several separable deliverables.
+    Matches enumerations at line starts AND inline ("… 1) module 2) CLI 3) docs")."""
     import re
 
-    enumerated = re.findall(r"(?m)^\s*(?:\d+[\.\)]\s|[-*]\s|DELIVERABLE|PART\s+\d)", task)
+    enumerated = re.findall(
+        r"(?m)(?:^\s*(?:\d+[\.\)]\s|[-*]\s)|(?<=\s)\d+[\.\)]\s|DELIVERABLE|PART\s+\d)",
+        task)
     return len(enumerated) >= 3
 
 

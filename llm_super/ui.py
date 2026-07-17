@@ -99,21 +99,49 @@ button.danger  { background: var(--critical); border-color: var(--critical); col
 .badge.ok       { border-color: var(--good);     }
 .card { background: var(--surface); border: 1px solid var(--border);
         border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
-.card .head { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; }
-.card .head .id { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
-.card .title { font-size: 13.5px; margin: 6px 0 0; color: var(--ink); }
-.card .title::before { content: "“"; color: var(--muted); }
-.card .title::after  { content: "”"; color: var(--muted); }
-.card .answer { font-size: 12.5px; margin-top: 4px; color: var(--ink-2); }
-.card .answer::before { content: "→ "; color: var(--muted); }
-.card .units { margin-top: 4px; font-size: 12px; color: var(--ink-2); }
-.card .units li { margin-left: 16px; }
 .scorebar { display: inline-flex; align-items: center; gap: 6px; }
 .scorebar .track { width: 90px; height: 6px; border-radius: 4px;
                    background: var(--seq-track); overflow: hidden; }
 .scorebar .fill { display: block; height: 100%; border-radius: 4px; background: var(--seq); }
 .scorebar .n { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--ink-2); }
-.steps { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px; }
+/* ---- goal timeline ---- */
+details.turn { background: var(--surface); border: 1px solid var(--border);
+               border-radius: 8px; margin-bottom: 10px; }
+details.turn > summary { list-style: none; cursor: pointer; padding: 10px 14px;
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; }
+details.turn > summary::-webkit-details-marker { display: none; }
+details.turn > summary::before { content: "▸"; color: var(--muted); font-size: 12px; }
+details.turn[open] > summary::before { content: "▾"; }
+.goal { font-size: 13.5px; color: var(--ink); flex: 1 1 320px; }
+.goal::before { content: "“"; color: var(--muted); }
+.goal::after  { content: "”"; color: var(--muted); }
+.gid { font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted); }
+.gcost { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); }
+.tl { border-top: 1px solid var(--grid); padding: 10px 14px 12px; }
+.node, details.node { position: relative; margin-left: 8px; padding: 3px 0 3px 20px;
+  border-left: 2px solid var(--grid); font-size: 12.5px; color: var(--ink-2); }
+.node::before, details.node::before { content: ""; position: absolute; left: -5px;
+  top: 11px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--baseline); }
+.node.fm::before, details.node.fm::before   { background: var(--serious); }
+.node.ok::before, details.node.ok::before   { background: var(--good); }
+.node.err::before, details.node.err::before { background: var(--critical); }
+details.node > summary { list-style: none; cursor: pointer; }
+details.node > summary::-webkit-details-marker { display: none; }
+details.node > summary .more { color: var(--seq); font-size: 11px; }
+.node .t, details.node .t { font-family: ui-monospace, monospace; font-size: 10.5px;
+  color: var(--muted); margin-right: 6px; }
+.node b, details.node b { color: var(--ink); font-weight: 600; }
+.payload { margin: 4px 0 6px 14px; padding: 6px 10px; background: var(--page);
+  border: 1px solid var(--grid); border-radius: 6px; font-size: 12px;
+  white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow: auto; }
+details.unit { margin-left: 8px; border-left: 2px solid var(--seq);
+  padding: 3px 0 3px 20px; position: relative; font-size: 12.5px; }
+details.unit::before { content: ""; position: absolute; left: -5px; top: 11px;
+  width: 8px; height: 8px; border-radius: 50%; background: var(--seq); }
+details.unit > summary { list-style: none; cursor: pointer; color: var(--ink); }
+details.unit > summary::-webkit-details-marker { display: none; }
+details.unit .subtl { margin: 4px 0 4px 4px; }
 .esc { margin-top: 8px; font-size: 13px; color: var(--ink); }
 .esc::before { content: "⛔ "; }
 .note { margin-top: 6px; font-size: 12px; color: var(--ink-2); }
@@ -262,6 +290,69 @@ function renderStatus(st, cfgModels) {
     tile("plan", esc(st.plan || "auto"));
 }
 
+// expand/collapse state survives the 2s re-render
+const openNodes = new Set();
+document.addEventListener("toggle", e => {
+  const id = e.target.dataset && e.target.dataset.nid;
+  if (!id) return;
+  if (e.target.open) openNodes.add(id); else openNodes.delete(id);
+}, true);
+
+function hhmmss(ts) { return new Date(ts * 1000).toLocaleTimeString(); }
+
+// One timeline node. body!=null → expandable <details>.
+function node(nid, cls, ts, html, body) {
+  const t = `<span class="t">${hhmmss(ts)}</span>`;
+  if (!body) return `<div class="node ${cls}">${t}${html}</div>`;
+  return `<details class="node ${cls}" data-nid="${nid}"${openNodes.has(nid) ? " open" : ""}>
+    <summary>${t}${html} <span class="more">details</span></summary>
+    <div class="payload">${body}</div></details>`;
+}
+
+// Translate a trace event into a human-readable timeline node.
+function nodeFor(task, e, idx) {
+  const d = e.data || {};
+  const nid = `${task}:${idx}:${e.kind}`;
+  const model = e.model ? ` <b>${esc(e.model)}</b>` : "";
+  const cost = e.cost_usd ? ` · $${e.cost_usd.toFixed(4)}` : "";
+  const toks = (e.tokens_in || e.tokens_out)
+    ? ` · ${(e.tokens_in||0)+(e.tokens_out||0)} tok` : "";
+  switch (e.kind) {
+    case "turn_start":  return node(nid, "", e.ts, `goal started —${model} routing=${esc(d.routed||"static")}`);
+    case "agent_turn":  return node(nid, "", e.ts, `agent goal started —${model} (${d.n_messages||"?"} msgs in conversation)`);
+    case "contract":    return node(nid, "", e.ts, `☑ checklist extracted — <b>${(d.constraints||[]).length} constraints</b>${cost}`,
+                                    (d.constraints||[]).map(c => "• " + esc(c)).join("\n") || null);
+    case "contract_skipped": return node(nid, "", e.ts, "☑ checklist skipped (user setting)");
+    case "contract_failed":  return node(nid, "err", e.ts, "☑ checklist extraction failed (provider) — continuing without");
+    case "plan":        return node(nid, "", e.ts, `⧉ plan — <b>${(d.units||[]).length ? (d.units||[]).length + " units" : "single pass"}</b>${cost}`,
+                                    (d.units||[]).map((u,i) => `${i+1}. ${esc(u)}`).join("\n") || null);
+    case "resume":      return node(nid, "ok", e.ts, `↻ resumed from checkpoint — units done: ${(d.completed||[]).map(x=>x+1).join(", ") || "none"} (prior spend $${(d.prior_spent||0).toFixed(4)})`);
+    case "wave_start":  return node(nid, "", e.ts, `∥ wave ${d.wave} started — units ${(d.units||[]).join(", ")} in parallel`);
+    case "execute":     return node(nid, "", e.ts, `⚙ attempt ${d.attempt||1} —${model}${toks}${cost}`);
+    case "execute_code":return node(nid, d.ok ? "ok" : "err", e.ts,
+                                    `⏵ sandbox ${d.ok ? "passed" : "FAILED"} — ${esc(d.backend)} · exit ${d.exit_code} · ${d.duration_s}s`,
+                                    d.stderr ? esc(d.stderr) : null);
+    case "fm_event":    return node(nid, "fm", e.ts,
+                                    `⚠ <b>${esc(e.fm_id || d.fm_id)}</b>${d.scope === "session" ? " (cross-turn)" : ""} · confidence ${d.confidence ?? "?"}`,
+                                    esc(d.evidence || ""));
+    case "verify":      return node(nid, d.passed ? "ok" : "err", e.ts,
+                                    `${d.passed ? "✓" : "✗"} verified by${model} — score <b>${(d.score ?? 0).toFixed(2)}</b>${d.stage ? " ("+esc(d.stage)+")" : ""}${cost}`,
+                                    d.criteria ? Object.entries(d.criteria).map(([k,v]) => `${k}: ${v}`).join("\n") : null);
+    case "verify_error":return node(nid, "err", e.ts, `✗ verification unavailable — ${esc(d.error||"")}`);
+    case "executor_error":    return node(nid, "err", e.ts, `⚙ executor failed —${model}`, esc(d.error||""));
+    case "executor_fallback": return node(nid, "", e.ts, `⇄ failed over to <b>${esc(e.model)}</b>`);
+    case "budget_stop": return node(nid, "err", e.ts, `$ budget stop — $${(d.spent||0).toFixed(3)} of $${(d.budget||0).toFixed(2)}`);
+    case "synthesis":   return node(nid, "", e.ts, `Σ assembled final answer —${model}${toks}${cost}`);
+    case "tool_step":   return node(nid, "", e.ts, `🔧 agent tool step —${model} · ${d.n_calls||1} call(s)${cost}`);
+    case "unit_done":   return null; // rendered as the unit group summary
+    case "turn_end": case "agent_end":
+      return node(nid, d.escalated ? "err" : "ok", e.ts,
+                  `${d.escalated ? "⛔" : "✓"} finished${d.score != null ? ` — score <b>${Number(d.score).toFixed(2)}</b>` : ""}${d.spent != null ? ` · spent $${d.spent.toFixed(4)}` : ""}`,
+                  d.answer_preview ? "→ " + esc(d.answer_preview) : null);
+    default:            return node(nid, "", e.ts, esc(e.kind) + model + cost);
+  }
+}
+
 function renderTasks(events) {
   const byTask = new Map();
   for (const e of events) {
@@ -272,7 +363,7 @@ function renderTasks(events) {
   const cards = [];
   let n = 0;
   for (const [task, evs] of byTask) {
-    if (++n > 8) break;
+    if (++n > 10) break;
     evs.sort((a, b) => a.ts - b.ts);
     const end = evs.find(e => e.kind === "turn_end" || e.kind === "agent_end");
     const verifies = evs.filter(e => e.kind === "verify");
@@ -280,13 +371,7 @@ function renderTasks(events) {
     const cost = evs.reduce((s, e) => s + (e.cost_usd || 0), 0);
     const fms = [...new Set(evs.filter(e => e.kind === "fm_event").map(e => e.fm_id || e.data?.fm_id))];
     const escalated = end?.data?.escalated;
-    const sessionNotes = evs.filter(e => e.kind === "fm_event" && e.data?.scope === "session");
-    const units = end?.data?.units;
-    const steps = evs.map(e =>
-      `<span class="badge ${e.kind === "fm_event" ? "fm" : ""}">${esc(e.kind)}${
-        e.model ? " · " + esc(e.model) : ""}</span>`).join("");
     const preview = evs.find(e => e.data?.task_preview)?.data?.task_preview;
-    const answer = end?.data?.answer_preview;
     const planUnits = evs.find(e => e.kind === "plan")?.data?.units || [];
     const agentic = evs.some(e => e.kind === "agent_turn" || e.kind === "tool_step");
     const status = end
@@ -295,22 +380,49 @@ function renderTasks(events) {
       : (agentic && !verifies.length
          ? `<span class="badge">🔧 agent tool step</span>`
          : `<span class="badge">… running</span>`);
-    cards.push(`<div class="card">
-      <div class="head">
-        <span class="id">${esc(task)}</span> ${status}
-        ${units ? `<span class="badge">${units} units</span>` : ""}
+
+    // Build the timeline: unit-tagged events fold into per-unit groups,
+    // inserted at the position of the unit's first event.
+    const rows = [];
+    const unitRendered = new Set();
+    evs.forEach((e, idx) => {
+      const u = e.data?.unit;
+      if (u == null || e.kind === "wave_start") {
+        const r = nodeFor(task, e, idx);
+        if (r) rows.push(r);
+        return;
+      }
+      if (unitRendered.has(u)) return;
+      unitRendered.add(u);
+      const unitEvs = evs.map((x, i) => [x, i]).filter(([x]) => x.data?.unit === u);
+      const done = unitEvs.map(([x]) => x).find(x => x.kind === "unit_done");
+      const desc = planUnits[u-1] ? esc(String(planUnits[u-1]).slice(0, 100)) : "";
+      const uScore = done?.data?.score;
+      const nid = `${task}:unit:${u}`;
+      rows.push(`<details class="unit" data-nid="${nid}"${openNodes.has(nid) ? " open" : ""}>
+        <summary><b>unit ${u}</b>${desc ? " — " + desc : ""}${
+          uScore != null ? ` · score <b>${Number(uScore).toFixed(2)}</b>` : ""}${
+          done?.data?.escalated ? " · ⛔ " + esc(done.data.escalated) : ""} <span class="more">expand</span></summary>
+        <div class="subtl">${unitEvs.filter(([x]) => x.kind !== "unit_done")
+          .map(([x, i]) => nodeFor(task, x, i)).filter(Boolean).join("")}</div>
+      </details>`);
+    });
+
+    const tnid = `${task}:turn`;
+    const open = openNodes.has(tnid) || n === 1;  // newest goal starts expanded
+    cards.push(`<details class="turn" data-nid="${tnid}"${open ? " open" : ""}>
+      <summary>
+        ${status}
+        <span class="goal" title="${esc(preview || "")}">${esc((preview || "(no prompt recorded)").slice(0, 150))}</span>
         ${scorebar(lastScore)}
-        <span class="n" style="color:var(--muted);font-size:12px">$${cost.toFixed(4)}</span>
+        <span class="gcost">$${cost.toFixed(4)}</span>
         ${fms.map(fmBadge).join(" ")}
+        <span class="gid">${esc(task)}</span>
+      </summary>
+      <div class="tl">${rows.join("")}
+        ${escalated ? `<div class="esc">${esc(escalated)}</div>` : ""}
       </div>
-      ${preview ? `<div class="title" title="${esc(preview)}">${esc(preview.slice(0,160))}${preview.length>160?"…":""}</div>` : ""}
-      ${planUnits.length ? `<ol class="units">${planUnits.map(u =>
-          `<li>${esc(String(u).slice(0,110))}</li>`).join("")}</ol>` : ""}
-      ${answer ? `<div class="answer">${esc(answer.slice(0,140))}${answer.length>=140?"…":""}</div>` : ""}
-      ${sessionNotes.map(e => `<div class="note">${esc(e.data?.evidence || "")}</div>`).join("")}
-      ${escalated ? `<div class="esc">${esc(escalated)}</div>` : ""}
-      <div class="steps">${steps}</div>
-    </div>`);
+    </details>`);
   }
   $("#tasks").innerHTML = cards.join("") ||
     `<div class="card" style="color:var(--muted)">no supervised turns yet — point a client at /v1 with model "super"</div>`;
