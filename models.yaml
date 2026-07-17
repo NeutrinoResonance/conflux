@@ -47,9 +47,9 @@ models:
     provider: nous
     id: moonshotai/kimi-k2.6
     family: kimi
-    roles: [executor, verifier]
-    logprobs: true
-    top_logprobs_max: 5
+    roles: [executor]          # logprobs regressed on Nous (0/6 probes
+    logprobs: false            # 2026-07-17; was top-5 on 2026-07-16) —
+    top_logprobs_max: 5        # re-add verifier role if a probe recovers
     price_in_per_m: 0.40
     price_out_per_m: 1.60
     failure_priors: []
@@ -126,8 +126,10 @@ routing:
   trivial_executor: gemma-4-31b # difficulty="trivial" turns (verify-lite);
                                 # deliberately NOT roles:[executor] so learned
                                 # routing never picks it for routine work
-  verifier_pool: [qwen-3.7-plus, kimi-k2.6, gemma-4-31b, deepseek-v4-pro,
+  verifier_pool: [qwen-3.7-plus, gemma-4-31b, deepseek-v4-pro,
                   qwen-3.7-plus-go, deepseek-v4-pro-go]
+  # kimi-k2.6 removed from the pool 2026-07-17: Nous stopped returning its
+  # logprobs (see the model entry); it remains an executor and the referee
   # verifiers are tried in prior-overlap-then-pool order, skipping the
   # executor's family; a provider failure fails over to the next entry
   learned: true        # route to the best-scoring executor once sampled
