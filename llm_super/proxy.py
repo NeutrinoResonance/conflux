@@ -296,6 +296,7 @@ async def admin_status():
                       else "skip" if c.contract_skip_once else "on"),
         "sandbox": c.sandbox_backend or "auto",
         "plan": c.plan_mode,
+        "ensemble": c.ensemble_n,
         "breakpoints": list(c.breakpoints),
         "models": list(state["cfg"].models),
         "recent_spend": round(sum(e.get("cost_usd") or 0 for e in recent), 4),
@@ -326,6 +327,15 @@ async def admin_control(request: Request):
     elif field == "plan":
         if value in ("auto", "on", "off"):
             c.plan_mode = value
+    elif field == "ensemble":
+        try:
+            n = int(value or 0)
+        except (TypeError, ValueError):
+            return JSONResponse({"error": f"bad ensemble {value!r}"}, status_code=400)
+        if n != 0 and not 2 <= n <= 4:
+            return JSONResponse({"error": "ensemble must be 0 (off) or 2-4"},
+                                status_code=400)
+        c.ensemble_n = n
     elif field == "break_add":
         rule = str(value or "").strip()
         valid = (rule == "escalation"

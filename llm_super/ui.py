@@ -261,6 +261,12 @@ tr:last-child td { border-bottom: none; }
           <option value="off">off</option>
         </select>
       </label>
+      <label>ensemble
+        <select id="ensembleSel" title="best-of-N model families + verified fusion; ~N+1x cost">
+          <option value="0">off</option><option value="2">2</option>
+          <option value="3">3</option><option value="4">4</option>
+        </select>
+      </label>
     </div>
     <div class="controls" style="margin-top:8px">
       <label>breakpoint
@@ -355,6 +361,7 @@ $("#budgetInp").onchange = e => post("budget", e.target.value);
 $("#checklistSel").onchange = e => post("checklist", e.target.value);
 $("#sandboxSel").onchange = e => post("sandbox", e.target.value);
 $("#planSel").onchange = e => post("plan", e.target.value);
+$("#ensembleSel").onchange = e => post("ensemble", e.target.value);
 
 function tile(k, v, small) {
   return `<div class="tile"><div class="k">${esc(k)}</div>
@@ -386,6 +393,7 @@ function renderStatus(st, cfgModels) {
   $("#checklistSel").value = st.checklist || "on";
   $("#sandboxSel").value = st.sandbox || "auto";
   $("#planSel").value = st.plan || "auto";
+  $("#ensembleSel").value = String(st.ensemble || 0);
   $("#breakList").innerHTML = (st.breakpoints || []).length
     ? st.breakpoints.map(b =>
         `<span class="badge">${esc(b)} <a href="#" style="text-decoration:none"

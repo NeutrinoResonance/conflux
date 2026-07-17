@@ -18,6 +18,7 @@ class ControlState:
     contract_skip_once: bool = False   # skip checklist for the next turn only
     sandbox_backend: str | None = None  # None = models.yaml default; "off" disables
     plan_mode: str = "auto"            # auto | on (always plan) | off (never)
+    ensemble_n: int = 0                # >=2: best-of-N families + fusion (§6.1)
     breakpoints: list[str] = field(default_factory=list)
     # rules: "fm:<FM-ID>" | "budget:<usd>" | "escalation" (SPEC §7.1)
     history: list[str] = field(default_factory=list)
@@ -57,6 +58,7 @@ HELP = """llm-super in-band commands (never forwarded to models):
   !checklist skip      skip the checklist for the NEXT turn only, then re-enable
   !sandbox local|gcloud|off|auto   where to execute code for verification
   !plan auto|on|off    task decomposition for large prompts (auto = size heuristic)
+  !ensemble <2-4>|off  best-of-N across model families + verified fusion (costly)
   !break fm:<FM-ID> | budget:<usd> | escalation   add a breakpoint (pause when hit)
   !break list / !break clear [rule]               show / remove breakpoints
   !checkpoints         list resumable checkpoints for this conversation
@@ -87,6 +89,7 @@ def handle(text: str, state: ControlState, model_names: list[str],
             f"checklist={checklist} "
             f"sandbox={state.sandbox_backend or 'auto'} "
             f"plan={state.plan_mode} "
+            f"ensemble={'off' if not state.ensemble_n else state.ensemble_n} "
             f"breakpoints={','.join(state.breakpoints) or 'none'}"
         )
     if cmd == "pause":
@@ -133,6 +136,20 @@ def handle(text: str, state: ControlState, model_names: list[str],
             state.sandbox_backend = None
             return "code execution backend returned to models.yaml default"
         return "usage: !sandbox local|gcloud|off|auto"
+    if cmd == "ensemble":
+        if arg in ("off", "0"):
+            state.ensemble_n = 0
+            return "ensemble mode off"
+        try:
+            n = int(arg)
+        except ValueError:
+            return "usage: !ensemble <2-4> | off"
+        if not 2 <= n <= 4:
+            return "usage: !ensemble <2-4> | off"
+        state.ensemble_n = n
+        return (f"ensemble mode: every plain turn samples {n} model families "
+                "in parallel, verifies each, and returns a verified fusion — "
+                f"roughly {n + 1}x the usual cost (!ensemble off to stop)")
     if cmd == "break":
         if arg == "list" or not arg:
             return ("breakpoints: " + ", ".join(state.breakpoints)

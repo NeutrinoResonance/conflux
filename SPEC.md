@@ -390,10 +390,22 @@ Best-of-N sampling across model families was deferred in v0.0 on cost
 grounds; the paper's **Probabilistic Pivot Tournament (PPT)** makes it
 tractable: rank N candidates with O(N·k) pairwise verifications instead of
 O(N²), using a random ring pass (cancels the verifier's positional bias) to
-pick top-k pivots, then comparing all candidates against pivots only. Adopt
-PPT as the referee's mechanism when it samples multiple candidate repairs,
-and as an opt-in "tournament mode" for hard units (user-triggered or
-budget-permitting).
+pick top-k pivots, then comparing all candidates against pivots only.
+
+*Implemented (pointwise variant) as ensemble mode* — `!ensemble <2-4>`
+(dashboard: Steering → ensemble): each plain turn samples N model families
+in parallel (family choice reuses the referee's repair-prior ordering),
+cross-family verifies each candidate, then **fuses**: the candidates and
+their reviewer scores become the prompt for a combined answer, which is
+itself verified and must out-score the best candidate to win — otherwise
+the best candidate is returned and the rejection is traced. Every stage is
+budget-gated; total provider outage degrades to the normal supervised
+unit. Ranking uses pointwise continuous scores (no ties, so no pairwise
+tournament is needed); PPT remains the upgrade path if pairwise comparison
+ever proves more discriminating than pointwise at equal cost. This also
+answers "can outputs of several models form the next prompt" generally:
+unit outputs already feed dependent units and synthesis (§5.8), and
+ensemble mode does it for N answers to the *same* task.
 
 ---
 

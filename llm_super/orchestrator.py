@@ -357,6 +357,123 @@ class Orchestrator:
             evidence=best_evidence, executor=best_executor,
         )
 
+    # ---------- ensemble turn (SPEC §6.1, opt-in via !ensemble) ----------
+
+    async def _ensemble_turn(
+        self,
+        session: str,
+        task_id: str,
+        messages: list[dict],
+        task_text: str,
+        constraints: list[str],
+        budget: Budget,
+        log,
+    ) -> UnitResult:
+        """Best-of-N across model families, then fusion: each candidate is
+        independently produced and cross-family verified (the continuous
+        score replaces §6.1's pairwise tournament — pointwise scores don't
+        tie); the candidates AND their scores then become the prompt for a
+        fused answer, which must out-score the best candidate to win."""
+        n = max(2, self.control.ensemble_n)
+        primary = self._route_executor()
+        names = [primary]
+        for cand in referee.switch_candidates(
+                self.cfg, names, [], self.history.repair_stats()):
+            if len(names) >= n:
+                break
+            names.append(cand)
+        log("ensemble_start", models=names)
+
+        async def one(name: str):
+            executed = await self._execute(
+                self.cfg.executor_chain(name), list(messages), log, 1)
+            if executed is None:
+                return None
+            res, m = executed
+            budget.add(res.cost_usd)
+            log("execute", model=m.name, cost_usd=res.cost_usd,
+                tokens_in=res.tokens_in, tokens_out=res.tokens_out,
+                attempt=1, ensemble=True)
+            try:
+                rep = await self.verifier.verify(
+                    task=task_text, output=res.text, contract=constraints,
+                    executor_family=m.family)
+            except Exception as e:
+                log("verify_error", model=m.name, error=str(e)[:300])
+                return None
+            budget.add(rep.cost_usd)
+            log("ensemble_candidate", model=m.name, score=rep.score,
+                cost_usd=rep.cost_usd)
+            return (m, res, rep)
+
+        scored = [r for r in await asyncio.gather(*(one(nm) for nm in names))
+                  if r is not None]
+        if not scored:
+            # every candidate died — degrade to the normal supervised unit
+            log("ensemble_degraded", reason="no verified candidates")
+            return await self._supervised_unit(
+                session, task_id, messages, task_text, constraints, budget,
+                log, executor_name=primary)
+
+        best_m, best_res, best_rep = max(scored, key=lambda t: t[2].score)
+        winner = best_m.name
+        if len(scored) >= 2 and not budget.exhausted:
+            fusion_prompt = (
+                f"{len(scored)} independent solutions to the same task "
+                "follow, each produced by a different model and scored by an "
+                "independent reviewer (0-1). Fuse them into ONE answer to "
+                "the ORIGINAL request that is at least as good as the best "
+                "candidate: keep the strongest elements of each, resolve "
+                "disagreements in favor of demonstrable correctness, and "
+                "drop redundancy.\n\n" + "\n\n".join(
+                    f"[candidate {i+1} — {m.name}, reviewer score "
+                    f"{rep.score:.2f}]\n{res.text[:8000]}"
+                    for i, (m, res, rep) in enumerate(scored))
+            )
+            executed = await self._execute(
+                self.cfg.executor_chain(primary),
+                list(messages) + [{"role": "user", "content": fusion_prompt}],
+                log, 1)
+            if executed is not None:
+                fres, fm = executed
+                budget.add(fres.cost_usd)
+                log("synthesis", model=fm.name, cost_usd=fres.cost_usd,
+                    tokens_in=fres.tokens_in, tokens_out=fres.tokens_out,
+                    attempt=1, ensemble=True)
+                try:
+                    frep = await self.verifier.verify(
+                        task=task_text, output=fres.text, contract=constraints,
+                        executor_family=fm.family)
+                    budget.add(frep.cost_usd)
+                    log("verify", model=frep.verifier, cost_usd=frep.cost_usd,
+                        score=frep.score, passed=frep.passed,
+                        stage="ensemble-fusion")
+                    # the fused answer must EARN the win — a fusion that
+                    # scores below the best candidate is discarded
+                    if frep.score >= best_rep.score:
+                        best_res, best_rep = fres, frep
+                        winner = f"fusion({fm.name})"
+                    else:
+                        log("ensemble_fusion_rejected", fusion_score=frep.score,
+                            best_candidate=best_m.name, score=best_rep.score)
+                except Exception as e:
+                    log("verify_error", error=str(e)[:300])
+        log("ensemble_winner", model=winner, score=best_rep.score,
+            candidates={m.name: round(rep.score, 3) for m, _, rep in scored})
+
+        events = run_monitors(best_res.text, task_text)
+        for ev in events:
+            log("fm_event", model=winner, fm_id=ev.fm_id,
+                confidence=ev.confidence, evidence=ev.evidence)
+        return UnitResult(
+            text=best_res.text,
+            attempts=len(scored) + (1 if winner.startswith("fusion") else 0),
+            verify=best_rep, fm_events=sorted({ev.fm_id for ev in events}),
+            escalated="" if best_rep.passed else
+            f"ensemble best score {best_rep.score:.2f} below the quality bar",
+            executor=winner,
+        )
+
     # ---------- agentic (tool-carrying) turn ----------
 
     async def run_tool_turn(self, session: str, body: dict) -> dict:
@@ -553,10 +670,15 @@ class Orchestrator:
                     cost_usd=pres.cost_usd if pres else 0)
 
         if not units:
-            unit = await self._supervised_unit(
-                session, task_id, messages, task_text, constraints, budget, log,
-                executor_name=executor_name, tier=tier,
-                allow_decompose=self.control.plan_mode != "off")
+            if self.control.ensemble_n >= 2:
+                unit = await self._ensemble_turn(
+                    session, task_id, messages, task_text, constraints,
+                    budget, log)
+            else:
+                unit = await self._supervised_unit(
+                    session, task_id, messages, task_text, constraints, budget, log,
+                    executor_name=executor_name, tier=tier,
+                    allow_decompose=self.control.plan_mode != "off")
             # Referee chose decomposition: plan now and fall through to the
             # unit path; the failed single-shot spend stays on the ledger.
             if unit.decompose:
