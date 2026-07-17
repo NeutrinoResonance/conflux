@@ -521,9 +521,12 @@ into a single `.llmx` container:
   payloads / trace events / turn history (0 = keep forever); auto-pruned
   hourly by the server, plus a dashboard "Prune now" and `llm-super prune`.
   Session/project metadata is never pruned (old conversations still list;
-  export before payload expiry). VACUUM reclaim is best-effort — deletion
-  always bounds growth, but the file fully compacts only when the server's
-  db connections are idle (e.g. on restart).
+  export before payload expiry). File space is reclaimed live: the db uses
+  `auto_vacuum=INCREMENTAL` (migrated automatically at server startup, or by
+  the first successful prune on a legacy file), so prune frees deleted pages
+  with `incremental_vacuum` even while the server's other connections are
+  open. Only an unmigrated legacy db can defer compaction to a later pass
+  (`vacuum deferred: db busy`); deletion always bounds growth regardless.
 
 ### TODO (later) — blob-stripping compression
 For maximum compression, strip from the bundle any large output blob that is

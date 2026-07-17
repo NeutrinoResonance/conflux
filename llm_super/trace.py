@@ -12,6 +12,10 @@ from typing import Any
 class Trace:
     def __init__(self, path: str | Path = "traces.db"):
         self._conn = sqlite3.connect(str(path), check_same_thread=False)
+        # Trace opens traces.db first (before History/Library/Checkpoints),
+        # so this is the one moment the auto_vacuum migration can VACUUM.
+        from .retention import ensure_auto_vacuum
+        ensure_auto_vacuum(self._conn)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute(
             """CREATE TABLE IF NOT EXISTS events (

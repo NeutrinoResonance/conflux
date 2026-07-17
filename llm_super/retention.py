@@ -28,6 +28,27 @@ _TABLES = {  # settings key -> (table, timestamp column)
     "turns_days": ("turns", "ts"),
 }
 
+_INCREMENTAL = 2  # PRAGMA auto_vacuum value
+
+
+def ensure_auto_vacuum(conn: sqlite3.Connection) -> bool:
+    """Migrate the db to auto_vacuum=INCREMENTAL so prune can reclaim file
+    space while other connections stay open (full VACUUM can't).
+
+    On an existing db the setting only takes effect after a VACUUM rebuild,
+    which needs the file to itself — call this before opening the other
+    long-lived connections (Trace does, at server startup). Returns True if
+    incremental vacuum is enabled after the call.
+    """
+    if conn.execute("PRAGMA auto_vacuum").fetchone()[0] == _INCREMENTAL:
+        return True
+    try:
+        conn.execute("PRAGMA auto_vacuum=INCREMENTAL")
+        conn.execute("VACUUM")
+        return conn.execute("PRAGMA auto_vacuum").fetchone()[0] == _INCREMENTAL
+    except sqlite3.OperationalError:
+        return False  # db busy — migrates on a later startup
+
 
 def stats(path: str | Path) -> dict[str, Any]:
     """Row counts per table and the db file size, for the dashboard."""
@@ -77,8 +98,17 @@ def prune(path: str | Path, settings: dict[str, Any]) -> dict[str, Any]:
         conn.commit()
         if settings.get("vacuum", True) and any(report["deleted"].values()):
             try:
+                if conn.execute("PRAGMA auto_vacuum").fetchone()[0] == _INCREMENTAL:
+                    # frees the deleted pages without exclusive access, so it
+                    # works while the server's other connections are open;
+                    # the pragma yields mid-run — drain it to free everything
+                    conn.execute("PRAGMA incremental_vacuum").fetchall()
+                else:
+                    # legacy db (pre-auto_vacuum): full rebuild, and enable
+                    # incremental for future passes while we have the lock
+                    conn.execute("PRAGMA auto_vacuum=INCREMENTAL")
+                    conn.execute("VACUUM")
                 conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-                conn.execute("VACUUM")
                 report["vacuumed"] = True
             except sqlite3.OperationalError:
                 # a live turn holds the db — space reclaims on a later pass
