@@ -280,6 +280,8 @@ class Orchestrator:
         def log(kind: str, **kw):
             self.trace.record(session, task_id, kind, **kw)
 
+        log("agent_turn", model=chain[0].name, task_preview=task_text[:200],
+            n_messages=len(messages))
         feedback = ""
         best_data: dict | None = None
         best_score = -1.0
@@ -339,12 +341,19 @@ class Orchestrator:
             if report.score > best_score:
                 best_data, best_score = data, report.score
             if report.passed and not events:
+                log("agent_end", score=report.score, answer_preview=text[:150])
                 return data
             parts = [ev.feedback for ev in events]
             if not report.passed:
                 parts.append(report.feedback)
             feedback = " ".join(p for p in parts if p)
-        return best_data if best_data is not None else data
+        final = best_data if best_data is not None else data
+        log("agent_end", score=best_score if best_score >= 0 else None,
+            answer_preview=((final["choices"][0].get("message") or {})
+                            .get("content") or "")[:150],
+            escalated=("best attempt below quality bar"
+                       if best_score < sup.pass_threshold else ""))
+        return final
 
     # ---------- full turn ----------
 
@@ -359,6 +368,7 @@ class Orchestrator:
             self.trace.record(session, task_id, kind, **kw)
 
         log("turn_start", model=executor_name, prompt_chars=len(task_text),
+            task_preview=task_text[:200],
             routed="learned" if (executor_name != self.cfg.default_executor
                                  and not self.control.forced_executor) else "static")
 
@@ -427,7 +437,7 @@ class Orchestrator:
                 session, task_id, messages, task_text, constraints, budget, log)
             log("turn_end", spent=budget.spent, attempts=unit.attempts,
                 score=unit.verify.score if unit.verify else None,
-                escalated=unit.escalated)
+                escalated=unit.escalated, answer_preview=unit.text[:150])
             score = unit.verify.score if unit.verify else None
             self.history.record_turn(session, task_text, unit.text, score,
                                      unit.fm_events, len(messages))
@@ -578,7 +588,8 @@ class Orchestrator:
             (r.verify for r in results if r.verify),
             key=lambda v: v.score, default=None)
         log("turn_end", spent=budget.spent, attempts=total_attempts,
-            units=len(results), escalated=escalated, prior_spent=prior_spent)
+            units=len(results), escalated=escalated, prior_spent=prior_spent,
+            answer_preview=final_text[:150])
         best_score = best.score if best else None
         self.history.record_turn(session, task_text, final_text, best_score,
                                  sorted(set(all_fm)), len(messages))

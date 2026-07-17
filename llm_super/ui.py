@@ -101,6 +101,13 @@ button.danger  { background: var(--critical); border-color: var(--critical); col
         border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
 .card .head { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; }
 .card .head .id { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
+.card .title { font-size: 13.5px; margin: 6px 0 0; color: var(--ink); }
+.card .title::before { content: "“"; color: var(--muted); }
+.card .title::after  { content: "”"; color: var(--muted); }
+.card .answer { font-size: 12.5px; margin-top: 4px; color: var(--ink-2); }
+.card .answer::before { content: "→ "; color: var(--muted); }
+.card .units { margin-top: 4px; font-size: 12px; color: var(--ink-2); }
+.card .units li { margin-left: 16px; }
 .scorebar { display: inline-flex; align-items: center; gap: 6px; }
 .scorebar .track { width: 90px; height: 6px; border-radius: 4px;
                    background: var(--seq-track); overflow: hidden; }
@@ -267,7 +274,7 @@ function renderTasks(events) {
   for (const [task, evs] of byTask) {
     if (++n > 8) break;
     evs.sort((a, b) => a.ts - b.ts);
-    const end = evs.find(e => e.kind === "turn_end");
+    const end = evs.find(e => e.kind === "turn_end" || e.kind === "agent_end");
     const verifies = evs.filter(e => e.kind === "verify");
     const lastScore = verifies.length ? verifies[verifies.length-1].data?.score : null;
     const cost = evs.reduce((s, e) => s + (e.cost_usd || 0), 0);
@@ -278,10 +285,16 @@ function renderTasks(events) {
     const steps = evs.map(e =>
       `<span class="badge ${e.kind === "fm_event" ? "fm" : ""}">${esc(e.kind)}${
         e.model ? " · " + esc(e.model) : ""}</span>`).join("");
+    const preview = evs.find(e => e.data?.task_preview)?.data?.task_preview;
+    const answer = end?.data?.answer_preview;
+    const planUnits = evs.find(e => e.kind === "plan")?.data?.units || [];
+    const agentic = evs.some(e => e.kind === "agent_turn" || e.kind === "tool_step");
     const status = end
       ? (escalated ? `<span class="badge crit">⛔ needs input</span>`
                    : `<span class="badge ok">✓ done</span>`)
-      : `<span class="badge">… running</span>`;
+      : (agentic && !verifies.length
+         ? `<span class="badge">🔧 agent tool step</span>`
+         : `<span class="badge">… running</span>`);
     cards.push(`<div class="card">
       <div class="head">
         <span class="id">${esc(task)}</span> ${status}
@@ -290,6 +303,10 @@ function renderTasks(events) {
         <span class="n" style="color:var(--muted);font-size:12px">$${cost.toFixed(4)}</span>
         ${fms.map(fmBadge).join(" ")}
       </div>
+      ${preview ? `<div class="title" title="${esc(preview)}">${esc(preview.slice(0,160))}${preview.length>160?"…":""}</div>` : ""}
+      ${planUnits.length ? `<ol class="units">${planUnits.map(u =>
+          `<li>${esc(String(u).slice(0,110))}</li>`).join("")}</ol>` : ""}
+      ${answer ? `<div class="answer">${esc(answer.slice(0,140))}${answer.length>=140?"…":""}</div>` : ""}
       ${sessionNotes.map(e => `<div class="note">${esc(e.data?.evidence || "")}</div>`).join("")}
       ${escalated ? `<div class="esc">${esc(escalated)}</div>` : ""}
       <div class="steps">${steps}</div>
