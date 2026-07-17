@@ -261,6 +261,91 @@ class Orchestrator:
             evidence=best_evidence, executor=best_executor,
         )
 
+    # ---------- agentic (tool-carrying) turn ----------
+
+    async def run_tool_turn(self, session: str, body: dict) -> dict:
+        """Supervision for agent clients (Hermes, OpenCode, …), whose
+        requests carry tool definitions. Mid-loop steps that return
+        tool_calls pass through untouched — interrupting a tool loop would
+        break the client. A FINAL TEXT answer, though, is monitored and
+        cross-family verified, with one repair attempt.
+        Returns the raw OpenAI-format response dict."""
+        task_id = uuid.uuid4().hex[:8]
+        sup = self.cfg.supervision
+        budget = Budget(cap=self.control.budget_usd or sup.budget_usd_per_task)
+        messages = body.get("messages", [])
+        task_text = _last_user_text(messages)
+        chain = self.cfg.executor_chain(self._route_executor())
+
+        def log(kind: str, **kw):
+            self.trace.record(session, task_id, kind, **kw)
+
+        feedback = ""
+        best_data: dict | None = None
+        best_score = -1.0
+        for attempt in range(2):  # initial + one verified repair
+            req = dict(body)
+            if feedback:
+                req["messages"] = list(messages) + [{
+                    "role": "user",
+                    "content": ("Your previous answer was reviewed and found "
+                                f"insufficient. {feedback}\nProduce a corrected, "
+                                "complete answer."),
+                }]
+            data = None
+            for m in chain:
+                try:
+                    data = await self.client.raw_chat(m, req)
+                    model = m
+                    break
+                except ProviderError as e:
+                    log("executor_error", model=m.name, error=str(e)[:200])
+            if data is None:
+                raise ProviderError(chain[0].name, 0, "all executors failed")
+            usage = data.get("usage") or {}
+            cost = model.cost(usage.get("prompt_tokens", 0),
+                              usage.get("completion_tokens", 0))
+            budget.add(cost)
+            msg = (data["choices"][0].get("message") or {})
+            if msg.get("tool_calls"):
+                log("tool_step", model=model.name, cost_usd=cost,
+                    tokens_in=usage.get("prompt_tokens", 0),
+                    tokens_out=usage.get("completion_tokens", 0),
+                    n_calls=len(msg["tool_calls"]))
+                return data  # mid-loop: hand straight back to the agent
+
+            text = msg.get("content") or ""
+            log("execute", model=model.name, cost_usd=cost,
+                tokens_in=usage.get("prompt_tokens", 0),
+                tokens_out=usage.get("completion_tokens", 0),
+                attempt=attempt + 1, agentic=True)
+            events = run_monitors(text, task_text)
+            for ev in events:
+                log("fm_event", model=model.name, fm_id=ev.fm_id,
+                    confidence=ev.confidence, evidence=ev.evidence)
+            if budget.exhausted:
+                return best_data or data
+            try:
+                report = await self.verifier.verify(
+                    task=task_text, output=text, contract=[],
+                    executor_family=model.family,
+                    evidence=_tool_transcript(req.get("messages", messages)))
+            except Exception as e:
+                log("verify_error", error=str(e)[:300])
+                return best_data or data
+            budget.add(report.cost_usd)
+            log("verify", model=report.verifier, cost_usd=report.cost_usd,
+                score=report.score, passed=report.passed, stage="agentic-final")
+            if report.score > best_score:
+                best_data, best_score = data, report.score
+            if report.passed and not events:
+                return data
+            parts = [ev.feedback for ev in events]
+            if not report.passed:
+                parts.append(report.feedback)
+            feedback = " ".join(p for p in parts if p)
+        return best_data if best_data is not None else data
+
     # ---------- full turn ----------
 
     async def run_turn(self, session: str, messages: list[dict]) -> TurnReport:
@@ -522,6 +607,28 @@ def _ckpt_state(units, completed, budget, prior_spent) -> dict:
         },
         "spent": budget.spent + prior_spent,
     }
+
+
+def _tool_transcript(messages: list[dict], limit: int = 12) -> str | None:
+    """Assemble the agent's recent tool activity (calls + results) so the
+    verifier judges a final answer against observed behavior, not bare text.
+    Without this, a terse-but-correct agent answer ("42") looks unevidenced."""
+    lines: list[str] = []
+    for m in messages[-limit:]:
+        if m.get("role") == "assistant" and m.get("tool_calls"):
+            for tc in m["tool_calls"]:
+                fn = (tc.get("function") or {})
+                lines.append(f"tool call: {fn.get('name')}({str(fn.get('arguments'))[:300]})")
+        elif m.get("role") == "tool":
+            content = m.get("content")
+            if isinstance(content, list):
+                content = " ".join(str(p.get("text", "")) for p in content
+                                   if isinstance(p, dict))
+            lines.append(f"tool result: {str(content)[:500]}")
+    if not lines:
+        return None
+    return ("Tool activity from the agent's conversation (these tools were "
+            "actually executed):\n" + "\n".join(lines[-16:]))
 
 
 def _looks_multipart(task: str) -> bool:

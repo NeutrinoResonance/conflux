@@ -48,7 +48,9 @@ The model's response:
 {output}
 ---
 
-Execution evidence (the response's code was actually run in a sandbox):
+Observed execution evidence (code/tools that actually ran — trust this over
+claims in the response; a brief answer consistent with this evidence is
+complete):
 {evidence}
 
 Analyze the response against the criterion. Quote specific evidence. Be

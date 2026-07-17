@@ -76,6 +76,53 @@ class Client:
     async def aclose(self) -> None:
         await self._http.aclose()
 
+    async def raw_chat(self, model: Model, body: dict[str, Any]) -> dict[str, Any]:
+        """Forward a full OpenAI-format request body (tools and all) to the
+        provider, preserving the response shape. Used for agentic tool-call
+        turns, which supervised chat() cannot represent. Same breaker/retry
+        policy as chat()."""
+        provider = self.cfg.provider_for(model)
+        breaker = self._breakers.setdefault(provider.name, _Breaker())
+        if time.monotonic() < breaker.open_until:
+            raise ProviderError(model.name, 0,
+                                f"circuit open for provider {provider.name}")
+        out = dict(body)
+        out["model"] = model.id
+        out.pop("stream", None)
+        last_exc: Exception | None = None
+        for attempt in range(2):
+            if attempt:
+                await asyncio.sleep(1.5)
+            try:
+                resp = await self._http.post(
+                    f"{provider.base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {resolve(provider.key_source)}",
+                        "Content-Type": "application/json",
+                    },
+                    json=out,
+                )
+            except httpx.HTTPError as e:
+                last_exc = ProviderError(model.name, 0, f"transport error: {e}")
+                continue
+            text = _CTRL.sub(" ", resp.text)
+            try:
+                data = json.loads(text, strict=False)
+            except json.JSONDecodeError as e:
+                last_exc = ProviderError(model.name, resp.status_code, f"unparseable body: {e}")
+                continue
+            if resp.status_code >= 500:
+                last_exc = ProviderError(model.name, resp.status_code, json.dumps(data))
+                continue
+            if resp.status_code != 200 or "choices" not in data:
+                raise ProviderError(model.name, resp.status_code, json.dumps(data))
+            breaker.fails = 0
+            return data
+        breaker.fails += 1
+        if breaker.fails >= self.BREAK_AFTER:
+            breaker.open_until = time.monotonic() + self.BREAK_FOR
+        raise last_exc if last_exc else ProviderError(model.name, 0, "exhausted retries")
+
     async def chat(
         self,
         model: Model,

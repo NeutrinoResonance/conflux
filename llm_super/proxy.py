@@ -25,7 +25,7 @@ from .config import load
 from .control import ControlState, handle
 from .history import History
 from .orchestrator import Orchestrator, _last_user_text
-from .providers import Client, ProviderError
+from .providers import Client, ProviderError  # noqa: F401 (ProviderError used below)
 from .trace import Trace
 
 state: dict = {}
@@ -81,6 +81,35 @@ def _completion_body(text: str, model: str) -> dict:
     }
 
 
+def _sse_raw(data: dict, model: str):
+    """Convert a complete (non-streamed) completion — possibly containing
+    tool_calls — into a minimal OpenAI-format SSE stream."""
+    cid = data.get("id") or f"chatcmpl-{uuid.uuid4().hex[:24]}"
+    choice = data["choices"][0]
+    msg = choice.get("message") or {}
+    finish = choice.get("finish_reason") or "stop"
+
+    def chunk(delta: dict, fin: str | None = None) -> str:
+        return "data: " + json.dumps({
+            "id": cid, "object": "chat.completion.chunk",
+            "created": int(time.time()), "model": model,
+            "choices": [{"index": 0, "delta": delta, "finish_reason": fin}],
+        }) + "\n\n"
+
+    async def gen():
+        yield chunk({"role": "assistant"})
+        if msg.get("content"):
+            for i in range(0, len(msg["content"]), 512):
+                yield chunk({"content": msg["content"][i: i + 512]})
+        if msg.get("tool_calls"):
+            deltas = [{**tc, "index": i} for i, tc in enumerate(msg["tool_calls"])]
+            yield chunk({"tool_calls": deltas})
+        yield chunk({}, finish)
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
+
+
 def _sse(text: str, model: str):
     cid = f"chatcmpl-{uuid.uuid4().hex[:24]}"
 
@@ -133,6 +162,23 @@ async def chat_completions(request: Request):
                               tokens_in=res.tokens_in, tokens_out=res.tokens_out,
                               cost_usd=res.cost_usd)
         return _sse(res.text, model_name) if stream else JSONResponse(_completion_body(res.text, model_name))
+
+    # Agentic tool-carrying turns (Hermes, OpenCode, …): mid-loop tool_calls
+    # pass through untouched; final text answers get monitored + verified
+    # with one repair attempt (Orchestrator.run_tool_turn).
+    if body.get("tools") or body.get("tool_choice"):
+        try:
+            data = await asyncio.wait_for(
+                state["orch"].run_tool_turn(session, body),
+                cfg.supervision.turn_timeout_s)
+        except ProviderError as e:
+            return JSONResponse({"error": {"message": str(e)}}, status_code=502)
+        except asyncio.TimeoutError:
+            return JSONResponse({"error": {"message": "turn timeout"}}, status_code=504)
+        data["model"] = model_name
+        if not stream:
+            return JSONResponse(data)
+        return _sse_raw(data, model_name)
 
     # Supervised mode (bounded by a hard wall-clock timeout).
     timeout = cfg.supervision.turn_timeout_s
