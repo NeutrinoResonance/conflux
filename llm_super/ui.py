@@ -265,6 +265,11 @@ tr:last-child td { border-bottom: none; }
   </section>
 
   <section>
+    <h2>Routing <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">— runtime overrides; edit models.yaml to persist</span></h2>
+    <div id="routing"></div>
+  </section>
+
+  <section>
     <h2 id="tasksHeading">Tasks</h2>
     <div id="tasks"></div>
   </section>
@@ -718,6 +723,63 @@ async function doExport(scope) {
     : `✓ ${r.name} — ${(r.bytes/1024).toFixed(1)}KB from ${(r.raw_bytes/1024).toFixed(1)}KB (${Math.round(100*r.bytes/r.raw_bytes)}%) · ${r.encryption} · ${r.location}`;
 }
 
+// ---- routing ----
+const ROUTING_LABELS = {
+  default_executor: "default executor",
+  utility: "utility (contract / planner)",
+  referee: "referee (repair strategy)",
+  trivial_executor: "trivial-tier executor",
+  learned_routing: "learned routing",
+  min_routing_samples: "min samples to route",
+  verifier_pool: "verifier pool (ordered)",
+};
+function renderRouting(r) {
+  const af = document.activeElement;
+  if (af && af.closest("#routing")) return;  // don't clobber live edits
+  const s = r.settings;
+  const names = Object.keys(r.models);
+  const executors = names.filter(m => r.models[m].roles.includes("executor"));
+  const modelSel = (k, v, pool, blank) =>
+    `<select onchange="setRouting('${k}', this.value)">` +
+    (blank ? `<option value=""${!v ? " selected" : ""}>(none)</option>` : "") +
+    pool.map(m => `<option${m === v ? " selected" : ""}>${m}</option>`).join("") +
+    `</select>`;
+  const controls = {
+    default_executor: modelSel("default_executor", s.default_executor, executors),
+    utility: modelSel("utility", s.utility, names),
+    referee: modelSel("referee", s.referee, names, true),
+    trivial_executor: modelSel("trivial_executor", s.trivial_executor, names, true),
+    learned_routing:
+      `<select onchange="setRouting('learned_routing', this.value === 'true')">
+         <option value="true"${s.learned_routing ? " selected" : ""}>on</option>
+         <option value="false"${!s.learned_routing ? " selected" : ""}>off</option></select>`,
+    min_routing_samples:
+      `<input type="number" min="1" step="1" value="${esc(s.min_routing_samples)}"
+        onchange="setRouting('min_routing_samples', Number(this.value))">`,
+    verifier_pool:
+      `<input type="text" style="width:100%" value="${esc(s.verifier_pool.join(", "))}"
+        onchange="setRouting('verifier_pool', this.value)">`,
+  };
+  $("#routing").innerHTML = `<div class="settings-grid">` +
+    Object.keys(ROUTING_LABELS).map(k =>
+      `<div class="fname">${ROUTING_LABELS[k]}</div><div class="fval">${controls[k]}</div><span></span><span></span>`
+    ).join("") + `</div>`;
+}
+async function setRouting(key, value) {
+  if (key === "verifier_pool")
+    value = value.split(",").map(s => s.trim()).filter(Boolean);
+  const resp = await fetch("/admin/routing", {method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({patch: {[key]: value}})});
+  if (!resp.ok) {
+    const e = await resp.json();
+    flash("routing: ✗ " + (e.error || resp.status));
+    renderRouting(await fetch("/admin/routing").then(r => r.json()));
+    return;
+  }
+  flash("routing: " + key + " set (runtime only)");
+}
+
 // ---- retention ----
 const RETENTION_LABELS = {
   exchanges_days: "message payloads (days)",
@@ -825,12 +887,13 @@ async function toggleMessages(ev, task) {
 let libraryRendered = false;
 async function refresh() {
   try {
-    const [st, evs, stats, lib, ret] = await Promise.all([
+    const [st, evs, stats, lib, ret, rt] = await Promise.all([
       fetch("/admin/status").then(r => r.json()),
       fetch("/admin/events?n=300").then(r => r.json()),
       fetch("/admin/stats").then(r => r.json()),
       fetch("/admin/library").then(r => r.json()),
       fetch("/admin/retention").then(r => r.json()),
+      fetch("/admin/routing").then(r => r.json()),
     ]);
     library = lib;
     if (!library.projects.find(p => p.id === sel.project)) sel = {project: "default", session: null};
@@ -838,6 +901,7 @@ async function refresh() {
     renderSidebar();
     renderLibrary();
     renderRetention(ret);
+    renderRouting(rt);
     renderTasks(evs);
     renderStats(stats);
     renderEvents(evs);

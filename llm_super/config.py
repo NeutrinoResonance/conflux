@@ -45,6 +45,7 @@ class Supervision:
     score_scale: int = 20
     pass_threshold: float = 0.70
     verify_repeats: int = 1
+    adversarial_repeats: int = 3   # K for the adversarial tier (variance ↓ 1/K)
     max_repairs: int = 2
     budget_usd_per_task: float = 0.50
     trailer: bool = True
@@ -64,6 +65,8 @@ class Config:
     execution: Execution
     learned_routing: bool = True
     min_routing_samples: int = 5
+    referee: str = ""              # large model that picks repair strategies
+    trivial_executor: str = ""     # cheap model for difficulty="trivial" turns
     path: Path = field(default_factory=lambda: Path("models.yaml"))
 
     def model(self, name: str) -> Model:
@@ -76,7 +79,13 @@ class Config:
 
     def eligible_verifiers(self, executor_family: str) -> list[Model]:
         """Cross-family rule: verifier family must differ from the executor's.
-        Ordered by pool priority; callers fail over down the list."""
+        Ordered by failure-prior overlap with the executor (uncorrelated
+        priors first — SPEC §3), then pool priority; callers fail over down
+        the list."""
+        exec_priors = set()
+        for m in self.models.values():
+            if m.family == executor_family:
+                exec_priors |= set(m.failure_priors)
         out = [
             self.models[name]
             for name in self.verifier_pool
@@ -86,7 +95,7 @@ class Config:
         ]
         if not out:
             raise RuntimeError(f"no logprobs-capable verifier outside family {executor_family!r}")
-        return out
+        return sorted(out, key=lambda m: len(exec_priors & set(m.failure_priors)))
 
     def pick_verifier(self, executor_family: str) -> Model:
         return self.eligible_verifiers(executor_family)[0]
@@ -127,6 +136,10 @@ def load(path: str | Path = "models.yaml") -> Config:
             raise ValueError(f"model {name!r} references unknown provider {models[name].provider!r}")
 
     routing = raw.get("routing", {})
+    for key in ("referee", "trivial_executor"):
+        name = routing.get(key, "")
+        if name and name not in models:
+            raise ValueError(f"routing.{key} references unknown model {name!r}")
     sup = Supervision(**raw.get("supervision", {}))
     execution = Execution(**raw.get("execution", {}))
     return Config(
@@ -139,5 +152,7 @@ def load(path: str | Path = "models.yaml") -> Config:
         execution=execution,
         learned_routing=bool(routing.get("learned", True)),
         min_routing_samples=int(routing.get("min_samples", 5)),
+        referee=str(routing.get("referee", "")),
+        trivial_executor=str(routing.get("trivial_executor", "")),
         path=path,
     )

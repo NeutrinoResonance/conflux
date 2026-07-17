@@ -31,9 +31,21 @@ DEFAULT_CRITERIA = [
     "Output quality: is the response well-formed, coherent, and directly usable as requested?",
 ]
 
+LITE_CRITERIA = [
+    "Overall: does the response satisfy the task's explicit requirements "
+    "(and the contract checklist, if given) completely and usably?",
+]
+
+_ADVERSARIAL_STANCE = (
+    "Adopt an adversarial stance: your job is to REFUTE this response if at "
+    "all possible. Hunt for any requirement it misses, any claim its "
+    "evidence does not support, any input on which it breaks. Award a high "
+    "score only if your refutation attempt genuinely fails.\n\n"
+)
+
 _PROMPT = """You are an expert reviewer verifying another model's work.
 
-Evaluation criterion: {criterion}
+{stance}Evaluation criterion: {criterion}
 
 Task given to the model:
 ---
@@ -78,6 +90,7 @@ class VerifyReport:
     cost_usd: float = 0.0
     tokens: int = 0
     verifier: str = ""
+    tier: str = "standard"     # lite | standard | adversarial (SPEC §6)
 
 
 def _letter_value(tok: str, scale: int) -> int | None:
@@ -150,27 +163,47 @@ class Verifier:
         criteria: list[str] | None = None,
         repeats: int | None = None,
         evidence: str | None = None,
+        tier: str = "standard",
     ) -> VerifyReport:
+        """Risk-tiered verification (SPEC §6):
+        - lite: cheapest eligible verifier, one merged criterion, K=1 —
+          for trivial-difficulty turns.
+        - standard: default criteria, configured K.
+        - adversarial: refutation-framed prompt, higher K, and the contract
+          constraints decomposed into individual criteria (the C axis) —
+          for high-risk units and referee escalations."""
         sup = self.cfg.supervision
         scale = sup.score_scale
-        criteria = list(criteria or DEFAULT_CRITERIA)
+        if criteria is None:
+            criteria = list(LITE_CRITERIA if tier == "lite" else DEFAULT_CRITERIA)
+            if tier == "adversarial":
+                criteria += [f"Contract constraint: {c}" for c in contract[:6]]
+        else:
+            criteria = list(criteria)
         if evidence:
             criteria.append(
                 "Errors: based on the execution evidence, does the code run "
                 "without errors, do tests pass, and do the response's claims "
                 "match the observed behavior?"
             )
-        repeats = repeats or sup.verify_repeats
+        if repeats is None:
+            repeats = (1 if tier == "lite"
+                       else max(sup.verify_repeats, sup.adversarial_repeats)
+                       if tier == "adversarial" else sup.verify_repeats)
 
         # Durability: fail over through every eligible cross-family verifier
         # before giving up — a single provider outage must not leave work
         # unverified (that would be our own FM-3.2).
         candidates = self.cfg.eligible_verifiers(executor_family)
+        if tier == "lite":
+            candidates = sorted(
+                candidates, key=lambda m: m.price_in_per_m + m.price_out_per_m)
         last_error: Exception | None = None
         for model in candidates:
             try:
                 return await self._verify_with(
-                    model, task, output, contract, criteria, repeats, evidence, scale
+                    model, task, output, contract, criteria, repeats, evidence,
+                    scale, tier,
                 )
             except ProviderError as e:
                 last_error = e
@@ -186,6 +219,7 @@ class Verifier:
         repeats: int,
         evidence: str | None,
         scale: int,
+        tier: str = "standard",
     ) -> VerifyReport:
         sup = self.cfg.supervision
 
@@ -209,6 +243,8 @@ class Verifier:
                             {
                                 "role": "user",
                                 "content": _PROMPT.format(
+                                    stance=(_ADVERSARIAL_STANCE
+                                            if tier == "adversarial" else ""),
                                     criterion=criterion,
                                     task=task[:8000],
                                     contract=contract_text,
@@ -265,4 +301,5 @@ class Verifier:
             cost_usd=cost,
             tokens=tokens,
             verifier=model.name,
+            tier=tier,
         )

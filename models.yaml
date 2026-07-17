@@ -122,10 +122,14 @@ models:
 routing:
   default_executor: deepseek-v4-pro
   utility: gemma-4-31b          # contract extraction, classification, planning
+  referee: kimi-k2.6            # diagnoses repeated failures, picks repair strategy
+  trivial_executor: gemma-4-31b # difficulty="trivial" turns (verify-lite);
+                                # deliberately NOT roles:[executor] so learned
+                                # routing never picks it for routine work
   verifier_pool: [qwen-3.7-plus, kimi-k2.6, gemma-4-31b, deepseek-v4-pro,
                   qwen-3.7-plus-go, deepseek-v4-pro-go]
-  # verifiers are tried in pool order, skipping the executor's family; a
-  # provider failure fails over to the next eligible entry
+  # verifiers are tried in prior-overlap-then-pool order, skipping the
+  # executor's family; a provider failure fails over to the next entry
   learned: true        # route to the best-scoring executor once sampled
   min_samples: 5       # turns per model before its stats can win routing
 
@@ -137,7 +141,8 @@ execution:
 supervision:
   score_scale: 20               # verifier scores 1..20
   pass_threshold: 0.70          # normalized [0,1]; below this → repair loop
-  verify_repeats: 1             # K (raise for adversarial tier)
+  verify_repeats: 1             # K for the standard tier
+  adversarial_repeats: 3        # K for the adversarial tier (refute-framed)
   max_repairs: 2                # structural-change rule: after N repairs, escalate
   budget_usd_per_task: 0.50
   trailer: true                 # append supervisor summary to responses

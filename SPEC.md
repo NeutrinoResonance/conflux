@@ -491,8 +491,21 @@ turn arrives.
 2. **M1 — Supervised single-executor**: contract extraction, completion +
    contract monitors (heuristics + Gemma judge), retry-with-feedback loop,
    budget gates. *Measurable goal: catch seeded FM-X.1/FM-1.1 failures.*
-3. **M2 — Cross-model verification & referee**: verifier role, escalation
-   ladder, model routing by difficulty + failure priors.
+3. **M2 — Cross-model verification & referee** *(implemented)*: verifier
+   role; referee (`referee.py`) — on verification failure the first
+   `max_repairs` retries carry targeted feedback (a rule, no referee spend),
+   then a large-model referee must pick a STRUCTURAL strategy: switch to an
+   untried model family (candidates ordered by learned repair success on the
+   observed failure modes, then uncorrelated failure priors), escalate to
+   adversarial verification, decompose into planner units, or ask the user;
+   a referee outage falls back to a deterministic reroute. Difficulty
+   routing: the contract call also classifies {trivial, routine, hard} —
+   trivial goes to `routing.trivial_executor` with lite verification, hard
+   is offered to the planner. Verification tiers (§6) implemented: lite /
+   standard / adversarial (refute-framed, higher K, contract constraints
+   decomposed into criteria). Verifier candidate order is failure-prior
+   aware. All routing options are editable at runtime from the dashboard
+   Routing panel (`/admin/routing`; in-memory — models.yaml persists).
 4. **M3 — Control plane**: live trace UI, pause/steer/kill, breakpoints,
    in-band `!commands`, checkpoint rewind.
 5. **M4 — Learning routing**: repair-success priors feed routing; efficiency

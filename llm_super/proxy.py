@@ -326,6 +326,65 @@ async def admin_control(request: Request):
     return await admin_status()
 
 
+@app.get("/admin/routing")
+async def admin_routing():
+    cfg = state["cfg"]
+    return {
+        "settings": {
+            "default_executor": cfg.default_executor,
+            "utility": cfg.utility,
+            "referee": cfg.referee,
+            "trivial_executor": cfg.trivial_executor,
+            "learned_routing": cfg.learned_routing,
+            "min_routing_samples": cfg.min_routing_samples,
+            "verifier_pool": list(cfg.verifier_pool),
+        },
+        "models": {name: {"roles": list(m.roles), "family": m.family,
+                          "logprobs": m.logprobs}
+                   for name, m in cfg.models.items()},
+    }
+
+
+@app.post("/admin/routing")
+async def admin_routing_set(request: Request):
+    """Runtime routing overrides from the dashboard. In-memory only:
+    models.yaml stays the on-disk source of truth (a restart reloads it)."""
+    b = await request.json()
+    cfg = state["cfg"]
+    for key, value in (b.get("patch") or {}).items():
+        if key in ("default_executor", "utility", "referee", "trivial_executor"):
+            # referee/trivial_executor may be unset (referee then falls back
+            # to the default executor; trivial turns keep normal routing)
+            if value == "" and key in ("referee", "trivial_executor"):
+                setattr(cfg, key, "")
+            elif value not in cfg.models:
+                return JSONResponse({"error": f"unknown model {value!r}"},
+                                    status_code=400)
+            else:
+                setattr(cfg, key, value)
+        elif key == "learned_routing":
+            cfg.learned_routing = bool(value)
+        elif key == "min_routing_samples":
+            try:
+                cfg.min_routing_samples = max(1, int(value))
+            except (TypeError, ValueError):
+                return JSONResponse({"error": f"bad min_samples {value!r}"},
+                                    status_code=400)
+        elif key == "verifier_pool":
+            names = [str(v) for v in value] if isinstance(value, list) else []
+            bad = [n for n in names if n not in cfg.models]
+            if bad or not names:
+                return JSONResponse(
+                    {"error": f"unknown models in pool: {', '.join(bad) or '(empty)'}"},
+                    status_code=400)
+            cfg.verifier_pool = names
+        else:
+            return JSONResponse({"error": f"unknown field {key!r}"},
+                                status_code=400)
+        state["trace"].record("-", "-", "control", command=f"ui:routing.{key}={value}")
+    return await admin_routing()
+
+
 @app.get("/admin/events")
 async def admin_events(n: int = 50):
     return state["trace"].recent(n)

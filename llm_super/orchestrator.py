@@ -19,6 +19,7 @@ import asyncio
 
 from . import contract as contract_mod
 from . import planner
+from . import referee
 from . import reqlog
 from . import sandbox
 from .checkpoint import Checkpoints, turn_key
@@ -53,6 +54,7 @@ class UnitResult:
     escalated: str = ""
     evidence: str = ""         # sandbox transcript of the best attempt
     executor: str = ""         # model that produced the best attempt
+    decompose: bool = False    # referee verdict: split into units and re-run
 
 
 @dataclass
@@ -145,11 +147,23 @@ class Orchestrator:
         constraints: list[str],
         budget: Budget,
         log,
+        *,
+        executor_name: str | None = None,
+        tier: str = "standard",
+        allow_decompose: bool = False,
     ) -> UnitResult:
         sup = self.cfg.supervision
-        chain = self.cfg.executor_chain(self._route_executor())
+        chain = self.cfg.executor_chain(executor_name or self._route_executor())
+        # §4 escalation ladder: 1 first pass + max_repairs feedback retries,
+        # then the referee must change something structural — one structural
+        # attempt before returning the best we have.
+        max_attempts = sup.max_repairs + 2
         attempts = 0
         fm_seen: list[str] = []
+        models_tried: list[str] = []
+        # (strategy, fm_ids) the current attempt is trying to repair —
+        # its verdict becomes a repair-outcome row (learned routing signal)
+        pending_repair: tuple[str, list[str]] | None = None
         best_text = ""
         best_evidence = ""
         best_executor = ""
@@ -157,7 +171,7 @@ class Orchestrator:
         feedback = ""
         escalated = ""
 
-        while attempts <= sup.max_repairs:
+        while attempts < max_attempts:
             if self.control.paused:
                 escalated = "supervisor is paused (!resume to continue)"
                 break
@@ -182,6 +196,8 @@ class Orchestrator:
                 escalated = "all executors failed (provider outage?)"
                 break
             res, executor = executed
+            if executor.name not in models_tried:
+                models_tried.append(executor.name)
             budget.add(res.cost_usd)
             log("execute", model=executor.name, cost_usd=res.cost_usd,
                 tokens_in=res.tokens_in, tokens_out=res.tokens_out, attempt=attempts)
@@ -223,7 +239,7 @@ class Orchestrator:
                 report = await self.verifier.verify(
                     task=task_text, output=res.text,
                     contract=constraints, executor_family=executor.family,
-                    evidence=evidence,
+                    evidence=evidence, tier=tier,
                 )
             except Exception as e:
                 log("verify_error", error=str(e)[:300])
@@ -233,7 +249,7 @@ class Orchestrator:
                 break
             budget.add(report.cost_usd)
             log("verify", model=report.verifier, cost_usd=report.cost_usd,
-                score=report.score, passed=report.passed,
+                score=report.score, passed=report.passed, tier=report.tier,
                 criteria={c.criterion: round(c.expected, 2) for c in report.criteria},
                 continuous=all(c.continuous for c in report.criteria))
 
@@ -242,15 +258,55 @@ class Orchestrator:
                 best_evidence = evidence or ""
                 best_executor = executor.name
 
-            if report.passed and not events:
+            passed = report.passed and not events
+            if pending_repair:
+                self.history.record_repair(
+                    executor.name, pending_repair[1], pending_repair[0], passed)
+            if passed:
                 break
+            if attempts >= max_attempts:
+                break
+
+            # Referee (SPEC §4): pick the repair strategy for the next
+            # attempt. Feedback retries are a rule; once max_repairs is
+            # spent, the referee must change something structural.
+            attempt_fms = sorted({ev.fm_id for ev in events})
+            decision = await referee.decide(
+                self.client, self.cfg,
+                task=task_text, output_tail=res.text[-1500:],
+                fm_events=attempt_fms or sorted(set(fm_seen)),
+                verify_feedback=report.feedback, attempts=attempts,
+                models_tried=models_tried, allow_decompose=allow_decompose,
+                tier=tier, repair_stats=self.history.repair_stats())
+            budget.add(decision.cost_usd)
+            log("referee", strategy=decision.strategy, source=decision.source,
+                target=decision.target_model, rationale=decision.rationale,
+                cost_usd=decision.cost_usd, attempt=attempts)
 
             parts = [ev.feedback for ev in events]
             if not report.passed:
                 parts.append(report.feedback)
             feedback = " ".join(p for p in parts if p)
+            pending_repair = (decision.strategy, attempt_fms)
 
-        if attempts > sup.max_repairs and best_report and not best_report.passed:
+            if decision.strategy == "switch_model":
+                chain = self.cfg.executor_chain(decision.target_model)
+            elif decision.strategy == "escalate_verification":
+                tier = "adversarial"
+            elif decision.strategy == "decompose":
+                return UnitResult(
+                    text=best_text, attempts=attempts, verify=best_report,
+                    fm_events=sorted(set(fm_seen)),
+                    evidence=best_evidence, executor=best_executor,
+                    decompose=True,
+                )
+            elif decision.strategy == "ask_user":
+                escalated = decision.question or (
+                    "repeated repairs failed; the referee needs your input")
+                break
+
+        if (attempts >= max_attempts and best_report
+                and not best_report.passed and not escalated):
             escalated = (
                 f"{attempts} attempts did not reach the quality bar "
                 f"(best score {best_report.score:.2f}); returning best attempt"
@@ -392,20 +448,33 @@ class Orchestrator:
                 evidence=ev.evidence, scope="session")
             session_notes.append(f"{ev.fm_id}: {ev.feedback}")
 
-        # 1. Contract extraction (user-toggleable: !checklist on|off|skip)
+        # 1. Contract extraction + difficulty classification, one utility
+        # call (user-toggleable: !checklist on|off|skip)
         constraints: list[str] = []
+        difficulty = "routine"
         if self.control.consume_contract_enabled():
-            constraints, cres = await contract_mod.extract(self.client, self.cfg, task_text)
+            constraints, difficulty, cres = await contract_mod.extract(
+                self.client, self.cfg, task_text)
             if cres:
                 budget.add(cres.cost_usd)
                 log("contract", model=self.cfg.utility, cost_usd=cres.cost_usd,
                     tokens_in=cres.tokens_in, tokens_out=cres.tokens_out,
-                    constraints=constraints)
+                    constraints=constraints, difficulty=difficulty)
             else:
                 # non-fatal (turn proceeds without a checklist) but never silent
                 log("contract_failed", model=self.cfg.utility)
         else:
             log("contract_skipped")
+
+        # 1b. Difficulty routing (SPEC §8): trivial turns go to the cheap
+        # executor and are verified at the lite tier; !use always wins.
+        tier = "standard"
+        if difficulty == "trivial":
+            tier = "lite"
+            if self.cfg.trivial_executor and not self.control.forced_executor:
+                executor_name = self.cfg.trivial_executor
+            log("difficulty_route", difficulty=difficulty,
+                model=executor_name, tier=tier)
 
         # 2. Planning decision (intense prompts → supervised units).
         # Trigger on size OR visible multi-deliverable structure — a short
@@ -434,6 +503,7 @@ class Orchestrator:
                 mode == "on"
                 or len(task_text) >= sup.plan_threshold_chars
                 or structured
+                or difficulty == "hard"   # planner still decides; [] = one shot
             ):
                 units, pres = await planner.plan(self.client, self.cfg, task_text)
                 if pres:
@@ -445,25 +515,43 @@ class Orchestrator:
 
         if not units:
             unit = await self._supervised_unit(
-                session, task_id, messages, task_text, constraints, budget, log)
-            log("turn_end", spent=budget.spent, attempts=unit.attempts,
-                score=unit.verify.score if unit.verify else None,
-                escalated=unit.escalated, answer_preview=unit.text[:150])
-            score = unit.verify.score if unit.verify else None
-            self.trace.record_exchange(session, task_id, "client_response", None,
-                                       {"text": unit.text, "score": score,
-                                        "escalated": unit.escalated})
-            self.history.record_turn(session, task_text, unit.text, score,
-                                     unit.fm_events, len(messages))
-            if unit.executor:
-                self.history.record_outcome(unit.executor, score,
-                                            unit.attempts, len(unit.fm_events))
-            return TurnReport(
-                text=unit.text, task_id=task_id, executor=unit.executor or executor_name,
-                attempts=unit.attempts, verify=unit.verify,
-                fm_events=unit.fm_events, cost_usd=budget.spent,
-                escalated=unit.escalated, session_notes=session_notes,
-            )
+                session, task_id, messages, task_text, constraints, budget, log,
+                executor_name=executor_name, tier=tier,
+                allow_decompose=self.control.plan_mode != "off")
+            # Referee chose decomposition: plan now and fall through to the
+            # unit path; the failed single-shot spend stays on the ledger.
+            if unit.decompose:
+                units, pres = await planner.plan(self.client, self.cfg, task_text)
+                if pres:
+                    budget.add(pres.cost_usd)
+                log("plan", model=self.cfg.utility,
+                    units=[u.description for u in units],
+                    deps=[u.depends_on for u in units],
+                    cost_usd=pres.cost_usd if pres else 0,
+                    trigger="referee_decompose")
+                if not units:
+                    unit.escalated = ("referee requested decomposition but "
+                                      "planning returned no units; returning "
+                                      "best attempt")
+            if not units:
+                log("turn_end", spent=budget.spent, attempts=unit.attempts,
+                    score=unit.verify.score if unit.verify else None,
+                    escalated=unit.escalated, answer_preview=unit.text[:150])
+                score = unit.verify.score if unit.verify else None
+                self.trace.record_exchange(session, task_id, "client_response", None,
+                                           {"text": unit.text, "score": score,
+                                            "escalated": unit.escalated})
+                self.history.record_turn(session, task_text, unit.text, score,
+                                         unit.fm_events, len(messages))
+                if unit.executor:
+                    self.history.record_outcome(unit.executor, score,
+                                                unit.attempts, len(unit.fm_events))
+                return TurnReport(
+                    text=unit.text, task_id=task_id, executor=unit.executor or executor_name,
+                    attempts=unit.attempts, verify=unit.verify,
+                    fm_events=unit.fm_events, cost_usd=budget.spent,
+                    escalated=unit.escalated, session_notes=session_notes,
+                )
 
         # 3. Wave-parallel supervised unit execution. Independent units run
         # concurrently (bounded); dependent units wait for their inputs.
@@ -502,7 +590,8 @@ class Orchestrator:
 
             async with sem:
                 r = await self._supervised_unit(
-                    session, task_id, unit_msgs, unit_task, [], budget, unit_log)
+                    session, task_id, unit_msgs, unit_task, [], budget, unit_log,
+                    executor_name=executor_name)
             log("unit_done", unit=i + 1, attempts=r.attempts,
                 score=r.verify.score if r.verify else None, escalated=r.escalated)
             completed[i] = r

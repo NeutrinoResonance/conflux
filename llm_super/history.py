@@ -56,6 +56,18 @@ class History:
                 fm_count INTEGER DEFAULT 0
             )"""
         )
+        # Repair outcomes: which (model, strategy) fixed which failure mode.
+        # fm_id "-" means the failure had no specific FM event (low verifier
+        # score only). Feeds referee switch_model choice (SPEC §M4).
+        self._conn.execute(
+            """CREATE TABLE IF NOT EXISTS repairs (
+                ts REAL NOT NULL,
+                model TEXT NOT NULL,
+                fm_id TEXT NOT NULL,
+                strategy TEXT NOT NULL,
+                success INTEGER NOT NULL
+            )"""
+        )
         self._conn.commit()
 
     # ---- turns ----
@@ -99,6 +111,29 @@ class History:
             (model, score or 0.0, attempts, fm_count),
         )
         self._conn.commit()
+
+    def record_repair(self, model: str, fm_ids: list[str], strategy: str,
+                      success: bool) -> None:
+        """One row per failure mode the repair attempt was addressing."""
+        now = time.time()
+        self._conn.executemany(
+            "INSERT INTO repairs VALUES (?,?,?,?,?)",
+            [(now, model, fm, strategy, int(success))
+             for fm in (fm_ids or ["-"])],
+        )
+        self._conn.commit()
+
+    def repair_stats(self) -> list[dict[str, Any]]:
+        """Per (model, fm_id) repair success rates — the referee's learned
+        prior for choosing a switch target."""
+        cur = self._conn.execute(
+            """SELECT model, fm_id, COUNT(*), SUM(success)
+               FROM repairs GROUP BY model, fm_id""")
+        return [
+            {"model": model, "fm_id": fm_id, "attempts": n,
+             "success_rate": round((wins or 0) / n, 3) if n else 0.0}
+            for model, fm_id, n, wins in cur.fetchall()
+        ]
 
     def stats(self) -> list[dict[str, Any]]:
         cur = self._conn.execute(
