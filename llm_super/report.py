@@ -23,6 +23,7 @@ _BUCKETS = {
     "passthrough": "executor",
     "synthesis": "synthesis",
     "verify": "verify",
+    "ensemble_candidate": "verify",   # candidate verification in best/union/fuse
     "contract": "contract",
     "plan": "plan",
     "referee": "referee",
@@ -61,6 +62,13 @@ def efficiency(path: str | Path, days: float = 30.0) -> dict[str, Any]:
                 except (json.JSONDecodeError, TypeError, ValueError):
                     pass
             bucket = "repair" if attempt > 1 else "first_pass"
+        elif kind == "ensemble_candidate" and data:
+            # the event names the CANDIDATE model but carries the VERIFIER's
+            # spend — attribute per-model cost to the verifier
+            try:
+                model = json.loads(data).get("verifier") or model
+            except (json.JSONDecodeError, TypeError, ValueError):
+                pass
         cost[bucket] = cost.get(bucket, 0.0) + usd
         tokens[bucket] = tokens.get(bucket, 0) + tok
         if model:

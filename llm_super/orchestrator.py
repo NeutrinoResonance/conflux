@@ -285,6 +285,7 @@ class Orchestrator:
                 break
             budget.add(report.cost_usd)
             log("verify", model=report.verifier, cost_usd=report.cost_usd,
+                tokens_in=report.tokens_in, tokens_out=report.tokens_out,
                 score=report.score, passed=report.passed, tier=report.tier,
                 criteria={c.criterion: round(c.expected, 2) for c in report.criteria},
                 continuous=all(c.continuous for c in report.criteria))
@@ -391,6 +392,25 @@ class Orchestrator:
         except Exception:
             pass
 
+    async def _run_evidence(self, text: str, log) -> str | None:
+        """Execution power for candidate answers: run produced code and
+        return the transcript as verifier evidence (same contract as the
+        supervised-unit path — verification without execution evidence is
+        just an opinion)."""
+        backend = self.control.sandbox_backend or self.cfg.execution.backend
+        code = sandbox.extract_python(text)
+        if not code or backend == "off":
+            return None
+        exec_res = await sandbox.run(
+            code, backend,
+            **({"zone": self.cfg.execution.gcloud_zone,
+                "machine_type": self.cfg.execution.gcloud_machine_type}
+               if backend == "gcloud" else {}))
+        log("execute_code", backend=exec_res.backend, ok=exec_res.ok,
+            exit_code=exec_res.exit_code, duration_s=round(exec_res.duration_s, 1),
+            stderr=exec_res.stderr[:400])
+        return exec_res.transcript() if exec_res.ran else None
+
     # ---------- ensemble turn (SPEC §6.1, opt-in via !ensemble) ----------
 
     async def _ensemble_turn(
@@ -435,15 +455,17 @@ class Orchestrator:
                 tokens_in=res.tokens_in, tokens_out=res.tokens_out,
                 attempt=1, ensemble=True)
             try:
+                evidence = await self._run_evidence(res.text, log)
                 rep = await self.verifier.verify(
                     task=task_text, output=res.text, contract=constraints,
-                    executor_family=m.family)
+                    executor_family=m.family, evidence=evidence)
             except Exception as e:
                 log("verify_error", model=m.name, error=str(e)[:300])
                 return None
             budget.add(rep.cost_usd)
             log("ensemble_candidate", model=m.name, score=rep.score,
-                cost_usd=rep.cost_usd)
+                cost_usd=rep.cost_usd, verifier=rep.verifier,
+                tokens_in=rep.tokens_in, tokens_out=rep.tokens_out)
             return (m, res, rep)
 
         tasks = [asyncio.ensure_future(one(nm)) for nm in names]
@@ -504,11 +526,13 @@ class Orchestrator:
                     tokens_in=fres.tokens_in, tokens_out=fres.tokens_out,
                     attempt=1, ensemble=True)
                 try:
+                    fevidence = await self._run_evidence(fres.text, log)
                     frep = await self.verifier.verify(
                         task=task_text, output=fres.text, contract=constraints,
-                        executor_family=fm.family)
+                        executor_family=fm.family, evidence=fevidence)
                     budget.add(frep.cost_usd)
                     log("verify", model=frep.verifier, cost_usd=frep.cost_usd,
+                        tokens_in=frep.tokens_in, tokens_out=frep.tokens_out,
                         score=frep.score, passed=frep.passed,
                         stage="ensemble-fusion")
                     # the merged answer must EARN the win — a merge that
@@ -619,6 +643,7 @@ class Orchestrator:
                 return best_data or data
             budget.add(report.cost_usd)
             log("verify", model=report.verifier, cost_usd=report.cost_usd,
+                tokens_in=report.tokens_in, tokens_out=report.tokens_out,
                 score=report.score, passed=report.passed, stage="agentic-final")
             if report.score > best_score:
                 best_data, best_score = data, report.score
@@ -907,6 +932,7 @@ class Orchestrator:
                     break
                 budget.add(report.cost_usd)
                 log("verify", model=report.verifier, cost_usd=report.cost_usd,
+                    tokens_in=report.tokens_in, tokens_out=report.tokens_out,
                     score=report.score, passed=report.passed, stage="synthesis")
                 if final_report is None or report.score > final_report.score:
                     final_text, final_report = res.text, report

@@ -402,8 +402,9 @@ answer by one of five modes:
   (`model_stats`), ignoring `min_samples` and the learned toggle — "just
   use the ranking winner".
 - **best `<2-4>`**: N model families in parallel (family choice reuses the
-  referee's repair-prior ordering), each candidate cross-family verified;
-  the top-scoring candidate is returned as-is. ~N× cost.
+  referee's repair-prior ordering), each candidate cross-family verified
+  with sandbox execution evidence (produced code runs before scoring, same
+  as the unit path); the top-scoring candidate is returned as-is. ~N× cost.
 - **union `<2-4>`**: as `best`, then a merge prompt demanding the **set
   union** — every distinct valid element from ANY candidate, deduplicated,
   contradictions resolved toward demonstrable correctness. ~(N+1)× cost.

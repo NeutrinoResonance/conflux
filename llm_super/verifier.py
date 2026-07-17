@@ -89,6 +89,8 @@ class VerifyReport:
     feedback: str = ""         # for the repair loop
     cost_usd: float = 0.0
     tokens: int = 0
+    tokens_in: int = 0
+    tokens_out: int = 0
     verifier: str = ""
     tier: str = "standard"     # lite | standard | adversarial (SPEC §6)
 
@@ -226,9 +228,10 @@ class Verifier:
         contract_text = "\n".join(f"- {c}" for c in contract) if contract else "(none extracted)"
         cost = 0.0
         tokens = 0
+        tin = tout = 0
 
         async def score_criterion(criterion: str) -> CriterionScore:
-            nonlocal cost, tokens
+            nonlocal cost, tokens, tin, tout
             expected_sum = 0.0
             point_last = 1
             continuous_all = True
@@ -261,6 +264,8 @@ class Verifier:
                     )
                     cost += res.cost_usd
                     tokens += res.tokens_in + res.tokens_out
+                    tin += res.tokens_in
+                    tout += res.tokens_out
                     expected, point, continuous = _score_from_logprobs(
                         res.logprob_content, res.text, scale
                     )
@@ -300,6 +305,8 @@ class Verifier:
             feedback=feedback,
             cost_usd=cost,
             tokens=tokens,
+            tokens_in=tin,
+            tokens_out=tout,
             verifier=model.name,
             tier=tier,
         )
