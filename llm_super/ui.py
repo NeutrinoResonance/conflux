@@ -300,6 +300,11 @@ tr:last-child td { border-bottom: none; }
   </section>
 
   <section>
+    <h2>Efficiency <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">— last 30 days; SPEC §8 KPIs</span></h2>
+    <div id="efficiency"></div>
+  </section>
+
+  <section>
     <h2>Event feed</h2>
     <div id="events"></div>
   </section>
@@ -565,6 +570,33 @@ function renderStats(rows) {
       <td class="num">${r.avg_attempts ?? "—"}</td>
       <td class="num">${r.fm_per_turn ?? "—"}</td></tr>`).join("") +
     "</tbody></table>";
+}
+
+function renderEfficiency(r) {
+  const k = r.kpi || {};
+  const pct = v => v == null ? "—" : v + "%";
+  const roles = Object.entries(r.by_role || {})
+    .filter(([, v]) => v.cost_usd || v.tokens);
+  const kpis =
+    tile("supervision overhead", pct(k.overhead_pct_tokens), "of tokens · target <15%") +
+    tile("repair spend", pct(k.repair_pct_of_executor), "of executor spend") +
+    tile("total (30d)", "$" + (r.total_cost_usd ?? 0).toFixed(3),
+         (r.total_tokens ?? 0).toLocaleString() + " tok");
+  const roleRows = roles.map(([b, v]) => `<tr><td>${esc(b)}</td>
+      <td class="num">$${v.cost_usd.toFixed(4)}</td>
+      <td class="num">${v.tokens.toLocaleString()}</td></tr>`).join("");
+  const repairs = (r.repair_stats || []).slice(0, 12).map(x =>
+    `<tr><td>${esc(x.model)}</td><td>${esc(x.fm_id)}</td>
+     <td class="num">${x.attempts}</td>
+     <td class="num">${Math.round(x.success_rate * 100)}%</td></tr>`).join("");
+  $("#efficiency").innerHTML =
+    `<div class="tiles" style="margin-bottom:10px">${kpis}</div>` +
+    (roleRows ? `<table><thead><tr><th>role</th><th class="num">$</th>
+       <th class="num">tokens</th></tr></thead><tbody>${roleRows}</tbody></table>` : "") +
+    (repairs ? `<div style="margin-top:10px"><table><thead><tr>
+       <th>repair priors: model</th><th>failure mode</th>
+       <th class="num">attempts</th><th class="num">success</th>
+       </tr></thead><tbody>${repairs}</tbody></table></div>` : "");
 }
 
 function renderEvents(events) {
@@ -913,13 +945,14 @@ async function toggleMessages(ev, task) {
 let libraryRendered = false;
 async function refresh() {
   try {
-    const [st, evs, stats, lib, ret, rt] = await Promise.all([
+    const [st, evs, stats, lib, ret, rt, eff] = await Promise.all([
       fetch("/admin/status").then(r => r.json()),
       fetch("/admin/events?n=300").then(r => r.json()),
       fetch("/admin/stats").then(r => r.json()),
       fetch("/admin/library").then(r => r.json()),
       fetch("/admin/retention").then(r => r.json()),
       fetch("/admin/routing").then(r => r.json()),
+      fetch("/admin/report").then(r => r.json()),
     ]);
     library = lib;
     if (!library.projects.find(p => p.id === sel.project)) sel = {project: "default", session: null};
@@ -930,6 +963,7 @@ async function refresh() {
     renderRouting(rt);
     renderTasks(evs);
     renderStats(stats);
+    renderEfficiency(eff);
     renderEvents(evs);
     $("#clock").textContent = new Date().toLocaleTimeString();
   } catch (e) {

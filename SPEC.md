@@ -201,6 +201,10 @@ abandoned before reaching a testable state.
 Diffs stated intent against emitted actions ("I will edit foo.py" → did a
 foo.py edit occur?). Flags asserted tool/file/test state that has no matching
 observation in the trajectory (hallucinated environment state).
+*Implemented (heuristic first cut):* a response that ENDS by announcing an
+action it never performs trips FM-2.6; asserted-but-unevidenced success was
+already FM-X.4, and sandbox execution evidence (§5.7) covers the observed-
+state half.
 
 ### 5.5 Protocol monitor — FM-X.7
 Schema validation of tool-call JSON / diff formats. Auto-repair via
@@ -288,14 +292,17 @@ These surface as `[llm-super] cross-turn:` trailer lines and trace events —
 never as automatic repairs, because the misbehaving party is the *driving*
 agent, and correcting it is the user's call (SPEC's intervention principle).
 
-### 5.10 Learned routing (implemented, first cut)
+### 5.10 Learned routing (implemented)
 Every unit outcome (executor, verifier score, attempts, failure events)
 accumulates in per-model stats (`/admin/stats`). With `routing.learned:
 true`, the router picks the executor with the best average score once it
 has `min_samples` turns; `!use <model>` always overrides; static default
-otherwise. This is the §M4 "repair outcomes teach the router" loop in its
-simplest defensible form — richer signals (per-failure-mode priors,
-cost-adjusted scores) can attach to the same stats table.
+otherwise. The §M4 repair loop is closed: every repair attempt writes a
+(model, failure mode, strategy, success) row, and the referee's
+switch-model candidate order puts learned repair success on the observed
+failure modes ahead of the static failure-prior heuristic — so "which
+model actually fixes FM-X.1" is learned from this installation's history.
+The efficiency report (§8) exposes whether repair spend trends down.
 
 ### 5.11 Session monitors — FM-2.1, FM-1.5 (designed)
 On the reconstructed session: sudden context-prefix shrinkage (client
@@ -521,8 +528,17 @@ turn arrives.
    unit-granular checkpoint rewind (`!checkpoints`, `!rewind`). Remaining
    from the full §7.1 vision: per-node streaming output, free-form
    plan-editing before resume.
-5. **M4 — Learning routing**: repair-success priors feed routing; efficiency
-   report; thrash/reasoning-action monitors.
+5. **M4 — Learning routing** *(implemented)*: repair outcomes accumulate in
+   a repairs table (model × failure mode × strategy × success) and bias the
+   referee's switch-model choice toward families that have actually fixed
+   the observed failure modes; efficiency report (`llm-super report`,
+   `/admin/report`, dashboard Efficiency panel) — spend by role, repair vs
+   first-pass share, supervision-overhead KPI vs the §8 targets, daily
+   repair-share trend; in-turn monitors: FM-2.6 reasoning–action gap
+   (response ends announcing an action it never performs) and in-turn
+   FM-1.3 (a repair attempt near-identical to its predecessor is advisory
+   for verification but sends the referee structural immediately — more
+   feedback is provably pointless).
 
 ## 10.5 Conversation library & extraction (implemented)
 

@@ -40,6 +40,11 @@ def main() -> None:
     pr.add_argument("--dry-run", action="store_true",
                     help="show current table stats without deleting")
 
+    rp = sub.add_parser("report", help="efficiency report: spend by role, "
+                                       "repair vs first-pass (SPEC §8 KPIs)")
+    rp.add_argument("--db", default="traces.db")
+    rp.add_argument("--days", type=float, default=30.0)
+
     args = p.parse_args()
     if args.cmd == "serve":
         import socket
@@ -108,6 +113,10 @@ def main() -> None:
             print("deleted:", rep["deleted"],
                   f"| reclaimed {rep['reclaimed_bytes']/1024:.0f}KB"
                   + ("" if rep.get("vacuumed", True) else " (vacuum deferred: db busy)"))
+    elif args.cmd == "report":
+        from . import report as report_mod
+
+        print(report_mod.format_text(report_mod.efficiency(args.db, args.days)))
 
 
 async def _probe(config_path: str) -> None:

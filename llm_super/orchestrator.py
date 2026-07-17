@@ -25,7 +25,7 @@ from . import sandbox
 from .checkpoint import Checkpoints, turn_key
 from .config import Config, Model
 from .control import ControlState
-from .history import History
+from .history import History, similarity
 from .monitors import FMEvent, run_monitors, run_session_monitors
 from .providers import ChatResult, Client, ProviderError
 from .trace import Trace
@@ -170,6 +170,7 @@ class Orchestrator:
         best_report: VerifyReport | None = None
         feedback = ""
         escalated = ""
+        prev_text = ""
 
         while attempts < max_attempts:
             if self.control.paused:
@@ -208,6 +209,18 @@ class Orchestrator:
                 fm_seen.append(ev.fm_id)
                 log("fm_event", model=executor.name, fm_id=ev.fm_id,
                     confidence=ev.confidence, evidence=ev.evidence)
+
+            # in-turn FM-1.3: a repair attempt nearly identical to the last
+            # one means feedback is not being incorporated. Advisory (never
+            # blocks a pass — the verifier judges content), but it forces
+            # the referee to go structural immediately.
+            repeating = bool(prev_text) and similarity(prev_text, res.text) > 0.85
+            prev_text = res.text
+            if repeating:
+                fm_seen.append("FM-1.3")
+                log("fm_event", model=executor.name, fm_id="FM-1.3",
+                    confidence=0.7,
+                    evidence="repair attempt nearly identical to the previous one")
 
             # execution power: run produced code; transcript = verifier evidence
             evidence = None
@@ -283,7 +296,8 @@ class Orchestrator:
             # Referee (SPEC §4): pick the repair strategy for the next
             # attempt. Feedback retries are a rule; once max_repairs is
             # spent, the referee must change something structural.
-            attempt_fms = sorted({ev.fm_id for ev in events})
+            attempt_fms = sorted({ev.fm_id for ev in events}
+                                 | ({"FM-1.3"} if repeating else set()))
             decision = await referee.decide(
                 self.client, self.cfg,
                 task=task_text, output_tail=res.text[-1500:],

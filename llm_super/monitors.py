@@ -45,6 +45,16 @@ _REFUSAL_LAZINESS = [
     r"you can (easily )?(do|implement|add) th(is|e rest)",
 ]
 
+# FM-2.6 reasoning–action gap: the response ENDS by announcing an action it
+# never performs — stated intent with no matching act in this turn.
+# \Z (not $): _scan compiles with MULTILINE, and this must anchor to the
+# absolute end of the output, not any line end.
+_TRAILING_INTENT = [
+    r"(?:I(?:'|’)?ll|I will|let me|I(?:'|’)?m going to|next,? I(?:'|’)?ll)\s+"
+    r"(?:now\s+)?(?:run|execute|test|edit|create|write|implement|add|update|"
+    r"check|verify|fix|install)\b[^.\n]{0,80}[.…]?\s*\Z",
+]
+
 
 def _scan(text: str, patterns: list[str]) -> str | None:
     for pat in patterns:
@@ -88,6 +98,20 @@ def run_monitors(output: str, prompt: str) -> list[FMEvent]:
                 ev,
                 "The response defers work back to the user. Complete the task "
                 "fully as requested.",
+            )
+        )
+
+    # FM-2.6 reasoning–action gap: ends with announced-but-unperformed work.
+    tail = output.rstrip()[-300:]
+    if ev := _scan(tail, _TRAILING_INTENT):
+        events.append(
+            FMEvent(
+                "FM-2.6",
+                0.5,
+                ev,
+                "The response ends by announcing an action it never performs. "
+                "Either perform the action and include its result, or remove "
+                "the announcement and complete the work directly.",
             )
         )
 

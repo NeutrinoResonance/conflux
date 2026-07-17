@@ -110,8 +110,10 @@ async def decide(
 ) -> Decision:
     # While the model still has feedback retries left (§4: at most
     # max_repairs repair attempts before a structural change), the decision
-    # is a rule — targeted feedback retry, no referee spend.
-    if attempts <= cfg.supervision.max_repairs:
+    # is a rule — targeted feedback retry, no referee spend. Exception:
+    # FM-1.3 (the attempt repeated itself despite feedback) proves more
+    # feedback is pointless, so the ladder goes structural immediately.
+    if attempts <= cfg.supervision.max_repairs and "FM-1.3" not in fm_events:
         return Decision("retry_feedback", source="rule")
 
     candidates = switch_candidates(cfg, models_tried, fm_events, repair_stats)

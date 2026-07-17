@@ -21,6 +21,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from . import ui
 
 from . import export as export_mod
+from . import report as report_mod
 from . import retention
 from .checkpoint import Checkpoints
 from .config import load
@@ -420,6 +421,15 @@ async def admin_events(n: int = 50):
 async def admin_stats():
     """Per-model outcome stats (feeds learned routing)."""
     return state["history"].stats()
+
+
+@app.get("/admin/report")
+async def admin_report(days: float = 30.0):
+    """Efficiency report (SPEC §8): spend by role, repair vs first-pass,
+    plus learned repair-success priors."""
+    rep = await asyncio.to_thread(report_mod.efficiency, state["trace_path"], days)
+    rep["repair_stats"] = state["history"].repair_stats()
+    return rep
 
 
 @app.get("/admin/messages")
