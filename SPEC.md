@@ -498,6 +498,38 @@ turn arrives.
 5. **M4 — Learning routing**: repair-success priors feed routing; efficiency
    report; thrash/reasoning-action monitors.
 
+## 10.5 Conversation library & extraction (implemented)
+
+Conversations (sessions) are grouped under **projects**; each project carries
+**extraction settings** that fall back field-by-field to one editable global
+default, and the dashboard shows per field whether a value is inherited or
+overridden (with a reset control). `export.py` "pops out" a session or project
+into a single `.llmx` container:
+
+- **Compression**: xz (default, ~9% of raw) / gzip / none.
+- **Encryption** (optional, AES-256-GCM AEAD): *passphrase* with a
+  user-chosen KDF (scrypt / Argon2id / PBKDF2, tunable params), or
+  *public-key* hybrid (X25519 raw-base64, or RSA-OAEP PEM) — encrypt to a
+  recipient who holds the private key.
+- **Destination**: a saved directory, or a user command template
+  (`gcloud storage cp {file} gs://…`, `rclone …`) for push-to-cloud.
+- Delete is enabled for sessions and projects (deleting a project reparents
+  its sessions to Default).
+- Surfaces: dashboard sidebar + settings panel, `/admin/export`, and
+  `llm-super export --session|--project [--passphrase]`.
+
+### TODO (later) — blob-stripping compression
+For maximum compression, strip from the bundle any large output blob that is
+*deterministically reconstructible* by replaying the tool commands recorded
+earlier in the conversation (build artifacts, large tool outputs, generated
+files). Replace each with a reference + the command that produces it, and ship
+alongside the export a minimal **input archive** (the source files those
+commands need) so the outputs can be regenerated on import. This trades a
+replay step at restore time for a potentially large size reduction on
+tool-heavy agent conversations. Requires: a reconstructibility classifier
+(which tool outputs are pure functions of recorded inputs), the input-archive
+collector, and a verified `import --rehydrate` path.
+
 ## 11. Open questions
 
 - Session reconstruction fidelity: how reliably can trajectories be rebuilt

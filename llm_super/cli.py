@@ -25,6 +25,16 @@ def main() -> None:
         "only the code block."
     ))
 
+    e = sub.add_parser("export", help="extract a conversation or project to a file")
+    e.add_argument("--db", default="traces.db")
+    g = e.add_mutually_exclusive_group(required=True)
+    g.add_argument("--session")
+    g.add_argument("--project")
+    e.add_argument("--passphrase", help="for passphrase-encrypted projects")
+
+    ls = sub.add_parser("sessions", help="list stored conversations")
+    ls.add_argument("--db", default="traces.db")
+
     args = p.parse_args()
     if args.cmd == "serve":
         import socket
@@ -57,6 +67,25 @@ def main() -> None:
         asyncio.run(_probe(args.config))
     elif args.cmd == "demo":
         asyncio.run(_demo(args.config, args.prompt))
+    elif args.cmd == "export":
+        from . import export as export_mod
+        from .library import Library
+        from .trace import Trace
+
+        result = export_mod.export(
+            Trace(args.db), Library(args.db),
+            session=args.session, project_id=args.project,
+            passphrase=args.passphrase)
+        print(f"{result['name']}\n  {result['bytes']/1024:.1f}KB from "
+              f"{result['raw_bytes']/1024:.1f}KB "
+              f"({round(100*result['bytes']/max(result['raw_bytes'],1))}%) · "
+              f"{result['encryption']} · {result['compression']}\n  → {result['location']}")
+    elif args.cmd == "sessions":
+        from .library import Library
+
+        for s in Library(args.db).sessions():
+            print(f"{s['session'][:12]}  [{s['project_id']}]  turns={s['turns']}  "
+                  f"{(s['title'] or '')[:60]}")
 
 
 async def _probe(config_path: str) -> None:

@@ -173,6 +173,48 @@ tr:last-child td { border-bottom: none; }
   border: 1px solid var(--warning); border-radius: 8px; background: var(--surface);
   font-size: 13px; }
 .paused-banner::before { content: "⏸ "; }
+/* ---- layout: sidebar + content ---- */
+.layout { display: flex; gap: 18px; align-items: flex-start; }
+.sidebar { flex: 0 0 240px; position: sticky; top: 12px; }
+.content { flex: 1 1 auto; min-width: 0; }
+@media (max-width: 820px) { .layout { flex-direction: column; }
+  .sidebar { position: static; flex-basis: auto; width: 100%; } }
+.proj { background: var(--surface); border: 1px solid var(--border);
+        border-radius: 8px; margin-bottom: 8px; }
+.proj > .ph { display: flex; align-items: center; gap: 6px; padding: 8px 10px;
+  cursor: pointer; font-size: 13px; }
+.proj > .ph.sel { background: var(--page); border-radius: 8px 8px 0 0;
+  box-shadow: inset 3px 0 0 var(--seq); }
+.proj > .ph .pname { font-weight: 600; flex: 1; }
+.proj > .ph .pcount { font-size: 11px; color: var(--muted); }
+.slist { padding: 2px 6px 8px; }
+.sitem { display: flex; align-items: center; gap: 6px; padding: 4px 8px;
+  border-radius: 6px; cursor: pointer; font-size: 12.5px; color: var(--ink-2); }
+.sitem:hover { background: var(--page); }
+.sitem.sel { background: var(--page); color: var(--ink); box-shadow: inset 2px 0 0 var(--seq); }
+.sitem .st { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sitem .sx { color: var(--muted); font-size: 12px; visibility: hidden; }
+.sitem:hover .sx { visibility: visible; }
+.iconbtn { background: none; border: none; cursor: pointer; padding: 0 3px;
+  color: var(--muted); font-size: 13px; }
+.iconbtn:hover { color: var(--ink); }
+.miniadd { width: 100%; margin-top: 4px; font-size: 12px; padding: 5px; }
+/* ---- library / settings ---- */
+.settings-grid { display: grid; grid-template-columns: 150px 1fr auto auto; gap: 6px 10px;
+  align-items: center; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px 14px; }
+.settings-grid .fname { font-size: 12.5px; color: var(--ink-2); }
+.settings-grid .fval input, .settings-grid .fval select { width: 100%; }
+.src { font-size: 10.5px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); }
+.src.default { color: var(--muted); }
+.src.project { color: var(--seq); border-color: var(--seq); }
+.reset { font-size: 11px; padding: 2px 8px; visibility: hidden; }
+.src.project ~ .reset, .reset.show { visibility: visible; }
+.exportbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  margin-top: 10px; }
+.exportbar input { min-width: 160px; }
+.export-result { font-size: 12px; color: var(--good-text); margin-top: 6px;
+  font-family: ui-monospace, monospace; word-break: break-all; }
 </style>
 </head>
 <body>
@@ -182,6 +224,14 @@ tr:last-child td { border-bottom: none; }
   <div class="paused-banner" id="pausedBanner">Supervision is paused — new turns will not execute until resumed.</div>
 
   <div class="tiles" id="tiles"></div>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <h2>Conversations</h2>
+      <div id="projects"></div>
+      <button class="miniadd" onclick="newProject()">＋ New project</button>
+    </aside>
+    <div class="content">
 
   <section>
     <h2>Steering</h2>
@@ -215,8 +265,15 @@ tr:last-child td { border-bottom: none; }
   </section>
 
   <section>
-    <h2>Tasks</h2>
+    <h2 id="tasksHeading">Tasks</h2>
     <div id="tasks"></div>
+  </section>
+
+  <section>
+    <h2>Extraction settings <span id="settingsScope" style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span></h2>
+    <div id="settings"></div>
+    <div class="exportbar" id="exportbar"></div>
+    <div class="export-result" id="exportResult"></div>
   </section>
 
   <section>
@@ -228,6 +285,8 @@ tr:last-child td { border-bottom: none; }
     <h2>Event feed</h2>
     <div id="events"></div>
   </section>
+    </div><!-- .content -->
+  </div><!-- .layout -->
 </main>
 <div id="flash"></div>
 <script>
@@ -365,9 +424,19 @@ function nodeFor(task, e, idx) {
 }
 
 function renderTasks(events) {
+  lastEvents = events;
+  const proj = library.projects.find(p => p.id === sel.project);
+  const projSessions = new Set(library.sessions
+    .filter(s => s.project_id === sel.project).map(s => s.session));
+  $("#tasksHeading").textContent = sel.session
+    ? "Tasks — this conversation"
+    : `Tasks — ${proj ? proj.name : "all"}`;
   const byTask = new Map();
   for (const e of events) {
     if (e.task === "-") continue;
+    // filter to the selected session, or all sessions in the selected project
+    if (sel.session) { if (e.session !== sel.session) continue; }
+    else if (library.sessions.length && !projSessions.has(e.session)) continue;
     if (!byTask.has(e.task)) byTask.set(e.task, []);
     byTask.get(e.task).push(e);
   }
@@ -477,9 +546,177 @@ function renderEvents(events) {
     }).join("") + "</tbody></table>";
 }
 
+// ---- conversation library: projects, sessions, settings, export ----
+let library = { projects: [], sessions: [], default_settings: {} };
+let sel = { project: "default", session: null };   // what the content pane shows
+const expandedProjects = new Set(["default"]);
+
+async function libPost(body) {
+  const r = await fetch("/admin/library", {method: "POST",
+    headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  return r.json();
+}
+async function newProject() {
+  const name = prompt("New project name:");
+  if (name) { await libPost({action: "create_project", name}); flash("project created"); refresh(); }
+}
+async function renameProject(pid, cur) {
+  const name = prompt("Rename project:", cur);
+  if (name) { await libPost({action: "rename_project", id: pid, name}); refresh(); }
+}
+async function deleteProject(pid) {
+  if (confirm("Delete this project? Its conversations move to Default.")) {
+    await libPost({action: "delete_project", id: pid});
+    if (sel.project === pid) sel = {project: "default", session: null};
+    refresh();
+  }
+}
+async function deleteSession(sid) {
+  if (confirm("Delete this conversation and all its messages? This cannot be undone.")) {
+    await libPost({action: "delete_session", session: sid});
+    if (sel.session === sid) sel.session = null;
+    refresh();
+  }
+}
+async function renameSession(sid, cur) {
+  const title = prompt("Rename conversation:", cur || "");
+  if (title != null) { await libPost({action: "rename_session", session: sid, title}); refresh(); }
+}
+async function assignSession(sid, pid) {
+  await libPost({action: "assign_session", session: sid, project_id: pid}); refresh();
+}
+function selectProject(pid) { sel = {project: pid, session: null}; renderSidebar(); renderLibrary(); renderTasks(lastEvents); }
+function selectSession(sid, pid) { sel = {project: pid, session: sid}; renderSidebar(); renderTasks(lastEvents); }
+
+function renderSidebar() {
+  const byProj = new Map(library.projects.map(p => [p.id, []]));
+  for (const s of library.sessions) {
+    (byProj.get(s.project_id) || byProj.get("default")).push(s);
+  }
+  const html = library.projects.map(p => {
+    const ss = byProj.get(p.id) || [];
+    const open = expandedProjects.has(p.id);
+    const selP = sel.project === p.id && !sel.session;
+    const projOpts = library.projects.map(x =>
+      `<option value="${esc(x.id)}"${x.id===p.id?" selected":""}>${esc(x.name)}</option>`).join("");
+    return `<div class="proj">
+      <div class="ph ${selP?"sel":""}">
+        <span class="iconbtn" onclick="toggleProj('${esc(p.id)}')">${open?"▾":"▸"}</span>
+        <span class="pname" onclick="selectProject('${esc(p.id)}')">${esc(p.name)}</span>
+        <span class="pcount">${ss.length}</span>
+        ${p.id!=="default" ? `<span class="iconbtn" title="rename" onclick="renameProject('${esc(p.id)}','${esc(p.name)}')">✎</span>
+          <span class="iconbtn" title="delete" onclick="deleteProject('${esc(p.id)}')">🗑</span>` : ""}
+      </div>
+      ${open ? `<div class="slist">${ss.length ? ss.map(s => `
+        <div class="sitem ${sel.session===s.session?"sel":""}">
+          <span class="st" title="${esc(s.title||s.session)}" onclick="selectSession('${esc(s.session)}','${esc(p.id)}')">${esc(s.title||"(untitled)")}</span>
+          <select class="sx" title="move to project" onchange="assignSession('${esc(s.session)}',this.value)">${projOpts}</select>
+          <span class="sx iconbtn" title="rename" onclick="renameSession('${esc(s.session)}','${esc(s.title||"")}')">✎</span>
+          <span class="sx iconbtn" title="delete" onclick="deleteSession('${esc(s.session)}')">🗑</span>
+        </div>`).join("") : '<div class="sitem" style="color:var(--muted)">no conversations</div>'}</div>` : ""}
+    </div>`;
+  }).join("");
+  $("#projects").innerHTML = html;
+}
+function toggleProj(pid) {
+  if (expandedProjects.has(pid)) expandedProjects.delete(pid); else expandedProjects.add(pid);
+  renderSidebar();
+}
+
+// setting field types for rendering the right control
+const SETTING_FIELDS = {
+  compression: ["select", ["xz","gzip","none"]],
+  compression_level: ["number", null],
+  encryption: ["select", ["none","passphrase","publickey"]],
+  kdf: ["select", ["scrypt","argon2id","pbkdf2"]],
+  public_key: ["text", null],
+  destination: ["select", ["dir","command"]],
+  directory: ["text", null],
+  command: ["text", null],
+  include_upstream: ["bool", null],
+};
+
+async function renderLibrary() {
+  // don't yank focus / reset a field the user is editing during the 2s poll
+  const af = document.activeElement;
+  if (af && (af.closest("#settings") || af.closest("#exportbar"))) return;
+  const pid = sel.project;
+  const proj = library.projects.find(p => p.id === pid);
+  $("#settingsScope").textContent = proj ? `— ${proj.name}${pid==="default"?" (global default)":""}` : "";
+  let resolved;
+  if (pid === "default") {
+    // editing the default itself: everything is "default", edits set the global default
+    resolved = {};
+    for (const [k, v] of Object.entries(library.default_settings))
+      resolved[k] = {value: v, source: "default"};
+  } else {
+    resolved = await fetch(`/admin/project/${pid}/settings`).then(r => r.json());
+  }
+  const rows = Object.keys(SETTING_FIELDS).map(key => {
+    const info = resolved[key] || {value: library.default_settings[key], source: "default"};
+    const [kind, opts] = SETTING_FIELDS[key];
+    const v = info.value;
+    let control;
+    if (kind === "select")
+      control = `<select onchange="setSetting('${key}',this.value)">${opts.map(o =>
+        `<option${String(v)===o?" selected":""}>${o}</option>`).join("")}</select>`;
+    else if (kind === "bool")
+      control = `<select onchange="setSetting('${key}',this.value==='true')">
+        <option value="true"${v?" selected":""}>true</option>
+        <option value="false"${!v?" selected":""}>false</option></select>`;
+    else if (kind === "number")
+      control = `<input type="number" value="${esc(v)}" onchange="setSetting('${key}',Number(this.value))">`;
+    else
+      control = `<input type="text" value="${esc(v)}" placeholder="${key==='public_key'?'X25519 base64 or RSA PEM':''}" onchange="setSetting('${key}',this.value)">`;
+    const isDefaultProj = pid === "default";
+    const badge = isDefaultProj ? "" :
+      `<span class="src ${info.source}">${info.source==="project"?"overridden":"inherited"}</span>`;
+    const reset = (!isDefaultProj && info.source === "project")
+      ? `<button class="reset show" onclick="resetSetting('${key}')">reset</button>` : "<span></span>";
+    return `<div class="fname">${key}</div><div class="fval">${control}</div>${badge||"<span></span>"}${reset}`;
+  }).join("");
+  $("#settings").innerHTML = `<div class="settings-grid">${rows}</div>`;
+
+  const eff = {}; for (const k in resolved) eff[k] = resolved[k].value;
+  const needsPass = eff.encryption === "passphrase";
+  $("#exportbar").innerHTML =
+    (sel.session
+      ? `<button class="primary" onclick="doExport('session')">Export this conversation</button>`
+      : "") +
+    `<button onclick="doExport('project')">Export whole project</button>` +
+    (needsPass ? `<input type="password" id="exportPass" placeholder="passphrase">` : "") +
+    `<span style="color:var(--muted);font-size:12px">→ ${esc(eff.destination==="command"?"command":eff.directory)} · ${esc(eff.encryption)} · ${esc(eff.compression)}</span>`;
+}
+
+async function setSetting(key, value) {
+  if (sel.project === "default")
+    await libPost({action: "set_default", patch: {[key]: value}});
+  else
+    await libPost({action: "set_project_override", id: sel.project, key, value});
+  flash(key + " set");
+  const lib = await fetch("/admin/library").then(r => r.json());
+  library = lib; renderLibrary();
+}
+async function resetSetting(key) {
+  await libPost({action: "clear_project_override", id: sel.project, key});
+  renderLibrary();
+}
+async function doExport(scope) {
+  const body = scope === "session" ? {session: sel.session} : {project_id: sel.project};
+  const passEl = document.getElementById("exportPass");
+  if (passEl) body.passphrase = passEl.value;
+  $("#exportResult").textContent = "exporting…";
+  const r = await fetch("/admin/export", {method: "POST",
+    headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}).then(r => r.json());
+  $("#exportResult").textContent = r.error
+    ? "✗ " + r.error
+    : `✓ ${r.name} — ${(r.bytes/1024).toFixed(1)}KB from ${(r.raw_bytes/1024).toFixed(1)}KB (${Math.round(100*r.bytes/r.raw_bytes)}%) · ${r.encryption} · ${r.location}`;
+}
+
 // Full-payload viewer: fetched on demand, never polled.
 const msgShown = new Set();
 const msgCache = new Map();
+let lastEvents = [];
 function fmtContent(c) {
   if (c == null) return "";
   if (Array.isArray(c)) return c.map(p => p.text || JSON.stringify(p)).join("\n");
@@ -533,14 +770,20 @@ async function toggleMessages(ev, task) {
   el.innerHTML = html;
 }
 
+let libraryRendered = false;
 async function refresh() {
   try {
-    const [st, evs, stats] = await Promise.all([
+    const [st, evs, stats, lib] = await Promise.all([
       fetch("/admin/status").then(r => r.json()),
-      fetch("/admin/events?n=200").then(r => r.json()),
+      fetch("/admin/events?n=300").then(r => r.json()),
       fetch("/admin/stats").then(r => r.json()),
+      fetch("/admin/library").then(r => r.json()),
     ]);
+    library = lib;
+    if (!library.projects.find(p => p.id === sel.project)) sel = {project: "default", session: null};
     renderStatus(st, st.models || []);
+    renderSidebar();
+    renderLibrary();
     renderTasks(evs);
     renderStats(stats);
     renderEvents(evs);
@@ -550,8 +793,10 @@ async function refresh() {
   }
 }
 refresh().then(() => {
-  // deep link: /?msg=<taskid> opens that goal's message view
-  const t = new URLSearchParams(location.search).get("msg");
+  const q = new URLSearchParams(location.search);
+  const p = q.get("project");
+  if (p) { sel = {project: p, session: null}; expandedProjects.add(p); renderSidebar(); renderLibrary(); renderTasks(lastEvents); }
+  const t = q.get("msg");
   if (t) toggleMessages(new Event("click"), t);
 });
 setInterval(refresh, 2000);

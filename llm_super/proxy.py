@@ -20,10 +20,12 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
 from . import ui
 
+from . import export as export_mod
 from .checkpoint import Checkpoints
 from .config import load
 from .control import ControlState, handle
 from .history import History
+from .library import DEFAULT_SETTINGS, Library
 from .orchestrator import Orchestrator, _last_user_text
 from .providers import Client, ProviderError  # noqa: F401 (ProviderError used below)
 from .trace import Trace
@@ -39,12 +41,14 @@ async def lifespan(app: FastAPI):
     trace = Trace(trace_path)
     control = ControlState()
     history = History(trace_path)
+    library = Library(trace_path)
     state.update(
         cfg=cfg,
         client=client,
         trace=trace,
         control=control,
         history=history,
+        library=library,
         orch=Orchestrator(cfg, client, trace, control,
                           checkpoints=Checkpoints(trace_path),
                           history=history),
@@ -149,6 +153,7 @@ async def chat_completions(request: Request):
         return _sse(reply, model_name) if stream else JSONResponse(_completion_body(reply, model_name))
 
     session = _session_id(messages)
+    state["library"].touch_session(session, _last_user_text(messages))
 
     # Pass-through mode for registry model names.
     if model_name in cfg.models:
@@ -320,6 +325,67 @@ async def admin_messages(task: str | None = None, session: str | None = None,
                          n: int = 100):
     """Full message payloads — every client and upstream exchange."""
     return state["trace"].exchanges(task=task, session=session, n=n)
+
+
+# ---- conversation library: projects, sessions, settings, export ----
+
+@app.get("/admin/library")
+async def admin_library():
+    lib: Library = state["library"]
+    return {
+        "projects": lib.projects(),
+        "sessions": lib.sessions(),
+        "default_settings": lib.global_default(),
+        "settings_schema": {k: type(v).__name__ for k, v in DEFAULT_SETTINGS.items()},
+    }
+
+
+@app.get("/admin/project/{pid}/settings")
+async def admin_project_settings(pid: str):
+    """Resolved settings with per-field source (inherited vs overridden)."""
+    return state["library"].resolved_settings(pid)
+
+
+@app.post("/admin/library")
+async def admin_library_action(request: Request):
+    lib: Library = state["library"]
+    b = await request.json()
+    action = b.get("action")
+    try:
+        if action == "create_project":
+            return {"id": lib.create_project(b["name"])}
+        if action == "rename_project":
+            lib.rename_project(b["id"], b["name"]); return {"ok": True}
+        if action == "delete_project":
+            lib.delete_project(b["id"]); return {"ok": True}
+        if action == "assign_session":
+            lib.set_session_project(b["session"], b["project_id"]); return {"ok": True}
+        if action == "rename_session":
+            lib.set_session_title(b["session"], b["title"]); return {"ok": True}
+        if action == "delete_session":
+            lib.delete_session(b["session"]); return {"ok": True}
+        if action == "set_default":
+            lib.set_global_default(b["patch"]); return {"ok": True}
+        if action == "set_project_override":
+            lib.set_project_override(b["id"], b["key"], b["value"]); return {"ok": True}
+        if action == "clear_project_override":
+            lib.clear_project_override(b["id"], b["key"]); return {"ok": True}
+    except (KeyError, ValueError) as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return JSONResponse({"error": f"unknown action {action!r}"}, status_code=400)
+
+
+@app.post("/admin/export")
+async def admin_export(request: Request):
+    b = await request.json()
+    try:
+        result = await asyncio.to_thread(
+            export_mod.export, state["trace"], state["library"],
+            session=b.get("session"), project_id=b.get("project_id"),
+            passphrase=b.get("passphrase"))
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return result
 
 
 @app.post("/admin/pause")
