@@ -33,6 +33,13 @@ class Model:
 
 
 @dataclass(frozen=True)
+class Execution:
+    backend: str = "local"
+    gcloud_zone: str = "us-central1-a"
+    gcloud_machine_type: str = "e2-micro"
+
+
+@dataclass(frozen=True)
 class Supervision:
     score_scale: int = 20
     pass_threshold: float = 0.70
@@ -50,6 +57,7 @@ class Config:
     utility: str
     verifier_pool: list[str]
     supervision: Supervision
+    execution: Execution
     path: Path = field(default_factory=lambda: Path("models.yaml"))
 
     def model(self, name: str) -> Model:
@@ -95,6 +103,7 @@ def load(path: str | Path = "models.yaml") -> Config:
 
     routing = raw.get("routing", {})
     sup = Supervision(**raw.get("supervision", {}))
+    execution = Execution(**raw.get("execution", {}))
     return Config(
         providers=providers,
         models=models,
@@ -102,5 +111,6 @@ def load(path: str | Path = "models.yaml") -> Config:
         utility=routing.get("utility", next(iter(models))),
         verifier_pool=list(routing.get("verifier_pool", [])),
         supervision=sup,
+        execution=execution,
         path=path,
     )

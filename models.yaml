@@ -80,6 +80,11 @@ routing:
   verifier_pool: [qwen-3.7-plus, kimi-k2.6, gemma-4-31b, deepseek-v4-pro]
   # verifier is chosen from the pool with family != executor family
 
+execution:
+  backend: local              # local | gcloud | off  (override per-session with !sandbox)
+  gcloud_zone: us-central1-a
+  gcloud_machine_type: e2-micro   # ~$0.008/hour, billed per second
+
 supervision:
   score_scale: 20               # verifier scores 1..20
   pass_threshold: 0.70          # normalized [0,1]; below this → repair loop

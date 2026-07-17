@@ -48,6 +48,9 @@ The model's response:
 {output}
 ---
 
+Execution evidence (the response's code was actually run in a sandbox):
+{evidence}
+
 Analyze the response against the criterion. Quote specific evidence. Be
 skeptical: unsupported claims of success count against it. Then end your
 reply with your score as a SINGLE CAPITAL LETTER on the A-{top} scale, where
@@ -144,10 +147,17 @@ class Verifier:
         executor_family: str,
         criteria: list[str] | None = None,
         repeats: int | None = None,
+        evidence: str | None = None,
     ) -> VerifyReport:
         sup = self.cfg.supervision
         scale = sup.score_scale
-        criteria = criteria or DEFAULT_CRITERIA
+        criteria = list(criteria or DEFAULT_CRITERIA)
+        if evidence:
+            criteria.append(
+                "Errors: based on the execution evidence, does the code run "
+                "without errors, do tests pass, and do the response's claims "
+                "match the observed behavior?"
+            )
         repeats = repeats or sup.verify_repeats
         model: Model = self.cfg.pick_verifier(executor_family)
 
@@ -176,6 +186,7 @@ class Verifier:
                                     task=task[:8000],
                                     contract=contract_text,
                                     output=output[:12000],
+                                    evidence=evidence or "(none — code was not executed)",
                                     top=chr(ord("A") + scale - 1),
                                     mid=chr(ord("A") + scale // 2 - 1),
                                 ),

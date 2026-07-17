@@ -219,7 +219,21 @@ cheap verifier pass every M executor steps and watch the curve:
 Caution: the paper's success/fail correlation gap is modest (+0.08), so this
 monitor triggers *review*, never automatic hard action.
 
-### 5.7 Session monitors — FM-1.4, FM-2.1, FM-1.5
+### 5.7 Execution power — evidence-based verification (implemented)
+Text-based verification judges what an answer *says*; the execution power
+observes what the code *does*. Produced code runs in a sandbox before the
+user sees it — **local** (subprocess, temp dir, timeout) or **gcloud**
+(ephemeral e2-micro VM ≈ $0.008/h: create → run → delete; verified 57s round
+trip) — and the transcript (exit code, stdout/stderr, doctest counts) feeds
+the verifier as an added "Errors" criterion plus targeted repair feedback on
+failure. The intended workflow for risky changes: test the strategy in the
+VM, verify the output, then run on the host for finality — or simply copy
+the VM's output back, cross-checked against it. User control: `!sandbox
+local|gcloud|off|auto`; config in `models.yaml` `execution:`. The checklist
+stage is likewise user-toggleable (`!checklist on|off|skip` — skip affects
+only the next turn).
+
+### 5.8 Session monitors — FM-1.4, FM-2.1, FM-1.5
 On the reconstructed session: sudden context-prefix shrinkage (client
 truncation → warn user), conversation restarts, and turn-count/termination
 watchdogs.

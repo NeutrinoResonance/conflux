@@ -11,9 +11,10 @@ import uuid
 from dataclasses import dataclass, field
 
 from . import contract as contract_mod
+from . import sandbox
 from .config import Config
 from .control import ControlState
-from .monitors import run_monitors
+from .monitors import FMEvent, run_monitors
 from .providers import Client, ProviderError
 from .trace import Trace
 from .verifier import Verifier, VerifyReport
@@ -68,13 +69,18 @@ class Orchestrator:
 
         log("turn_start", model=executor.name, prompt_chars=len(task_text))
 
-        # 1. Contract extraction (cheap, cached-by-provider; failure is non-fatal)
-        constraints, cres = await contract_mod.extract(self.client, self.cfg, task_text)
-        if cres:
-            spent += cres.cost_usd
-            log("contract", model=self.cfg.utility, cost_usd=cres.cost_usd,
-                tokens_in=cres.tokens_in, tokens_out=cres.tokens_out,
-                constraints=constraints)
+        # 1. Contract extraction (cheap; failure is non-fatal; user-toggleable
+        #    via !checklist on|off|skip)
+        constraints: list[str] = []
+        if self.control.consume_contract_enabled():
+            constraints, cres = await contract_mod.extract(self.client, self.cfg, task_text)
+            if cres:
+                spent += cres.cost_usd
+                log("contract", model=self.cfg.utility, cost_usd=cres.cost_usd,
+                    tokens_in=cres.tokens_in, tokens_out=cres.tokens_out,
+                    constraints=constraints)
+        else:
+            log("contract_skipped")
 
         # 2. Execute / monitor / verify / repair loop
         attempts = 0
@@ -120,12 +126,38 @@ class Orchestrator:
                 log("fm_event", model=executor.name, fm_id=ev.fm_id,
                     confidence=ev.confidence, evidence=ev.evidence)
 
+            # execution power: run produced code in the sandbox; the transcript
+            # becomes verifier evidence and (on failure) repair feedback
+            evidence = None
+            backend = self.control.sandbox_backend or self.cfg.execution.backend
+            code = sandbox.extract_python(res.text)
+            if code and backend != "off":
+                exec_res = await sandbox.run(
+                    code, backend,
+                    **({"zone": self.cfg.execution.gcloud_zone,
+                        "machine_type": self.cfg.execution.gcloud_machine_type}
+                       if backend == "gcloud" else {}),
+                )
+                log("execute_code", backend=exec_res.backend, ok=exec_res.ok,
+                    exit_code=exec_res.exit_code, duration_s=round(exec_res.duration_s, 1),
+                    stderr=exec_res.stderr[:400])
+                if exec_res.ran:
+                    evidence = exec_res.transcript()
+                    if not exec_res.ok:
+                        fm_seen.append("FM-X.3")
+                        events.append(FMEvent(
+                            "FM-X.3", 0.9, exec_res.stderr[:120],
+                            "The code was executed and FAILED. Fix it so it runs "
+                            f"cleanly. Execution output:\n{exec_res.transcript(800)}",
+                        ))
+
             # independent cross-family verification — its failure must never
             # kill the turn (that would be our own FM-3.2)
             try:
                 report = await self.verifier.verify(
                     task=task_text, output=res.text,
                     contract=constraints, executor_family=executor.family,
+                    evidence=evidence,
                 )
             except Exception as e:
                 log("verify_error", error=str(e))

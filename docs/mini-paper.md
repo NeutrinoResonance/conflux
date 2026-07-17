@@ -68,6 +68,18 @@ modes fired, what the grade was) is written to a local SQLite trace you can
 query while it runs. Each task has a dollar budget; crossing it halts work
 mid-task.
 
+**Ability 7 — It runs the code before you see it.**
+When an answer contains code, the system executes it in a sandbox: a local
+throwaway process, or — for untrusted or system-touching code — an ephemeral
+cloud VM (a $0.008/hour machine created, used, and deleted in under a
+minute; verified live). Doctests are run and counted. The execution
+transcript becomes a fourth grading criterion ("does it actually run, and do
+the claims match observed behavior?") and, on failure, becomes the repair
+feedback. The working pattern: prove the strategy in the sandbox, verify the
+output, only then touch the real system — or just take the verified VM
+output directly. Toggle per-session with `!sandbox local|gcloud|off`; the
+checklist stage is likewise toggleable (`!checklist on|off|skip`).
+
 ## 2. Does the grading actually work?
 
 The discrimination test, run live against real providers:
@@ -107,8 +119,8 @@ These cost us debugging time so you don't have to rediscover them:
 It supervises one turn at a time — it does not yet reconstruct multi-turn
 agent trajectories, so failure modes that only show up *across* turns
 (repeating steps, thrashing between shallow approaches) have detectors
-designed but not yet wired to live data. Grading is text-based: the verifier
-judges what the answer says, not what happens when the code runs. Pause
+designed but not yet wired to live data. Execution evidence covers Python
+snippets; multi-file projects and other languages are not yet run. Pause
 takes effect between steps, not mid-generation. And routing is static — the
 plan is for repair outcomes to teach the router which model to trust for
 what, but no learning happens yet.
