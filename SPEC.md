@@ -251,6 +251,19 @@ validated against a real mid-session Nous outage + credential expiry:
   units, each supervised (execute→monitor→sandbox→verify→repair) with unit-
   scoped verification, then synthesized. Weak units are reported, not fatal;
   only pause/budget/outage aborts remaining units.
+- **Wave-parallel units**: the planner declares per-unit dependencies;
+  independent units run concurrently (bounded at 3), dependent units wait
+  only for their declared inputs.
+- **Turn checkpointing**: the plan and every completed unit persist to
+  SQLite keyed by (session, prompt). A crash, pause, or budget stop keeps
+  the checkpoint; resending the identical request resumes from the first
+  incomplete unit with prior spend carried in the report. Checkpoints
+  delete on success and expire after 24 h. Validated live: budget-stopped
+  turn resumed by a fresh orchestrator instance, re-buying nothing.
+- **Verified synthesis**: the assembled multi-unit answer is itself
+  cross-family verified against the original task and full contract (with
+  one repair attempt), and unit-level sandbox transcripts ride along as
+  evidence for both the synthesizer and the final verifier.
 - **Parallel verification**: criteria are judged concurrently.
 - **Turn wall-clock timeout** (default 30 min) and SSE keepalives so clients
   survive long supervised turns.

@@ -15,9 +15,12 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 
+import asyncio
+
 from . import contract as contract_mod
 from . import planner
 from . import sandbox
+from .checkpoint import Checkpoints, turn_key
 from .config import Config, Model
 from .control import ControlState
 from .monitors import FMEvent, run_monitors
@@ -46,6 +49,7 @@ class UnitResult:
     verify: VerifyReport | None
     fm_events: list[str] = field(default_factory=list)
     escalated: str = ""
+    evidence: str = ""         # sandbox transcript of the best attempt
 
 
 @dataclass
@@ -79,12 +83,16 @@ class TurnReport:
 
 
 class Orchestrator:
-    def __init__(self, cfg: Config, client: Client, trace: Trace, control: ControlState):
+    UNIT_CONCURRENCY = 3   # parallel units per wave (provider-rate friendly)
+
+    def __init__(self, cfg: Config, client: Client, trace: Trace, control: ControlState,
+                 checkpoints: Checkpoints | None = None):
         self.cfg = cfg
         self.client = client
         self.trace = trace
         self.control = control
         self.verifier = Verifier(client, cfg)
+        self.checkpoints = checkpoints or Checkpoints(":memory:")
 
     # ---------- durable executor call (fallback chain) ----------
 
@@ -121,6 +129,7 @@ class Orchestrator:
         attempts = 0
         fm_seen: list[str] = []
         best_text = ""
+        best_evidence = ""
         best_report: VerifyReport | None = None
         feedback = ""
         escalated = ""
@@ -207,6 +216,7 @@ class Orchestrator:
 
             if best_report is None or report.score > best_report.score:
                 best_text, best_report = res.text, report
+                best_evidence = evidence or ""
 
             if report.passed and not events:
                 break
@@ -225,6 +235,7 @@ class Orchestrator:
         return UnitResult(
             text=best_text, attempts=attempts, verify=best_report,
             fm_events=sorted(set(fm_seen)), escalated=escalated,
+            evidence=best_evidence,
         )
 
     # ---------- full turn ----------
@@ -259,19 +270,38 @@ class Orchestrator:
         # 2. Planning decision (intense prompts → supervised units).
         # Trigger on size OR visible multi-deliverable structure — a short
         # prompt with "three separate deliverables" is still an intense task.
-        units: list[str] = []
-        mode = self.control.plan_mode
-        structured = _looks_multipart(task_text)
-        if mode != "off" and (
-            mode == "on"
-            or len(task_text) >= sup.plan_threshold_chars
-            or structured
-        ):
-            units, pres = await planner.plan(self.client, self.cfg, task_text)
-            if pres:
-                budget.add(pres.cost_usd)
-            log("plan", model=self.cfg.utility, units=units,
-                cost_usd=pres.cost_usd if pres else 0)
+        # A checkpoint from a crashed/stopped identical turn restores the
+        # plan and the units already paid for.
+        ckpt_key = turn_key(session, task_text)
+        units: list[planner.Unit] = []
+        completed: dict[int, UnitResult] = {}
+        prior_spent = 0.0
+        ckpt = self.checkpoints.load(ckpt_key)
+        if ckpt:
+            units = [planner.Unit(**u) for u in ckpt["units"]]
+            for k, v in ckpt.get("completed", {}).items():
+                completed[int(k)] = UnitResult(
+                    text=v["text"], attempts=v.get("attempts", 0), verify=None,
+                    fm_events=v.get("fm_events", []), evidence=v.get("evidence", ""),
+                )
+            prior_spent = float(ckpt.get("spent", 0.0))
+            log("resume", units=len(units), completed=sorted(completed),
+                prior_spent=prior_spent)
+        else:
+            mode = self.control.plan_mode
+            structured = _looks_multipart(task_text)
+            if mode != "off" and (
+                mode == "on"
+                or len(task_text) >= sup.plan_threshold_chars
+                or structured
+            ):
+                units, pres = await planner.plan(self.client, self.cfg, task_text)
+                if pres:
+                    budget.add(pres.cost_usd)
+                log("plan", model=self.cfg.utility,
+                    units=[u.description for u in units],
+                    deps=[u.depends_on for u in units],
+                    cost_usd=pres.cost_usd if pres else 0)
 
         if not units:
             unit = await self._supervised_unit(
@@ -286,28 +316,29 @@ class Orchestrator:
                 escalated=unit.escalated,
             )
 
-        # 3. Unit-by-unit supervised execution
-        results: list[UnitResult] = []
-        all_fm: list[str] = []
+        # 3. Wave-parallel supervised unit execution. Independent units run
+        # concurrently (bounded); dependent units wait for their inputs.
+        # Every completed unit is checkpointed immediately.
+        self.checkpoints.save(ckpt_key, _ckpt_state(units, completed, budget, prior_spent))
         weak_units: list[str] = []
-        total_attempts = 0
+        all_fm: list[str] = []
         escalated = ""
-        for i, unit_desc in enumerate(units, 1):
-            if self.control.paused or budget.exhausted:
-                escalated = (f"stopped before unit {i}/{len(units)}: "
-                             + ("paused" if self.control.paused else "budget exhausted"))
-                break
+        sem = asyncio.Semaphore(self.UNIT_CONCURRENCY)
+
+        async def run_unit(i: int) -> None:
+            unit = units[i]
             prior = "\n\n".join(
-                f"[completed unit {j+1}: {units[j]}]\n{r.text}"
-                for j, r in enumerate(results)
+                f"[completed unit {d+1}: {units[d].description}]\n{completed[d].text}"
+                for d in unit.depends_on if d in completed
             )
             unit_msgs = list(messages)
             unit_msgs.append({
                 "role": "user",
                 "content": (
                     f"This large task is being done in units. Complete ONLY this "
-                    f"unit now (unit {i} of {len(units)}): {unit_desc}\n"
-                    + (f"\nWork already completed:\n{prior[:8000]}" if prior else "")
+                    f"unit now (unit {i+1} of {len(units)}): {unit.description}\n"
+                    + (f"\nOutput of units this one depends on:\n{prior[:8000]}"
+                       if prior else "")
                 ),
             })
             # Verify against the UNIT's scope, not the full-task contract —
@@ -315,59 +346,134 @@ class Orchestrator:
             # belongs to a later unit.
             unit_task = (
                 f"One unit of a larger task. Judge ONLY this unit's scope: "
-                f"{unit_desc}"
+                f"{unit.description}"
             )
-            r = await self._supervised_unit(
-                session, task_id, unit_msgs, unit_task, [], budget, log)
-            log("unit_done", unit=i, attempts=r.attempts,
+            async with sem:
+                r = await self._supervised_unit(
+                    session, task_id, unit_msgs, unit_task, [], budget, log)
+            log("unit_done", unit=i + 1, attempts=r.attempts,
                 score=r.verify.score if r.verify else None, escalated=r.escalated)
-            results.append(r)
-            all_fm += r.fm_events
-            total_attempts += r.attempts
-            if r.escalated:
-                # Quality-bar escalations are per-unit notes; only hard stops
-                # (pause, budget, provider outage) abort the remaining units.
-                weak_units.append(f"unit {i}/{len(units)}: {r.escalated}")
-                hard = ("paused" in r.escalated or "budget" in r.escalated
-                        or "executors failed" in r.escalated
-                        or "UNVERIFIED" in r.escalated)
-                if hard:
-                    escalated = weak_units[-1]
-                    break
+            completed[i] = r
+            self.checkpoints.save(
+                ckpt_key, _ckpt_state(units, completed, budget, prior_spent))
 
-        # 4. Synthesis: assemble unit outputs into one coherent answer
+        for wave_no, wave in enumerate(planner.waves(units), 1):
+            pending = [i for i in wave if i not in completed]
+            if not pending:
+                continue
+            if self.control.paused or budget.exhausted:
+                escalated = (f"stopped before wave {wave_no}: "
+                             + ("paused" if self.control.paused else "budget exhausted")
+                             + " — resend the same request to resume from checkpoint")
+                break
+            log("wave_start", wave=wave_no, units=[i + 1 for i in pending])
+            await asyncio.gather(*(run_unit(i) for i in pending))
+            hard_stops = [
+                f"unit {i+1}/{len(units)}: {completed[i].escalated}"
+                for i in pending
+                if completed[i].escalated
+                and ("paused" in completed[i].escalated
+                     or "budget" in completed[i].escalated
+                     or "executors failed" in completed[i].escalated
+                     or "UNVERIFIED" in completed[i].escalated)
+            ]
+            weak_units += [
+                f"unit {i+1}/{len(units)}: {completed[i].escalated}"
+                for i in pending if completed[i].escalated
+            ]
+            if hard_stops:
+                escalated = hard_stops[0] + " — resend the same request to resume"
+                break
+
+        results = [completed[i] for i in sorted(completed)]
+        for r in results:
+            all_fm += r.fm_events
+        total_attempts = sum(r.attempts for r in results)
+
+        # 4. Synthesis: assemble unit outputs into one coherent, VERIFIED
+        # answer. Unit-level sandbox evidence rides along so the synthesizer
+        # (and the final verifier) see observed behavior, not just text.
         assembled = "\n\n".join(r.text for r in results if r.text)
+        evidence_appendix = "\n\n".join(
+            f"[unit {i+1} execution evidence]\n{completed[i].evidence}"
+            for i in sorted(completed) if completed[i].evidence
+        )
         final_text = assembled
-        if len(results) > 1 and not budget.exhausted and not self.control.paused:
+        final_report = None
+        if len(results) > 1 and not escalated:
             chain = self.cfg.executor_chain(executor_name)
-            synth_msgs = list(messages) + [{
-                "role": "user",
-                "content": (
-                    "All units of the task are complete. Assemble them into one "
-                    "coherent final answer to the ORIGINAL request. Do not drop "
-                    "content; fix seams and duplication only.\n\n" + assembled[:24000]
-                ),
-            }]
-            executed = await self._execute(chain, synth_msgs, log, 1)
-            if executed:
+            synth_prompt = (
+                "All units of the task are complete. Assemble them into one "
+                "coherent final answer to the ORIGINAL request. Do not drop "
+                "content; fix seams and duplication only.\n\n" + assembled[:24000]
+                + (f"\n\nSandbox execution evidence for the units (for your "
+                   f"reference; do not include verbatim unless asked):\n"
+                   f"{evidence_appendix[:6000]}" if evidence_appendix else "")
+            )
+            synth_msgs = list(messages) + [{"role": "user", "content": synth_prompt}]
+            feedback = ""
+            for attempt in range(2):  # synthesis + one verified repair
+                msgs = synth_msgs if not feedback else synth_msgs + [{
+                    "role": "user",
+                    "content": ("The assembled answer was reviewed and found "
+                                f"insufficient. {feedback}\nProduce a corrected "
+                                "complete assembly."),
+                }]
+                executed = await self._execute(chain, msgs, log, attempt + 1)
+                if not executed:
+                    break
                 res, m = executed
                 budget.add(res.cost_usd)
                 log("synthesis", model=m.name, cost_usd=res.cost_usd,
-                    tokens_in=res.tokens_in, tokens_out=res.tokens_out)
-                final_text = res.text
+                    tokens_in=res.tokens_in, tokens_out=res.tokens_out,
+                    attempt=attempt + 1)
+                try:
+                    report = await self.verifier.verify(
+                        task=task_text, output=res.text, contract=constraints,
+                        executor_family=m.family,
+                        evidence=evidence_appendix or None)
+                except Exception as e:
+                    log("verify_error", error=str(e)[:300])
+                    final_text = res.text
+                    break
+                budget.add(report.cost_usd)
+                log("verify", model=report.verifier, cost_usd=report.cost_usd,
+                    score=report.score, passed=report.passed, stage="synthesis")
+                if final_report is None or report.score > final_report.score:
+                    final_text, final_report = res.text, report
+                if report.passed:
+                    break
+                feedback = report.feedback
 
         if weak_units and not escalated:
             escalated = "; ".join(weak_units)
-        best = max((r.verify for r in results if r.verify),
-                   key=lambda v: v.score, default=None)
+        if not escalated:
+            self.checkpoints.delete(ckpt_key)
+        best = final_report or max(
+            (r.verify for r in results if r.verify),
+            key=lambda v: v.score, default=None)
         log("turn_end", spent=budget.spent, attempts=total_attempts,
-            units=len(results), escalated=escalated)
+            units=len(results), escalated=escalated, prior_spent=prior_spent)
         return TurnReport(
             text=final_text, task_id=task_id, executor=executor_name,
             attempts=total_attempts, verify=best,
-            fm_events=sorted(set(all_fm)), cost_usd=budget.spent,
+            fm_events=sorted(set(all_fm)), cost_usd=budget.spent + prior_spent,
             escalated=escalated, units=len(results),
         )
+
+
+def _ckpt_state(units, completed, budget, prior_spent) -> dict:
+    return {
+        "units": [{"description": u.description, "depends_on": u.depends_on}
+                  for u in units],
+        "completed": {
+            str(i): {"text": r.text, "attempts": r.attempts,
+                     "fm_events": r.fm_events, "evidence": r.evidence,
+                     "score": r.verify.score if r.verify else None}
+            for i, r in completed.items() if not r.escalated and r.text
+        },
+        "spent": budget.spent + prior_spent,
+    }
 
 
 def _looks_multipart(task: str) -> bool:

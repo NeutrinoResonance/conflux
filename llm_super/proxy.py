@@ -18,6 +18,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from .checkpoint import Checkpoints
 from .config import load
 from .control import ControlState, handle
 from .orchestrator import Orchestrator, _last_user_text
@@ -31,14 +32,16 @@ state: dict = {}
 async def lifespan(app: FastAPI):
     cfg = load(state.get("config_path", "models.yaml"))
     client = Client(cfg)
-    trace = Trace(state.get("trace_path", "traces.db"))
+    trace_path = state.get("trace_path", "traces.db")
+    trace = Trace(trace_path)
     control = ControlState()
     state.update(
         cfg=cfg,
         client=client,
         trace=trace,
         control=control,
-        orch=Orchestrator(cfg, client, trace, control),
+        orch=Orchestrator(cfg, client, trace, control,
+                          checkpoints=Checkpoints(trace_path)),
     )
     yield
     await client.aclose()
