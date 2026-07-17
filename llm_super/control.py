@@ -18,6 +18,8 @@ class ControlState:
     contract_skip_once: bool = False   # skip checklist for the next turn only
     sandbox_backend: str | None = None  # None = models.yaml default; "off" disables
     plan_mode: str = "auto"            # auto | on (always plan) | off (never)
+    breakpoints: list[str] = field(default_factory=list)
+    # rules: "fm:<FM-ID>" | "budget:<usd>" | "escalation" (SPEC §7.1)
     history: list[str] = field(default_factory=list)
 
     def consume_contract_enabled(self) -> bool:
@@ -26,6 +28,23 @@ class ControlState:
             self.contract_skip_once = False
             return False
         return self.contract_enabled
+
+    def breakpoint_hit(self, *, fm_ids: tuple[str, ...] | list[str] = (),
+                       spent: float = 0.0, escalation: bool = False) -> str | None:
+        """First matching breakpoint rule, or None. The caller pauses the
+        supervisor and parks the task at its checkpoint."""
+        for rule in self.breakpoints:
+            if rule.startswith("fm:") and rule[3:] in fm_ids:
+                return rule
+            if rule.startswith("budget:"):
+                try:
+                    if spent >= float(rule[7:]):
+                        return rule
+                except ValueError:
+                    continue
+            if rule == "escalation" and escalation:
+                return rule
+        return None
 
 
 HELP = """llm-super in-band commands (never forwarded to models):
@@ -38,10 +57,15 @@ HELP = """llm-super in-band commands (never forwarded to models):
   !checklist skip      skip the checklist for the NEXT turn only, then re-enable
   !sandbox local|gcloud|off|auto   where to execute code for verification
   !plan auto|on|off    task decomposition for large prompts (auto = size heuristic)
+  !break fm:<FM-ID> | budget:<usd> | escalation   add a breakpoint (pause when hit)
+  !break list / !break clear [rule]               show / remove breakpoints
+  !checkpoints         list resumable checkpoints for this conversation
+  !rewind <unit#>|all  forget a completed unit (or all) so resending re-runs it
   !help                this message"""
 
 
-def handle(text: str, state: ControlState, model_names: list[str]) -> str | None:
+def handle(text: str, state: ControlState, model_names: list[str],
+           checkpoints=None, session: str | None = None) -> str | None:
     """If `text` is a control command, apply it and return the reply.
     Returns None for normal (non-control) messages."""
     stripped = text.strip()
@@ -62,7 +86,8 @@ def handle(text: str, state: ControlState, model_names: list[str]) -> str | None
             f"budget={'default' if state.budget_usd is None else f'${state.budget_usd:.2f}'} "
             f"checklist={checklist} "
             f"sandbox={state.sandbox_backend or 'auto'} "
-            f"plan={state.plan_mode}"
+            f"plan={state.plan_mode} "
+            f"breakpoints={','.join(state.breakpoints) or 'none'}"
         )
     if cmd == "pause":
         state.paused = True
@@ -108,4 +133,70 @@ def handle(text: str, state: ControlState, model_names: list[str]) -> str | None
             state.sandbox_backend = None
             return "code execution backend returned to models.yaml default"
         return "usage: !sandbox local|gcloud|off|auto"
+    if cmd == "break":
+        if arg == "list" or not arg:
+            return ("breakpoints: " + ", ".join(state.breakpoints)
+                    if state.breakpoints else "no breakpoints set")
+        if arg.startswith("clear"):
+            _, _, which = arg.partition(" ")
+            which = which.strip()
+            if not which:
+                n = len(state.breakpoints)
+                state.breakpoints.clear()
+                return f"cleared {n} breakpoint(s)"
+            if which in state.breakpoints:
+                state.breakpoints.remove(which)
+                return f"cleared breakpoint {which}"
+            return f"no such breakpoint {which!r} (!break list)"
+        valid = (arg == "escalation"
+                 or (arg.startswith("fm:") and len(arg) > 3)
+                 or arg.startswith("budget:"))
+        if arg.startswith("budget:"):
+            try:
+                float(arg[7:])
+            except ValueError:
+                return f"could not parse {arg[7:]!r} as a dollar amount"
+        if not valid:
+            return "usage: !break fm:<FM-ID> | budget:<usd> | escalation | list | clear [rule]"
+        if arg not in state.breakpoints:
+            state.breakpoints.append(arg)
+        return (f"breakpoint set: {arg} — the supervisor will pause when it "
+                "hits (then !resume and resend to continue from checkpoint)")
+    if cmd == "checkpoints":
+        if checkpoints is None or session is None:
+            return "checkpoints unavailable in this context"
+        rows = checkpoints.for_session(session)
+        if not rows:
+            return "no checkpoints for this conversation"
+        lines = []
+        for r in rows:
+            done = ", ".join(str(i + 1) for i in r["completed"]) or "none"
+            age_m = r["age_s"] / 60
+            lines.append(
+                f"- {len(r['completed'])}/{len(r['units'])} units done "
+                f"(units {done}) · ${r['spent']:.3f} spent · {age_m:.0f}m old")
+            for i, u in enumerate(r["units"]):
+                mark = "✓" if i in r["completed"] else "·"
+                lines.append(f"    {mark} unit {i+1}: {u['description'][:90]}")
+        return ("checkpoints (resend the same request to resume; "
+                "!rewind <unit#> to re-run a unit):\n" + "\n".join(lines))
+    if cmd == "rewind":
+        if checkpoints is None or session is None:
+            return "rewind unavailable in this context"
+        rows = checkpoints.for_session(session)
+        if not rows:
+            return "no checkpoints for this conversation"
+        key = rows[0]["key"]  # newest
+        if arg == "all":
+            checkpoints.delete(key)
+            return ("checkpoint deleted — resending the request starts the "
+                    "turn from scratch")
+        try:
+            unit_no = int(arg) - 1
+        except ValueError:
+            return "usage: !rewind <unit#> | all"
+        if checkpoints.drop_unit(key, unit_no):
+            return (f"unit {arg} forgotten — resend the same request and it "
+                    "will re-run (other completed units are kept)")
+        return f"unit {arg} is not a completed unit in the checkpoint (!checkpoints)"
     return f"unknown command !{cmd} — try !help"

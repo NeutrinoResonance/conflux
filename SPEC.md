@@ -400,11 +400,14 @@ without a checkpoint the user could have intercepted.*
 Local web UI (+ CLI equivalents) attached to the orchestration core.
 *Implemented (first cut) at `/` on the proxy:* status tiles, steering
 controls (pause/resume, executor forcing, budget, checklist, sandbox, plan
-mode — same semantics as the !commands), task cards with verification score
+mode — same semantics as the !commands), breakpoint rules (add/clear from
+the Steering panel or `!break`), a Routing panel (runtime overrides for
+default/utility/referee/trivial executors, learned routing, verifier pool —
+`/admin/routing`; models.yaml persists), task cards with verification score
 bars, failure-mode badges with cross-turn advisories, escalation callouts,
 per-model outcome stats, and the raw event feed; 2s polling, light/dark.
-Remaining from the full vision below: per-node streaming output, breakpoint
-rules, and checkpoint rewind-with-edits.
+Remaining from the full vision below: per-node streaming output and
+edit-the-plan steering (rewind is unit-granular, not free-form).
 
 - **Live trace view**: task tree (plan → units → attempts), per-node model,
   tokens, $, FM events with evidence spans; streaming output per node; a
@@ -419,11 +422,18 @@ rules, and checkpoint rewind-with-edits.
 - **Steer**: edit the contract/plan/next-node prompt before resume; force a
   routing decision ("use Kimi for this unit"); inject a user note the referee
   must honor; skip or re-run a node.
-- **Breakpoints**: user-set rules that force a pause + approval, e.g.
-  `on: escalation_to_tier3`, `on: budget > $0.50/task`,
-  `on: fm_event(FM-X.3)`, `on: file_write outside workspace`.
-- **Rewind / replay**: restore any checkpoint and resume with modifications
-  (see §9 — LangGraph checkpointing gives this nearly for free).
+- **Breakpoints** *(implemented)*: user-set rules that force a pause, set
+  via `!break fm:<FM-ID> | budget:<usd> | escalation` (or the dashboard).
+  A matching rule pauses the supervisor mid-ladder; paid work stays
+  checkpointed, and `!resume` + resend continues. The fm rule fires before
+  verification spend; budget is a soft threshold under the hard cap;
+  escalation fires when the referee picks a structural strategy. (A
+  file-write rule awaits workspace-write mediation, which the proxy does
+  not have yet.)
+- **Rewind / replay** *(implemented, unit-granular)*: `!checkpoints` lists
+  this conversation's resumable checkpoints with per-unit status;
+  `!rewind <unit#>` forgets one completed unit so resending re-runs it
+  (other units stay paid-for); `!rewind all` restarts the turn.
 
 ### 7.2 Intervention through the client (no extra window)
 Because many users will live in their OSS client, the proxy also supports
@@ -506,8 +516,11 @@ turn arrives.
    decomposed into criteria). Verifier candidate order is failure-prior
    aware. All routing options are editable at runtime from the dashboard
    Routing panel (`/admin/routing`; in-memory — models.yaml persists).
-4. **M3 — Control plane**: live trace UI, pause/steer/kill, breakpoints,
-   in-band `!commands`, checkpoint rewind.
+4. **M3 — Control plane** *(implemented)*: live trace UI, pause/steer/kill,
+   in-band `!commands`, breakpoint rules (fm / budget / escalation), and
+   unit-granular checkpoint rewind (`!checkpoints`, `!rewind`). Remaining
+   from the full §7.1 vision: per-node streaming output, free-form
+   plan-editing before resume.
 5. **M4 — Learning routing**: repair-success priors feed routing; efficiency
    report; thrash/reasoning-action monitors.
 

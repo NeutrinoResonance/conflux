@@ -233,6 +233,19 @@ class Orchestrator:
                             f"cleanly. Execution output:\n{exec_res.transcript(800)}",
                         ))
 
+            # user breakpoints (SPEC §7.1): a matching rule pauses the
+            # supervisor before more is spent; work so far stays checkpointed
+            rule = self.control.breakpoint_hit(
+                fm_ids=[ev.fm_id for ev in events], spent=budget.spent)
+            if rule:
+                self.control.paused = True
+                log("breakpoint", rule=rule, spent=budget.spent, attempt=attempts)
+                escalated = (f"breakpoint {rule} hit — supervisor paused "
+                             "(!resume, then resend to continue)")
+                if best_report is None:
+                    best_text, best_executor = res.text, executor.name
+                break
+
             # independent cross-family verification (fails over internally;
             # total failure must not kill the turn — that's our own FM-3.2)
             try:
@@ -282,6 +295,18 @@ class Orchestrator:
             log("referee", strategy=decision.strategy, source=decision.source,
                 target=decision.target_model, rationale=decision.rationale,
                 cost_usd=decision.cost_usd, attempt=attempts)
+
+            # breakpoints again, now that verify/referee spend has landed and
+            # we know whether the ladder is escalating structurally
+            rule = self.control.breakpoint_hit(
+                spent=budget.spent,
+                escalation=decision.strategy != "retry_feedback")
+            if rule:
+                self.control.paused = True
+                log("breakpoint", rule=rule, spent=budget.spent, attempt=attempts)
+                escalated = (f"breakpoint {rule} hit — supervisor paused "
+                             "(!resume, then resend to continue)")
+                break
 
             parts = [ev.feedback for ev in events]
             if not report.passed:
@@ -556,7 +581,8 @@ class Orchestrator:
         # 3. Wave-parallel supervised unit execution. Independent units run
         # concurrently (bounded); dependent units wait for their inputs.
         # Every completed unit is checkpointed immediately.
-        self.checkpoints.save(ckpt_key, _ckpt_state(units, completed, budget, prior_spent))
+        self.checkpoints.save(ckpt_key, _ckpt_state(units, completed, budget, prior_spent),
+                              session=session)
         weak_units: list[str] = []
         all_fm: list[str] = []
         escalated = ""

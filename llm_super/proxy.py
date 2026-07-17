@@ -43,6 +43,7 @@ async def lifespan(app: FastAPI):
     control = ControlState()
     history = History(trace_path)
     library = Library(trace_path)
+    checkpoints = Checkpoints(trace_path)
     state.update(
         cfg=cfg,
         client=client,
@@ -51,8 +52,9 @@ async def lifespan(app: FastAPI):
         history=history,
         library=library,
         trace_path=trace_path,
+        checkpoints=checkpoints,
         orch=Orchestrator(cfg, client, trace, control,
-                          checkpoints=Checkpoints(trace_path),
+                          checkpoints=checkpoints,
                           history=history),
     )
 
@@ -164,7 +166,9 @@ async def chat_completions(request: Request):
     cfg, control = state["cfg"], state["control"]
 
     # In-band control commands short-circuit everything.
-    reply = handle(_last_user_text(messages), control, list(cfg.models))
+    reply = handle(_last_user_text(messages), control, list(cfg.models),
+                   checkpoints=state["checkpoints"],
+                   session=_session_id(messages))
     if reply is not None:
         state["trace"].record(_session_id(messages), "-", "control", command=_last_user_text(messages))
         return _sse(reply, model_name) if stream else JSONResponse(_completion_body(reply, model_name))
@@ -291,6 +295,7 @@ async def admin_status():
                       else "skip" if c.contract_skip_once else "on"),
         "sandbox": c.sandbox_backend or "auto",
         "plan": c.plan_mode,
+        "breakpoints": list(c.breakpoints),
         "models": list(state["cfg"].models),
         "recent_spend": round(sum(e.get("cost_usd") or 0 for e in recent), 4),
         "recent_commands": c.history[-10:],
@@ -320,6 +325,27 @@ async def admin_control(request: Request):
     elif field == "plan":
         if value in ("auto", "on", "off"):
             c.plan_mode = value
+    elif field == "break_add":
+        rule = str(value or "").strip()
+        valid = (rule == "escalation"
+                 or (rule.startswith("fm:") and len(rule) > 3)
+                 or rule.startswith("budget:"))
+        if rule.startswith("budget:"):
+            try:
+                float(rule[7:])
+            except ValueError:
+                valid = False
+        if not valid:
+            return JSONResponse({"error": f"bad breakpoint rule {rule!r}"},
+                                status_code=400)
+        if rule not in c.breakpoints:
+            c.breakpoints.append(rule)
+    elif field == "break_clear":
+        if value:
+            if value in c.breakpoints:
+                c.breakpoints.remove(value)
+        else:
+            c.breakpoints.clear()
     else:
         return JSONResponse({"error": f"unknown field {field!r}"}, status_code=400)
     state["trace"].record("-", "-", "control", command=f"ui:{field}={value}")

@@ -262,6 +262,14 @@ tr:last-child td { border-bottom: none; }
         </select>
       </label>
     </div>
+    <div class="controls" style="margin-top:8px">
+      <label>breakpoint
+        <input id="breakInp" type="text" size="18"
+               placeholder="fm:FM-X.3 · budget:0.4 · escalation">
+      </label>
+      <button onclick="addBreak()">Add</button>
+      <span id="breakList" style="font-size:12px"></span>
+    </div>
   </section>
 
   <section>
@@ -323,6 +331,19 @@ function flash(msg) {
   clearTimeout(f._t); f._t = setTimeout(() => f.style.display = "none", 1800);
 }
 
+async function addBreak() {
+  const rule = $("#breakInp").value.trim();
+  if (!rule) return;
+  const r = await fetch("/admin/control", {method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({field: "break_add", value: rule})});
+  if (!r.ok) { flash("✗ " + ((await r.json()).error || r.status)); return; }
+  $("#breakInp").value = "";
+  flash("breakpoint set: " + rule);
+  refresh();
+}
+function clearBreak(rule) { post("break_clear", rule); }
+
 $("#pauseBtn").onclick = () => post("paused", $("#pauseBtn").dataset.paused !== "true");
 $("#executorSel").onchange = e => post("executor", e.target.value);
 $("#budgetInp").onchange = e => post("budget", e.target.value);
@@ -360,6 +381,11 @@ function renderStatus(st, cfgModels) {
   $("#checklistSel").value = st.checklist || "on";
   $("#sandboxSel").value = st.sandbox || "auto";
   $("#planSel").value = st.plan || "auto";
+  $("#breakList").innerHTML = (st.breakpoints || []).length
+    ? st.breakpoints.map(b =>
+        `<span class="badge">${esc(b)} <a href="#" style="text-decoration:none"
+           onclick="clearBreak('${esc(b)}');return false">×</a></span>`).join(" ")
+    : '<span style="color:var(--muted)">none — pauses the supervisor when a rule matches</span>';
   $("#tiles").innerHTML =
     tile("state", paused ? "⏸ paused" : "▶ running") +
     tile("executor", esc(st.forced_executor || "auto")) +
