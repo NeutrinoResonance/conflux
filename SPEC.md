@@ -268,7 +268,36 @@ validated against a real mid-session Nous outage + credential expiry:
 - **Turn wall-clock timeout** (default 30 min) and SSE keepalives so clients
   survive long supervised turns.
 
-### 5.9 Session monitors — FM-1.4, FM-2.1, FM-1.5
+### 5.9 Cross-turn trajectory monitors (implemented)
+The proxy reconstructs the session trajectory (one history row per
+supervised turn: task, response, verifier score, failure events, message
+count) and runs advisory monitors over it at each turn start:
+
+- **FM-1.3 step repetition** — ≥2 recent turns lexically near-identical to
+  the current request: the driving agent is retrying without incorporating
+  results.
+- **FM-X.2 breadth thrash** — ≥4 rapid, mutually dissimilar, low-scoring
+  turns: shallow approach-hopping with no candidate carried to depth.
+- **FM-1.4 context loss** — the conversation shrank versus the maximum seen:
+  client-side truncation or reset.
+- **Progress stall (§5.6 realization)** — verifier scores flat-or-declining
+  below threshold across turns. Advisory only, per the paper's modest
+  success/fail correlation gap.
+
+These surface as `[llm-super] cross-turn:` trailer lines and trace events —
+never as automatic repairs, because the misbehaving party is the *driving*
+agent, and correcting it is the user's call (SPEC's intervention principle).
+
+### 5.10 Learned routing (implemented, first cut)
+Every unit outcome (executor, verifier score, attempts, failure events)
+accumulates in per-model stats (`/admin/stats`). With `routing.learned:
+true`, the router picks the executor with the best average score once it
+has `min_samples` turns; `!use <model>` always overrides; static default
+otherwise. This is the §M4 "repair outcomes teach the router" loop in its
+simplest defensible form — richer signals (per-failure-mode priors,
+cost-adjusted scores) can attach to the same stats table.
+
+### 5.11 Session monitors — FM-2.1, FM-1.5 (designed)
 On the reconstructed session: sudden context-prefix shrinkage (client
 truncation → warn user), conversation restarts, and turn-count/termination
 watchdogs.

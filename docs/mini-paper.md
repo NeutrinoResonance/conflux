@@ -116,14 +116,16 @@ These cost us debugging time so you don't have to rediscover them:
 
 ## 4. What it cannot do yet
 
-It supervises one turn at a time — it does not yet reconstruct multi-turn
-agent trajectories, so failure modes that only show up *across* turns
-(repeating steps, thrashing between shallow approaches) have detectors
-designed but not yet wired to live data. Execution evidence covers Python
+Cross-turn awareness is advisory: the system now reconstructs the session
+trajectory and warns you when the driving agent is repeating itself,
+thrashing between approaches, losing context, or stalling — but it warns
+rather than intervenes, since the misbehaving party is usually the agent
+driving it, not this turn's worker. Execution evidence covers Python
 snippets; multi-file projects and other languages are not yet run. Pause
-takes effect between steps, not mid-generation. And routing is static — the
-plan is for repair outcomes to teach the router which model to trust for
-what, but no learning happens yet.
+takes effect between steps, not mid-generation. Routing now learns from
+outcomes (best-average-score executor wins once sampled enough), but the
+signal is coarse — per-failure-mode and cost-adjusted routing are future
+work.
 
 ## 5. Foundations
 

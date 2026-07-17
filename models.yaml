@@ -126,6 +126,8 @@ routing:
                   qwen-3.7-plus-go, deepseek-v4-pro-go]
   # verifiers are tried in pool order, skipping the executor's family; a
   # provider failure fails over to the next eligible entry
+  learned: true        # route to the best-scoring executor once sampled
+  min_samples: 5       # turns per model before its stats can win routing
 
 execution:
   backend: local              # local | gcloud | off  (override per-session with !sandbox)

@@ -62,6 +62,8 @@ class Config:
     verifier_pool: list[str]
     supervision: Supervision
     execution: Execution
+    learned_routing: bool = True
+    min_routing_samples: int = 5
     path: Path = field(default_factory=lambda: Path("models.yaml"))
 
     def model(self, name: str) -> Model:
@@ -135,5 +137,7 @@ def load(path: str | Path = "models.yaml") -> Config:
         verifier_pool=list(routing.get("verifier_pool", [])),
         supervision=sup,
         execution=execution,
+        learned_routing=bool(routing.get("learned", True)),
+        min_routing_samples=int(routing.get("min_samples", 5)),
         path=path,
     )

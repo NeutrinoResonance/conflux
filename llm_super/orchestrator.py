@@ -23,7 +23,8 @@ from . import sandbox
 from .checkpoint import Checkpoints, turn_key
 from .config import Config, Model
 from .control import ControlState
-from .monitors import FMEvent, run_monitors
+from .history import History
+from .monitors import FMEvent, run_monitors, run_session_monitors
 from .providers import ChatResult, Client, ProviderError
 from .trace import Trace
 from .verifier import Verifier, VerifyReport
@@ -50,6 +51,7 @@ class UnitResult:
     fm_events: list[str] = field(default_factory=list)
     escalated: str = ""
     evidence: str = ""         # sandbox transcript of the best attempt
+    executor: str = ""         # model that produced the best attempt
 
 
 @dataclass
@@ -63,9 +65,10 @@ class TurnReport:
     cost_usd: float = 0.0
     escalated: str = ""
     units: int = 0
+    session_notes: list[str] = field(default_factory=list)
 
     def trailer(self) -> str:
-        if self.verify is None and not self.escalated:
+        if self.verify is None and not self.escalated and not self.session_notes:
             return ""
         lines = ["", "---"]
         if self.verify is not None:
@@ -77,6 +80,8 @@ class TurnReport:
             )
         if self.fm_events:
             lines.append(f"[llm-super] failure modes detected: {', '.join(self.fm_events)}")
+        for note in self.session_notes:
+            lines.append(f"[llm-super] cross-turn: {note}")
         if self.escalated:
             lines.append(f"[llm-super] NEEDS YOUR INPUT: {self.escalated}")
         return "\n".join(lines)
@@ -86,13 +91,31 @@ class Orchestrator:
     UNIT_CONCURRENCY = 3   # parallel units per wave (provider-rate friendly)
 
     def __init__(self, cfg: Config, client: Client, trace: Trace, control: ControlState,
-                 checkpoints: Checkpoints | None = None):
+                 checkpoints: Checkpoints | None = None,
+                 history: History | None = None):
         self.cfg = cfg
         self.client = client
         self.trace = trace
         self.control = control
         self.verifier = Verifier(client, cfg)
         self.checkpoints = checkpoints or Checkpoints(":memory:")
+        self.history = history or History(":memory:")
+
+    def _route_executor(self) -> str:
+        """Forced > learned (best recent avg score, min sample size) > static."""
+        if self.control.forced_executor:
+            return self.control.forced_executor
+        if self.cfg.learned_routing:
+            eligible = {n for n, m in self.cfg.models.items() if "executor" in m.roles}
+            best = None
+            for row in self.history.stats():
+                if (row["model"] in eligible
+                        and row["turns"] >= self.cfg.min_routing_samples
+                        and (best is None or (row["avg_score"] or 0) > (best[1] or 0))):
+                    best = (row["model"], row["avg_score"])
+            if best and (best[1] or 0) > 0:
+                return best[0]
+        return self.cfg.default_executor
 
     # ---------- durable executor call (fallback chain) ----------
 
@@ -123,13 +146,12 @@ class Orchestrator:
         log,
     ) -> UnitResult:
         sup = self.cfg.supervision
-        chain = self.cfg.executor_chain(
-            self.control.forced_executor or self.cfg.default_executor
-        )
+        chain = self.cfg.executor_chain(self._route_executor())
         attempts = 0
         fm_seen: list[str] = []
         best_text = ""
         best_evidence = ""
+        best_executor = ""
         best_report: VerifyReport | None = None
         feedback = ""
         escalated = ""
@@ -217,6 +239,7 @@ class Orchestrator:
             if best_report is None or report.score > best_report.score:
                 best_text, best_report = res.text, report
                 best_evidence = evidence or ""
+                best_executor = executor.name
 
             if report.passed and not events:
                 break
@@ -235,7 +258,7 @@ class Orchestrator:
         return UnitResult(
             text=best_text, attempts=attempts, verify=best_report,
             fm_events=sorted(set(fm_seen)), escalated=escalated,
-            evidence=best_evidence,
+            evidence=best_evidence, executor=best_executor,
         )
 
     # ---------- full turn ----------
@@ -245,12 +268,23 @@ class Orchestrator:
         sup = self.cfg.supervision
         budget = Budget(cap=self.control.budget_usd or sup.budget_usd_per_task)
         task_text = _last_user_text(messages)
-        executor_name = self.control.forced_executor or self.cfg.default_executor
+        executor_name = self._route_executor()
 
         def log(kind: str, **kw):
             self.trace.record(session, task_id, kind, **kw)
 
-        log("turn_start", model=executor_name, prompt_chars=len(task_text))
+        log("turn_start", model=executor_name, prompt_chars=len(task_text),
+            routed="learned" if (executor_name != self.cfg.default_executor
+                                 and not self.control.forced_executor) else "static")
+
+        # 0. Cross-turn monitors over the reconstructed session trajectory
+        # (advisory: they observe the DRIVING agent's behavior across turns)
+        session_notes: list[str] = []
+        for ev in run_session_monitors(
+                self.history.recent_turns(session), task_text, len(messages)):
+            log("fm_event", fm_id=ev.fm_id, confidence=ev.confidence,
+                evidence=ev.evidence, scope="session")
+            session_notes.append(f"{ev.fm_id}: {ev.feedback}")
 
         # 1. Contract extraction (user-toggleable: !checklist on|off|skip)
         constraints: list[str] = []
@@ -309,11 +343,17 @@ class Orchestrator:
             log("turn_end", spent=budget.spent, attempts=unit.attempts,
                 score=unit.verify.score if unit.verify else None,
                 escalated=unit.escalated)
+            score = unit.verify.score if unit.verify else None
+            self.history.record_turn(session, task_text, unit.text, score,
+                                     unit.fm_events, len(messages))
+            if unit.executor:
+                self.history.record_outcome(unit.executor, score,
+                                            unit.attempts, len(unit.fm_events))
             return TurnReport(
-                text=unit.text, task_id=task_id, executor=executor_name,
+                text=unit.text, task_id=task_id, executor=unit.executor or executor_name,
                 attempts=unit.attempts, verify=unit.verify,
                 fm_events=unit.fm_events, cost_usd=budget.spent,
-                escalated=unit.escalated,
+                escalated=unit.escalated, session_notes=session_notes,
             )
 
         # 3. Wave-parallel supervised unit execution. Independent units run
@@ -454,11 +494,19 @@ class Orchestrator:
             key=lambda v: v.score, default=None)
         log("turn_end", spent=budget.spent, attempts=total_attempts,
             units=len(results), escalated=escalated, prior_spent=prior_spent)
+        best_score = best.score if best else None
+        self.history.record_turn(session, task_text, final_text, best_score,
+                                 sorted(set(all_fm)), len(messages))
+        for r in results:
+            if r.executor:
+                self.history.record_outcome(
+                    r.executor, r.verify.score if r.verify else None,
+                    r.attempts, len(r.fm_events))
         return TurnReport(
             text=final_text, task_id=task_id, executor=executor_name,
             attempts=total_attempts, verify=best,
             fm_events=sorted(set(all_fm)), cost_usd=budget.spent + prior_spent,
-            escalated=escalated, units=len(results),
+            escalated=escalated, units=len(results), session_notes=session_notes,
         )
 
 

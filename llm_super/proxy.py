@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from .checkpoint import Checkpoints
 from .config import load
 from .control import ControlState, handle
+from .history import History
 from .orchestrator import Orchestrator, _last_user_text
 from .providers import Client, ProviderError
 from .trace import Trace
@@ -35,13 +36,16 @@ async def lifespan(app: FastAPI):
     trace_path = state.get("trace_path", "traces.db")
     trace = Trace(trace_path)
     control = ControlState()
+    history = History(trace_path)
     state.update(
         cfg=cfg,
         client=client,
         trace=trace,
         control=control,
+        history=history,
         orch=Orchestrator(cfg, client, trace, control,
-                          checkpoints=Checkpoints(trace_path)),
+                          checkpoints=Checkpoints(trace_path),
+                          history=history),
     )
     yield
     await client.aclose()
@@ -214,6 +218,12 @@ async def admin_status():
 @app.get("/admin/events")
 async def admin_events(n: int = 50):
     return state["trace"].recent(n)
+
+
+@app.get("/admin/stats")
+async def admin_stats():
+    """Per-model outcome stats (feeds learned routing)."""
+    return state["history"].stats()
 
 
 @app.post("/admin/pause")
