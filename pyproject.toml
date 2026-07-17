@@ -1,0 +1,21 @@
+[project]
+name = "llm-super"
+version = "0.1.0"
+description = "Ensemble supervisor for open-source LLMs: taxonomy-driven monitors, cross-model verification, human-interruptible orchestration"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "httpx>=0.27",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+llm-super = "llm_super.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["llm_super"]

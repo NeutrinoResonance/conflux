@@ -1,0 +1,89 @@
+# Model & provider registry. Capabilities below reflect empirical probes
+# (2026-07-16, see SPEC.md §6 matrix) — re-verify with `llm-super probe`.
+#
+# key_source values are resolved at request time by llm_super/keys.py:
+#   env:VAR                      — environment variable
+#   hermes:nous                  — agent_key from ~/.hermes/auth.json (rotates ~daily)
+#   opencode:<provider>          — key from ~/.local/share/opencode/auth.json
+
+providers:
+  nous:
+    base_url: https://inference-api.nousresearch.com/v1
+    key_source: hermes:nous
+  opencode-go:
+    base_url: https://opencode.ai/zen/go/v1
+    key_source: opencode:opencode-go
+  nanogpt:
+    base_url: https://nano-gpt.com/api/v1
+    key_source: opencode:nano-gpt
+  ollama-cloud:
+    base_url: https://ollama.com/v1
+    key_source: opencode:ollama-cloud
+
+models:
+  # ---- executors (large) ----
+  deepseek-v4-pro:
+    provider: nous
+    id: deepseek/deepseek-v4-pro
+    family: deepseek
+    roles: [executor, verifier]
+    logprobs: true
+    top_logprobs_max: 5        # 20 works on nous, but 5 is the safe cross-provider default
+    price_in_per_m: 0.28
+    price_out_per_m: 0.42
+    failure_priors: [FM-X.1, FM-3.1]
+  glm-5.2:
+    provider: nous
+    id: z-ai/glm-5.2
+    family: glm
+    roles: [executor]          # no logprobs anywhere (Z.ai upstream) → never a verifier
+    logprobs: false
+    price_in_per_m: 0.35
+    price_out_per_m: 1.40
+    failure_priors: [FM-X.2, FM-2.3]
+  kimi-k2.6:
+    provider: nous
+    id: moonshotai/kimi-k2.6
+    family: kimi
+    roles: [executor, verifier]
+    logprobs: true
+    top_logprobs_max: 5
+    price_in_per_m: 0.40
+    price_out_per_m: 1.60
+    failure_priors: []
+  qwen-3.7-plus:
+    provider: nous
+    id: qwen/qwen3.7-plus
+    family: qwen
+    roles: [executor, verifier]
+    logprobs: true
+    top_logprobs_max: 5        # Alibaba upstream rejects >5
+    price_in_per_m: 0.30
+    price_out_per_m: 1.20
+    failure_priors: []
+
+  # ---- small / cheap (contract extraction, lite verification) ----
+  gemma-4-31b:
+    provider: nous
+    id: google/gemma-4-31b-it
+    family: gemma
+    roles: [verifier, utility]
+    logprobs: true
+    top_logprobs_max: 5
+    price_in_per_m: 0.08
+    price_out_per_m: 0.16
+    failure_priors: [FM-X.5, FM-X.7]
+
+routing:
+  default_executor: deepseek-v4-pro
+  utility: gemma-4-31b          # contract extraction, classification
+  verifier_pool: [qwen-3.7-plus, kimi-k2.6, gemma-4-31b, deepseek-v4-pro]
+  # verifier is chosen from the pool with family != executor family
+
+supervision:
+  score_scale: 20               # verifier scores 1..20
+  pass_threshold: 0.70          # normalized [0,1]; below this → repair loop
+  verify_repeats: 1             # K (raise for adversarial tier)
+  max_repairs: 2                # structural-change rule: after N repairs, escalate
+  budget_usd_per_task: 0.50
+  trailer: true                 # append supervisor summary to responses
