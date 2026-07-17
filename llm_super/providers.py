@@ -150,6 +150,19 @@ class Client:
         breaker.limit_hits = 0
         self._model_breakers.pop(model.name, None)
 
+    def breaker_status(self) -> dict[str, Any]:
+        """Circuit state for the dashboard's load-balancing panel."""
+        now = time.monotonic()
+        def snap(breakers: dict[str, _Breaker]) -> dict[str, Any]:
+            return {
+                name: {"open_for_s": round(max(0.0, b.open_until - now), 1),
+                       "fails": b.fails, "limit_hits": b.limit_hits}
+                for name, b in breakers.items()
+                if b.open_until > now or b.fails or b.limit_hits
+            }
+        return {"providers": snap(self._breakers),
+                "models": snap(self._model_breakers)}
+
     async def aclose(self) -> None:
         await self._http.aclose()
 

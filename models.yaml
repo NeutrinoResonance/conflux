@@ -23,9 +23,11 @@ providers:
   opencode-go:
     base_url: https://opencode.ai/zen/go/v1
     key_source: opencode:opencode-go
+    limits: {usd_5h: 12, usd_week: 30, usd_month: 60}
   nanogpt:
     base_url: https://nano-gpt.com/api/v1
     key_source: opencode:nano-gpt
+    limits: {input_tokens_week: 60000000}
   ollama-cloud:
     base_url: https://ollama.com/v1
     key_source: opencode:ollama-cloud

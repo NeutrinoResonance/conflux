@@ -13,6 +13,9 @@ class Provider:
     name: str
     base_url: str
     key_source: str
+    # declared usage limits, e.g. {usd_5h: 12, usd_week: 30, usd_month: 60}
+    # (Go dollar windows) or {input_tokens_week: 60000000} (NanoGPT)
+    limits: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

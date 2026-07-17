@@ -422,9 +422,16 @@ controls (pause/resume, executor forcing, budget, checklist, sandbox, plan
 mode — same semantics as the !commands), breakpoint rules (add/clear from
 the Steering panel or `!break`), a Routing panel (runtime overrides for
 default/utility/referee/trivial executors, learned routing, verifier pool —
-`/admin/routing`; models.yaml persists), task cards with verification score
-bars, failure-mode badges with cross-turn advisories, escalation callouts,
-per-model outcome stats, and the raw event feed; 2s polling, light/dark.
+`/admin/routing`; models.yaml persists), a Load-balancing panel
+(`/admin/balance`: per-provider 5h/week/month window usage vs the limits
+declared in `providers.<name>.limits`, with subscription channels re-priced
+at nominal twin rates, "≈ N requests left" estimates matching how the Go
+docs express limits, and live circuit/cooldown state), task cards with
+verification score bars, a per-task "⧉ request" quick-copy (the exact
+request text — locator for editing/rewinding that message in the client,
+and the checkpoint-resume key when resent verbatim), failure-mode badges
+with cross-turn advisories, escalation callouts, per-model outcome stats,
+and the raw event feed; 2s polling, light/dark.
 Remaining from the full vision below: per-node streaming output and
 edit-the-plan steering (rewind is unit-granular, not free-form).
 

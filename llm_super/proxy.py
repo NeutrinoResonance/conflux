@@ -20,6 +20,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
 from . import ui
 
+from . import balance as balance_mod
 from . import export as export_mod
 from . import report as report_mod
 from . import retention
@@ -431,6 +432,15 @@ async def admin_events(n: int = 50):
 async def admin_stats():
     """Per-model outcome stats (feeds learned routing)."""
     return state["history"].stats()
+
+
+@app.get("/admin/balance")
+async def admin_balance():
+    """Load balancing: per-provider window usage vs declared limits, plus
+    live circuit-breaker state."""
+    usage = await asyncio.to_thread(
+        balance_mod.provider_usage, state["trace_path"], state["cfg"])
+    return {"providers": usage, "breakers": state["client"].breaker_status()}
 
 
 @app.get("/admin/report")

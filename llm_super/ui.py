@@ -63,7 +63,8 @@ body {
   margin: 0; background: var(--page); color: var(--ink);
   font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
-main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 60px; }
+/* wide cap: the conversation tree needs the room on big displays */
+main { max-width: 1560px; margin: 0 auto; padding: 20px 20px 60px; }
 h1 { font-size: 18px; margin: 0 0 2px; }
 .sub { color: var(--muted); font-size: 12px; margin-bottom: 16px; }
 section { margin-top: 22px; }
@@ -303,6 +304,11 @@ tr:last-child td { border-bottom: none; }
   <section>
     <h2>Model outcomes</h2>
     <div id="stats"></div>
+  </section>
+
+  <section>
+    <h2>Load balancing <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">— window usage vs provider limits; nominal prices for subscription channels</span></h2>
+    <div id="balance"></div>
   </section>
 
   <section>
@@ -548,6 +554,8 @@ function renderTasks(events) {
         ${fms.map(fmBadge).join(" ")}
         <span class="gid">${esc(task)}</span>
         <button class="msgbtn" onclick="toggleMessages(event, '${esc(task)}')">messages</button>
+        <button class="msgbtn" onclick="copyRequest(event, '${esc(task)}')"
+          title="copy the exact request text — search for it in OpenCode/Hermes to edit that message, or resend it to resume from checkpoint (!rewind <unit#> first to redo a unit)">⧉ request</button>
       </summary>
       <div class="tl">${rows.join("")}
         ${escalated ? `<div class="esc">${esc(escalated)}</div>` : ""}
@@ -578,6 +586,55 @@ function renderStats(rows) {
       <td class="num">${r.avg_attempts ?? "—"}</td>
       <td class="num">${r.fm_per_turn ?? "—"}</td></tr>`).join("") +
     "</tbody></table>";
+}
+
+function meter(pct) {
+  if (pct == null) return "";
+  const color = pct >= 90 ? "var(--critical)" : pct >= 60 ? "var(--serious)" : "var(--seq)";
+  return `<span class="scorebar"><span class="track"><span class="fill"
+    style="width:${Math.min(100, pct)}%;background:${color}"></span></span>
+    <span class="n">${pct}%</span></span>`;
+}
+
+function renderBalance(b) {
+  const provs = Object.entries(b.providers || {});
+  if (!provs.length) { $("#balance").innerHTML = ""; return; }
+  const br = b.breakers || {providers: {}, models: {}};
+  const rows = [];
+  for (const [name, p] of provs) {
+    const hasLimits = Object.keys(p.limits || {}).length > 0;
+    const anyUse = Object.values(p.windows).some(w => w.requests);
+    if (!hasLimits && !anyUse) continue;   // idle provider with no declared caps
+    const circuit = br.providers[name];
+    const circuitTxt = circuit && circuit.open_for_s > 0
+      ? `<span class="badge crit">⛔ cooling ${Math.ceil(circuit.open_for_s)}s</span>`
+      : (circuit && (circuit.fails || circuit.limit_hits)
+         ? `<span class="badge fm">⚠ ${circuit.limit_hits ? "limit hits: " + circuit.limit_hits : "fails: " + circuit.fails}</span>`
+         : `<span class="badge ok">✓ ok</span>`);
+    const cells = Object.entries(p.windows).map(([wname, w]) => {
+      const unitTok = "limit_tokens_in" in w;
+      const used = unitTok
+        ? `${(w.tokens_in / 1e6).toFixed(2)}M in-tok`
+        : `$${w.nominal_usd.toFixed(2)}`;
+      const cap = unitTok ? (w.limit_tokens_in != null ? ` / ${(w.limit_tokens_in / 1e6).toFixed(0)}M` : "")
+                          : (w.limit_usd != null ? ` / $${w.limit_usd}` : "");
+      const est = w.est_requests_left != null
+        ? `<div style="color:var(--muted);font-size:11px">≈ ${w.est_requests_left.toLocaleString()} req left</div>` : "";
+      return `<td class="num">${w.requests} req · ${used}${cap}
+        ${meter(w.used_pct)}${est}</td>`;
+    }).join("");
+    rows.push(`<tr><td>${esc(name)}<br>${circuitTxt}</td>${cells}</tr>`);
+  }
+  const modelBr = Object.entries(br.models || {})
+    .filter(([, v]) => v.open_for_s > 0)
+    .map(([m, v]) => `<span class="badge fm">⚠ ${esc(m)} cooling ${Math.ceil(v.open_for_s)}s</span>`)
+    .join(" ");
+  $("#balance").innerHTML = (rows.length
+    ? `<table><thead><tr><th>provider</th><th class="num">5h window</th>
+       <th class="num">week</th><th class="num">month</th></tr></thead>
+       <tbody>${rows.join("")}</tbody></table>`
+    : `<div class="card" style="color:var(--muted)">no provider traffic yet</div>`)
+    + (modelBr ? `<div style="margin-top:8px">model-level limit cooldowns: ${modelBr}</div>` : "");
 }
 
 function renderEfficiency(r) {
@@ -893,6 +950,34 @@ async function pruneNow() {
     (r.vacuumed === false ? " (vacuum deferred: db busy)" : "");
 }
 
+// Quick-copy the exact request text for a task. It is both the locator
+// (search your client's history for it to edit/rewind to that message) and
+// the resume key (resending the identical text continues from checkpoint).
+// Copied verbatim — any decoration would break the checkpoint key match.
+async function copyRequest(e, task) {
+  e.preventDefault(); e.stopPropagation();
+  const msgs = await fetch(`/admin/messages?task=${encodeURIComponent(task)}&n=20`)
+    .then(r => r.json());
+  const req = msgs.find(m => m.kind === "client_request");
+  let text = "";
+  const mlist = (req && req.payload && req.payload.messages) || [];
+  for (let i = mlist.length - 1; i >= 0; i--) {
+    if (mlist[i].role === "user") {
+      const c = mlist[i].content;
+      text = typeof c === "string" ? c
+        : (c || []).map(p => p && p.text || "").join(" ");
+      break;
+    }
+  }
+  if (!text) { flash("no recorded request for this task"); return; }
+  try {
+    await navigator.clipboard.writeText(text);
+    flash("request copied — paste in your client to edit/rewind, or resend to resume");
+  } catch (err) {
+    flash("clipboard blocked by the browser (" + err + ")");
+  }
+}
+
 // Full-payload viewer: fetched on demand, never polled.
 const msgShown = new Set();
 const msgCache = new Map();
@@ -953,7 +1038,7 @@ async function toggleMessages(ev, task) {
 let libraryRendered = false;
 async function refresh() {
   try {
-    const [st, evs, stats, lib, ret, rt, eff] = await Promise.all([
+    const [st, evs, stats, lib, ret, rt, eff, bal] = await Promise.all([
       fetch("/admin/status").then(r => r.json()),
       fetch("/admin/events?n=300").then(r => r.json()),
       fetch("/admin/stats").then(r => r.json()),
@@ -961,6 +1046,7 @@ async function refresh() {
       fetch("/admin/retention").then(r => r.json()),
       fetch("/admin/routing").then(r => r.json()),
       fetch("/admin/report").then(r => r.json()),
+      fetch("/admin/balance").then(r => r.json()),
     ]);
     library = lib;
     if (!library.projects.find(p => p.id === sel.project)) sel = {project: "default", session: null};
@@ -972,6 +1058,7 @@ async function refresh() {
     renderTasks(evs);
     renderStats(stats);
     renderEfficiency(eff);
+    renderBalance(bal);
     renderEvents(evs);
     $("#clock").textContent = new Date().toLocaleTimeString();
   } catch (e) {
