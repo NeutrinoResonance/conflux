@@ -11,6 +11,7 @@ from typing import Any
 
 import httpx
 
+from . import reqlog
 from .config import Config, Model
 from .keys import resolve, try_refresh
 
@@ -117,6 +118,7 @@ class Client:
             if resp.status_code != 200 or "choices" not in data:
                 raise ProviderError(model.name, resp.status_code, json.dumps(data))
             breaker.fails = 0
+            reqlog.record("upstream", model.name, {"request": out, "response": data})
             return data
         breaker.fails += 1
         if breaker.fails >= self.BREAK_AFTER:
@@ -200,6 +202,7 @@ class Client:
             raise last_exc if last_exc else ProviderError(model.name, 0, "exhausted retries")
         breaker.fails = 0
 
+        reqlog.record("upstream", model.name, {"request": body, "response": data})
         choice = data["choices"][0]
         content = (choice.get("message") or {}).get("content") or ""
         usage = data.get("usage") or {}

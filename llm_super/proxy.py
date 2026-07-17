@@ -315,6 +315,13 @@ async def admin_stats():
     return state["history"].stats()
 
 
+@app.get("/admin/messages")
+async def admin_messages(task: str | None = None, session: str | None = None,
+                         n: int = 100):
+    """Full message payloads — every client and upstream exchange."""
+    return state["trace"].exchanges(task=task, session=session, n=n)
+
+
 @app.post("/admin/pause")
 async def admin_pause():
     state["control"].paused = True

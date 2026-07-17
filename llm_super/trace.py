@@ -27,6 +27,20 @@ class Trace:
                 data TEXT
             )"""
         )
+        # Full message payloads: every request/response through the proxy,
+        # client-side and upstream-side. This is the ground truth the event
+        # previews summarize.
+        self._conn.execute(
+            """CREATE TABLE IF NOT EXISTS exchanges (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts REAL NOT NULL,
+                session TEXT NOT NULL,
+                task TEXT NOT NULL,
+                kind TEXT NOT NULL,          -- client_request/client_response/upstream
+                model TEXT,
+                payload TEXT NOT NULL        -- full JSON
+            )"""
+        )
         self._conn.commit()
 
     def record(
@@ -73,6 +87,45 @@ class Trace:
                 d["data"] = json.loads(d["data"])
             rows.append(d)
         return rows
+
+    MAX_PAYLOAD = 400_000  # chars; guards against pathological rows
+
+    def record_exchange(self, session: str, task: str, kind: str,
+                        model: str | None, payload: Any) -> None:
+        blob = json.dumps(payload, default=str)
+        if len(blob) > self.MAX_PAYLOAD:
+            blob = json.dumps({"truncated": True, "chars": len(blob),
+                               "head": blob[: self.MAX_PAYLOAD]})
+        self._conn.execute(
+            "INSERT INTO exchanges (ts, session, task, kind, model, payload) "
+            "VALUES (?,?,?,?,?,?)",
+            (time.time(), session, task, kind, model, blob),
+        )
+        self._conn.commit()
+
+    def exchanges(self, task: str | None = None, session: str | None = None,
+                  n: int = 100) -> list[dict[str, Any]]:
+        q = ("SELECT id, ts, session, task, kind, model, payload FROM exchanges")
+        cond, args = [], []
+        if task:
+            cond.append("task=?"); args.append(task)
+        if session:
+            cond.append("session=?"); args.append(session)
+        if cond:
+            q += " WHERE " + " AND ".join(cond)
+        q += " ORDER BY id DESC LIMIT ?"
+        args.append(n)
+        cur = self._conn.execute(q, args)
+        cols = [c[0] for c in cur.description]
+        rows = []
+        for row in cur.fetchall():
+            d = dict(zip(cols, row))
+            try:
+                d["payload"] = json.loads(d["payload"])
+            except json.JSONDecodeError:
+                pass
+            rows.append(d)
+        return list(reversed(rows))
 
     def task_cost(self, session: str, task: str) -> float:
         cur = self._conn.execute(

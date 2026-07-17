@@ -19,6 +19,7 @@ import asyncio
 
 from . import contract as contract_mod
 from . import planner
+from . import reqlog
 from . import sandbox
 from .checkpoint import Checkpoints, turn_key
 from .config import Config, Model
@@ -280,6 +281,8 @@ class Orchestrator:
         def log(kind: str, **kw):
             self.trace.record(session, task_id, kind, **kw)
 
+        reqlog.set_context(self.trace, session, task_id)
+        self.trace.record_exchange(session, task_id, "client_request", None, body)
         log("agent_turn", model=chain[0].name, task_preview=task_text[:200],
             n_messages=len(messages))
         feedback = ""
@@ -314,6 +317,8 @@ class Orchestrator:
                     tokens_in=usage.get("prompt_tokens", 0),
                     tokens_out=usage.get("completion_tokens", 0),
                     n_calls=len(msg["tool_calls"]))
+                self.trace.record_exchange(session, task_id, "client_response",
+                                           model.name, data)
                 return data  # mid-loop: hand straight back to the agent
 
             text = msg.get("content") or ""
@@ -342,6 +347,8 @@ class Orchestrator:
                 best_data, best_score = data, report.score
             if report.passed and not events:
                 log("agent_end", score=report.score, answer_preview=text[:150])
+                self.trace.record_exchange(session, task_id, "client_response",
+                                           model.name, data)
                 return data
             parts = [ev.feedback for ev in events]
             if not report.passed:
@@ -353,6 +360,7 @@ class Orchestrator:
                             .get("content") or "")[:150],
             escalated=("best attempt below quality bar"
                        if best_score < sup.pass_threshold else ""))
+        self.trace.record_exchange(session, task_id, "client_response", None, final)
         return final
 
     # ---------- full turn ----------
@@ -367,6 +375,9 @@ class Orchestrator:
         def log(kind: str, **kw):
             self.trace.record(session, task_id, kind, **kw)
 
+        reqlog.set_context(self.trace, session, task_id)
+        self.trace.record_exchange(session, task_id, "client_request", None,
+                                   {"messages": messages})
         log("turn_start", model=executor_name, prompt_chars=len(task_text),
             task_preview=task_text[:200],
             routed="learned" if (executor_name != self.cfg.default_executor
@@ -439,6 +450,9 @@ class Orchestrator:
                 score=unit.verify.score if unit.verify else None,
                 escalated=unit.escalated, answer_preview=unit.text[:150])
             score = unit.verify.score if unit.verify else None
+            self.trace.record_exchange(session, task_id, "client_response", None,
+                                       {"text": unit.text, "score": score,
+                                        "escalated": unit.escalated})
             self.history.record_turn(session, task_text, unit.text, score,
                                      unit.fm_events, len(messages))
             if unit.executor:
@@ -594,6 +608,9 @@ class Orchestrator:
             units=len(results), escalated=escalated, prior_spent=prior_spent,
             answer_preview=final_text[:150])
         best_score = best.score if best else None
+        self.trace.record_exchange(session, task_id, "client_response", None,
+                                   {"text": final_text, "score": best_score,
+                                    "escalated": escalated})
         self.history.record_turn(session, task_text, final_text, best_score,
                                  sorted(set(all_fm)), len(messages))
         for r in results:

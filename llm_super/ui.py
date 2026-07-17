@@ -144,6 +144,17 @@ details.unit > summary::-webkit-details-marker { display: none; }
 details.unit .subtl { margin: 4px 0 4px 4px; }
 .esc { margin-top: 8px; font-size: 13px; color: var(--ink); }
 .esc::before { content: "⛔ "; }
+.msgbtn { font-size: 11px; padding: 2px 10px; margin-left: auto; }
+.msgview { border-top: 1px solid var(--grid); padding: 10px 14px; }
+.msg { margin-bottom: 8px; }
+.msg .mh { font-size: 11px; color: var(--muted); margin-bottom: 2px;
+           font-family: ui-monospace, monospace; }
+.msg .role { display: inline-block; min-width: 70px; font-weight: 600;
+             color: var(--ink); }
+.msg pre { margin: 0 0 4px; padding: 6px 10px; background: var(--page);
+           border: 1px solid var(--grid); border-radius: 6px; font-size: 11.5px;
+           white-space: pre-wrap; word-break: break-word; max-height: 300px;
+           overflow: auto; }
 .note { margin-top: 6px; font-size: 12px; color: var(--ink-2); }
 .note::before { content: "↩ "; color: var(--muted); }
 table { width: 100%; border-collapse: collapse; background: var(--surface);
@@ -418,14 +429,24 @@ function renderTasks(events) {
         <span class="gcost">$${cost.toFixed(4)}</span>
         ${fms.map(fmBadge).join(" ")}
         <span class="gid">${esc(task)}</span>
+        <button class="msgbtn" onclick="toggleMessages(event, '${esc(task)}')">messages</button>
       </summary>
       <div class="tl">${rows.join("")}
         ${escalated ? `<div class="esc">${esc(escalated)}</div>` : ""}
       </div>
+      <div class="msgview" id="msg-${esc(task)}" style="display:none"></div>
     </details>`);
   }
   $("#tasks").innerHTML = cards.join("") ||
     `<div class="card" style="color:var(--muted)">no supervised turns yet — point a client at /v1 with model "super"</div>`;
+  // restore message views wiped by the re-render
+  for (const task of msgShown) {
+    const el = document.getElementById("msg-" + task);
+    if (el && msgCache.has(task)) {
+      el.style.display = "block";
+      el.innerHTML = msgCache.get(task);
+    }
+  }
 }
 
 function renderStats(rows) {
@@ -456,6 +477,62 @@ function renderEvents(events) {
     }).join("") + "</tbody></table>";
 }
 
+// Full-payload viewer: fetched on demand, never polled.
+const msgShown = new Set();
+const msgCache = new Map();
+function fmtContent(c) {
+  if (c == null) return "";
+  if (Array.isArray(c)) return c.map(p => p.text || JSON.stringify(p)).join("\n");
+  return typeof c === "string" ? c : JSON.stringify(c, null, 1);
+}
+function renderMessage(m, i) {
+  const rows = [];
+  const add = (role, text) =>
+    rows.push(`<div><span class="role">${esc(role)}</span></div><pre>${esc(text)}</pre>`);
+  if (m.kind === "client_request") {
+    for (const msg of (m.payload.messages || [])) {
+      let t = fmtContent(msg.content);
+      if (msg.tool_calls) t += "\n[tool_calls] " + JSON.stringify(msg.tool_calls, null, 1);
+      add(msg.role, t);
+    }
+  } else if (m.kind === "upstream") {
+    for (const msg of ((m.payload.request || {}).messages || []).slice(-2))
+      add(msg.role, fmtContent(msg.content));
+    const rmsg = (((m.payload.response || {}).choices || [])[0] || {}).message || {};
+    let t = fmtContent(rmsg.content);
+    if (rmsg.tool_calls) t += "\n[tool_calls] " + JSON.stringify(rmsg.tool_calls, null, 1);
+    add("↳ " + (m.model || "model"), t);
+  } else {  // client_response
+    const p = m.payload;
+    const rmsg = ((p.choices || [])[0] || {}).message;
+    let t = rmsg ? fmtContent(rmsg.content) : fmtContent(p.text);
+    if (rmsg && rmsg.tool_calls) t += "\n[tool_calls] " + JSON.stringify(rmsg.tool_calls, null, 1);
+    add("→ client", t);
+  }
+  return `<div class="msg"><div class="mh">#${i + 1} ${esc(m.kind)}${
+    m.model ? " · " + esc(m.model) : ""} · ${hhmmss(m.ts)}</div>${rows.join("")}</div>`;
+}
+async function toggleMessages(ev, task) {
+  ev.preventDefault(); ev.stopPropagation();
+  const el = document.getElementById("msg-" + task);
+  if (!el) return;
+  if (msgShown.has(task)) {
+    msgShown.delete(task); el.style.display = "none"; return;
+  }
+  msgShown.add(task);
+  el.style.display = "block";
+  el.innerHTML = '<span style="color:var(--muted)">loading…</span>';
+  const ms = await fetch(`/admin/messages?task=${encodeURIComponent(task)}&n=200`)
+    .then(r => r.json()).catch(() => []);
+  const html = ms.length
+    ? `<div class="mh" style="margin-bottom:8px;color:var(--muted)">
+         ${ms.length} exchanges (client ↔ proxy ↔ providers) — newest last</div>`
+      + ms.map(renderMessage).join("")
+    : '<span style="color:var(--muted)">no recorded exchanges for this task (predates message recording?)</span>';
+  msgCache.set(task, html);
+  el.innerHTML = html;
+}
+
 async function refresh() {
   try {
     const [st, evs, stats] = await Promise.all([
@@ -472,7 +549,11 @@ async function refresh() {
     $("#clock").textContent = "proxy unreachable";
   }
 }
-refresh();
+refresh().then(() => {
+  // deep link: /?msg=<taskid> opens that goal's message view
+  const t = new URLSearchParams(location.search).get("msg");
+  if (t) toggleMessages(new Event("click"), t);
+});
 setInterval(refresh, 2000);
 </script>
 </body>
