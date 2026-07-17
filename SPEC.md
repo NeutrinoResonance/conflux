@@ -261,6 +261,7 @@ Provider logprobs matrix (tested 2026-07-16 unless noted):
 | Ollama Cloud | ✗ | null on OpenAI-compat endpoint; native `/api/chat` has no logprob fields at all (engine limitation) |
 | OpenCode Zen (PAYG, `/zen/v1`) | ✓ | full top-20 per generated token; verified end-to-end with the 1–20 scoring recipe on `deepseek-v4-flash-free`. Paid PAYG models blocked (workspace credits at zero) |
 | OpenCode Go (subscription, `/zen/go/v1`) | partial, per-model | DeepSeek V4 Pro ✓ (top-5; `top_logprobs: 20` trips a gateway JSON-escaping bug on exotic alt tokens); Qwen 3.7 Plus ✓ (Alibaba upstream caps `top_logprobs` at 5); GLM-5.2 ✗ (chosen-token logprob only, no alternatives); Kimi K2.6 ✗ (empty alts; explicit `top_logprobs` errors upstream); MiniMax M3 ✗ (null) |
+| Nous inference API (Hermes subscription, `inference-api.nousresearch.com/v1`) | ✓ best hosted option | 281-model aggregator. Hermes-4-405B ✓ top-20; DeepSeek V4 Pro ✓ top-20 (no escaping bug here); Gemma 4 31B ✓ top-20; Qwen 3.7 Plus ✓ top-5 (Alibaba cap; 400 error above 5); Kimi K2.6 ✓ top-5 (top-20 request returns malformed JSON); GLM-5.2 ✗ null (Z.ai upstream, consistent with Go finding) |
 | DeepInfra / Novita / SiliconFlow direct | ✓ (docs) | vLLM-based; untested by us |
 | Local vLLM / SGLang / llama.cpp | ✓ | reference path for the verifier scoring pass | Therefore NanoGPT-served models are executors
 and stage-1 reasoners only; the scoring pass runs on a logprob-exposing
