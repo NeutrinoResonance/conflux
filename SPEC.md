@@ -397,7 +397,14 @@ rule: *the orchestrator may not take an irreversible or budget-exceeding step
 without a checkpoint the user could have intercepted.*
 
 ### 7.1 Control-plane surface
-Local web UI (+ CLI equivalents) attached to the orchestration core:
+Local web UI (+ CLI equivalents) attached to the orchestration core.
+*Implemented (first cut) at `/` on the proxy:* status tiles, steering
+controls (pause/resume, executor forcing, budget, checklist, sandbox, plan
+mode — same semantics as the !commands), task cards with verification score
+bars, failure-mode badges with cross-turn advisories, escalation callouts,
+per-model outcome stats, and the raw event feed; 2s polling, light/dark.
+Remaining from the full vision below: per-node streaming output, breakpoint
+rules, and checkpoint rewind-with-edits.
 
 - **Live trace view**: task tree (plan → units → attempts), per-node model,
   tokens, $, FM events with evidence spans; streaming output per node; a

@@ -16,7 +16,9 @@ import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+
+from . import ui
 
 from .checkpoint import Checkpoints
 from .config import load
@@ -204,15 +206,56 @@ async def models():
     return {"object": "list", "data": data}
 
 
+@app.get("/", include_in_schema=False)
+async def dashboard():
+    return HTMLResponse(ui.PAGE)
+
+
 @app.get("/admin/status")
 async def admin_status():
     c: ControlState = state["control"]
+    recent = state["trace"].recent(200)
     return {
         "paused": c.paused,
         "forced_executor": c.forced_executor,
         "budget_usd": c.budget_usd,
+        "checklist": ("off" if not c.contract_enabled
+                      else "skip" if c.contract_skip_once else "on"),
+        "sandbox": c.sandbox_backend or "auto",
+        "plan": c.plan_mode,
+        "models": list(state["cfg"].models),
+        "recent_spend": round(sum(e.get("cost_usd") or 0 for e in recent), 4),
         "recent_commands": c.history[-10:],
     }
+
+
+@app.post("/admin/control")
+async def admin_control(request: Request):
+    """Steering from the dashboard — same semantics as the in-band !commands."""
+    body = await request.json()
+    c: ControlState = state["control"]
+    field, value = body.get("field"), body.get("value")
+    if field == "paused":
+        c.paused = bool(value)
+    elif field == "executor":
+        c.forced_executor = value if value in state["cfg"].models else None
+    elif field == "budget":
+        try:
+            c.budget_usd = float(value) if value not in ("", None) else None
+        except ValueError:
+            return JSONResponse({"error": f"bad budget {value!r}"}, status_code=400)
+    elif field == "checklist":
+        c.contract_enabled = value != "off"
+        c.contract_skip_once = value == "skip"
+    elif field == "sandbox":
+        c.sandbox_backend = None if value == "auto" else value
+    elif field == "plan":
+        if value in ("auto", "on", "off"):
+            c.plan_mode = value
+    else:
+        return JSONResponse({"error": f"unknown field {field!r}"}, status_code=400)
+    state["trace"].record("-", "-", "control", command=f"ui:{field}={value}")
+    return await admin_status()
 
 
 @app.get("/admin/events")
