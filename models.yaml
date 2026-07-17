@@ -6,6 +6,16 @@
 #   hermes:nous                  — agent_key from ~/.hermes/auth.json (rotates ~daily)
 #   opencode:<provider>          — key from ~/.local/share/opencode/auth.json
 
+# Provider usage-limit semantics (drives the limit-aware circuit breaker in
+# providers.py — HTTP 429s open an escalating provider-level cooldown, a 429
+# embedded in an HTTP 200 body opens a model-level one):
+#   opencode-go: rolling DOLLAR windows — $12/5h, $30/week, $60/month
+#     (opencode.ai/docs/go#usage-limits). Pricey models drain the window at
+#     their real API price, so exhaustion can persist for hours; free models
+#     keep working after the limit.
+#   nanogpt: 60M INPUT TOKENS/week is the only text limit (plus 100
+#     images/week, generation); models consume the allowance at per-model
+#     multiplier rates (some 2x). Reported by the user 2026-07-17.
 providers:
   nous:
     base_url: https://inference-api.nousresearch.com/v1
@@ -54,6 +64,18 @@ models:
     price_out_per_m: 1.60
     failure_priors: []
     fallbacks: [kimi-k2.6-go]
+  kimi-k3:
+    provider: nous
+    id: moonshotai/kimi-k3
+    family: kimi
+    roles: [executor]          # 2.8T reasoning model, added 2026-07-17.
+    logprobs: false            # Unverified: upstream 429'd every probe (new
+    top_logprobs_max: 5        # model, slammed) and Nous supported_parameters
+                               # omits logprobs — re-probe when it calms down
+    price_in_per_m: 3.00
+    price_out_per_m: 15.00
+    failure_priors: []
+    fallbacks: [kimi-k3-go]
   qwen-3.7-plus:
     provider: nous
     id: qwen/qwen3.7-plus
@@ -94,6 +116,15 @@ models:
     logprobs: false
     price_in_per_m: 0.0
     price_out_per_m: 0.0
+    failure_priors: []
+  kimi-k3-go:
+    provider: opencode-go
+    id: kimi-k3
+    family: kimi
+    roles: [executor]
+    logprobs: false            # unverified, same 429 wall as the nous entry
+    price_in_per_m: 0.0        # covered by subscription — but note it drains
+    price_out_per_m: 0.0       # the Go dollar window at ~$3/$15 per M
     failure_priors: []
   qwen-3.7-plus-go:
     provider: opencode-go

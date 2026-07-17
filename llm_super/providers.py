@@ -12,7 +12,7 @@ from typing import Any
 import httpx
 
 from . import reqlog
-from .config import Config, Model
+from .config import Config, Model, Provider
 from .keys import resolve, try_refresh
 
 # Some gateways emit unescaped control chars inside reasoning text.
@@ -51,19 +51,51 @@ async def chat_chain(client: "Client", cfg: Config, model_name: str,
 class _Breaker:
     fails: int = 0
     open_until: float = 0.0
+    limit_hits: int = 0        # consecutive rate/usage-limit trips
+
+
+def _embedded_error_code(data: Any) -> int | None:
+    """Some aggregators (Nous) wrap upstream errors in an HTTP 200 body:
+    {"error": {"message": "Provider returned error", "code": 429}}."""
+    err = data.get("error") if isinstance(data, dict) else None
+    if not isinstance(err, dict):
+        return None
+    code = err.get("code")
+    if isinstance(code, int):
+        return code
+    if isinstance(code, str):
+        if code.isdigit():
+            return int(code)
+        if "rate_limit" in code:
+            return 429
+    if "rate limit" in str(err.get("message", "")).lower():
+        return 429
+    return None
 
 
 class Client:
-    """Provider client with retries and a per-provider circuit breaker.
+    """Provider client with retries and circuit breakers.
 
     Without the breaker, a flaky provider gets independently re-probed by
     every stage (executor, contract, planner, each verifier criterion) and
     their retry loops multiply into minutes of stall. After BREAK_AFTER
     consecutive failures a provider is skipped instantly for BREAK_FOR
-    seconds; fallback chains route around it."""
+    seconds; fallback chains route around it.
+
+    Rate/usage limits get their own treatment, scoped by what they actually
+    mean (verified empirically 2026-07-17):
+    - an HTTP 429 from the gateway is provider-level exhaustion — on
+      OpenCode Go the limits are rolling DOLLAR windows ($12/5h, $30/wk,
+      $60/mo; opencode.ai/docs/go#usage-limits), so the condition persists
+      for hours and the cooldown escalates (doubling up to LIMIT_BREAK_MAX)
+      instead of re-probing every BREAK_FOR seconds;
+    - a 429 embedded in an HTTP 200 body (Nous relaying a slammed upstream)
+      is MODEL-level: only that model is skipped, never the other ~280
+      models on the aggregator."""
 
     BREAK_AFTER = 2
     BREAK_FOR = 120.0
+    LIMIT_BREAK_MAX = 1800.0   # cap the escalating limit cooldown at 30 min
 
     def __init__(self, cfg: Config, timeout: float | httpx.Timeout | None = None):
         self.cfg = cfg
@@ -72,7 +104,51 @@ class Client:
             else httpx.Timeout(connect=10.0, read=240.0, write=30.0, pool=10.0)
         )
         self._breakers: dict[str, _Breaker] = {}
+        self._model_breakers: dict[str, _Breaker] = {}
         self._last_key_refresh: dict[str, float] = {}
+
+    def _trip_limit(self, scope: str, provider: Provider, model: Model,
+                    status: int, data: Any) -> ProviderError:
+        b = (self._breakers.setdefault(provider.name, _Breaker())
+             if scope == "provider"
+             else self._model_breakers.setdefault(model.name, _Breaker()))
+        b.limit_hits += 1
+        cooldown = min(self.LIMIT_BREAK_MAX,
+                       self.BREAK_FOR * 2 ** (b.limit_hits - 1))
+        b.open_until = time.monotonic() + cooldown
+        target = provider.name if scope == "provider" else model.name
+        return ProviderError(
+            model.name, status or 429,
+            f"rate/usage limit ({scope} {target}, cooldown {cooldown:.0f}s): "
+            + json.dumps(data)[:200])
+
+    def _check_limit(self, provider: Provider, model: Model,
+                     status: int, data: Any) -> None:
+        """Raise (and open the right breaker) if this response is a limit."""
+        if status == 429:
+            raise self._trip_limit("provider", provider, model, status, data)
+        if status == 200 and _embedded_error_code(data) == 429:
+            raise self._trip_limit("model", provider, model, status, data)
+
+    def _entry_checks(self, provider: Provider, model: Model) -> _Breaker:
+        breaker = self._breakers.setdefault(provider.name, _Breaker())
+        if time.monotonic() < breaker.open_until:
+            raise ProviderError(
+                model.name, 0,
+                f"circuit open for provider {provider.name} "
+                f"({breaker.fails} recent failures); using fallbacks")
+        mb = self._model_breakers.get(model.name)
+        if mb and time.monotonic() < mb.open_until:
+            raise ProviderError(
+                model.name, 0,
+                f"limit circuit open for model {model.name}; using fallbacks")
+        return breaker
+
+    def _note_success(self, provider: Provider, model: Model,
+                      breaker: _Breaker) -> None:
+        breaker.fails = 0
+        breaker.limit_hits = 0
+        self._model_breakers.pop(model.name, None)
 
     async def aclose(self) -> None:
         await self._http.aclose()
@@ -83,10 +159,7 @@ class Client:
         turns, which supervised chat() cannot represent. Same breaker/retry
         policy as chat()."""
         provider = self.cfg.provider_for(model)
-        breaker = self._breakers.setdefault(provider.name, _Breaker())
-        if time.monotonic() < breaker.open_until:
-            raise ProviderError(model.name, 0,
-                                f"circuit open for provider {provider.name}")
+        breaker = self._entry_checks(provider, model)
         out = dict(body)
         out["model"] = model.id
         out.pop("stream", None)
@@ -112,12 +185,13 @@ class Client:
             except json.JSONDecodeError as e:
                 last_exc = ProviderError(model.name, resp.status_code, f"unparseable body: {e}")
                 continue
+            self._check_limit(provider, model, resp.status_code, data)
             if resp.status_code >= 500:
                 last_exc = ProviderError(model.name, resp.status_code, json.dumps(data))
                 continue
             if resp.status_code != 200 or "choices" not in data:
                 raise ProviderError(model.name, resp.status_code, json.dumps(data))
-            breaker.fails = 0
+            self._note_success(provider, model, breaker)
             reqlog.record("upstream", model.name, {"request": out, "response": data})
             return data
         breaker.fails += 1
@@ -145,13 +219,7 @@ class Client:
             body["logprobs"] = True
             body["top_logprobs"] = model.top_logprobs_max
 
-        breaker = self._breakers.setdefault(provider.name, _Breaker())
-        if time.monotonic() < breaker.open_until:
-            raise ProviderError(
-                model.name, 0,
-                f"circuit open for provider {provider.name} "
-                f"({breaker.fails} recent failures); using fallbacks",
-            )
+        breaker = self._entry_checks(provider, model)
 
         last_exc: Exception | None = None
         data = None
@@ -176,6 +244,7 @@ class Client:
             except json.JSONDecodeError as e:
                 last_exc = ProviderError(model.name, resp.status_code, f"unparseable body: {e}")
                 continue
+            self._check_limit(provider, model, resp.status_code, data)
             if resp.status_code >= 500:
                 last_exc = ProviderError(model.name, resp.status_code, json.dumps(data))
                 continue
@@ -200,7 +269,7 @@ class Client:
             if breaker.fails >= self.BREAK_AFTER:
                 breaker.open_until = time.monotonic() + self.BREAK_FOR
             raise last_exc if last_exc else ProviderError(model.name, 0, "exhausted retries")
-        breaker.fails = 0
+        self._note_success(provider, model, breaker)
 
         reqlog.record("upstream", model.name, {"request": body, "response": data})
         choice = data["choices"][0]
