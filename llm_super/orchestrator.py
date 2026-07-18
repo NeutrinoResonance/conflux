@@ -243,8 +243,9 @@ class Orchestrator:
                         "machine_type": self.cfg.execution.gcloud_machine_type}
                        if backend == "gcloud" else {}),
                 )
-                log("execute_code", backend=exec_res.backend, ok=exec_res.ok,
-                    exit_code=exec_res.exit_code, duration_s=round(exec_res.duration_s, 1),
+                log("execute_code", model=executor.name, backend=exec_res.backend,
+                    ok=exec_res.ok, exit_code=exec_res.exit_code,
+                    duration_s=round(exec_res.duration_s, 1),
                     stderr=exec_res.stderr[:400])
                 if exec_res.ran:
                     evidence = exec_res.transcript()
@@ -392,7 +393,7 @@ class Orchestrator:
         except Exception:
             pass
 
-    async def _run_evidence(self, text: str, log) -> str | None:
+    async def _run_evidence(self, text: str, log, model: str = "") -> str | None:
         """Execution power for candidate answers: run produced code and
         return the transcript as verifier evidence (same contract as the
         supervised-unit path — verification without execution evidence is
@@ -406,8 +407,9 @@ class Orchestrator:
             **({"zone": self.cfg.execution.gcloud_zone,
                 "machine_type": self.cfg.execution.gcloud_machine_type}
                if backend == "gcloud" else {}))
-        log("execute_code", backend=exec_res.backend, ok=exec_res.ok,
-            exit_code=exec_res.exit_code, duration_s=round(exec_res.duration_s, 1),
+        log("execute_code", model=model, backend=exec_res.backend,
+            ok=exec_res.ok, exit_code=exec_res.exit_code,
+            duration_s=round(exec_res.duration_s, 1),
             stderr=exec_res.stderr[:400])
         return exec_res.transcript() if exec_res.ran else None
 
@@ -455,7 +457,7 @@ class Orchestrator:
                 tokens_in=res.tokens_in, tokens_out=res.tokens_out,
                 attempt=1, ensemble=True)
             try:
-                evidence = await self._run_evidence(res.text, log)
+                evidence = await self._run_evidence(res.text, log, m.name)
                 rep = await self.verifier.verify(
                     task=task_text, output=res.text, contract=constraints,
                     executor_family=m.family, evidence=evidence)
@@ -526,7 +528,7 @@ class Orchestrator:
                     tokens_in=fres.tokens_in, tokens_out=fres.tokens_out,
                     attempt=1, ensemble=True)
                 try:
-                    fevidence = await self._run_evidence(fres.text, log)
+                    fevidence = await self._run_evidence(fres.text, log, fm.name)
                     frep = await self.verifier.verify(
                         task=task_text, output=fres.text, contract=constraints,
                         executor_family=fm.family, evidence=fevidence)

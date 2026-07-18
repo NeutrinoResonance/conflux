@@ -206,6 +206,36 @@ tr:last-child td { border-bottom: none; }
   color: var(--muted); font-size: 13px; }
 .iconbtn:hover { color: var(--ink); }
 .miniadd { width: 100%; margin-top: 4px; font-size: 12px; padding: 5px; }
+/* ---- pipeline graph ---- */
+.pipeline { background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 12px; overflow-x: auto; }
+.pipeline .phead { display: flex; gap: 10px; align-items: center;
+  font-size: 12px; color: var(--ink-2); margin-bottom: 4px; }
+.pipeline svg { display: block; }
+.gnode rect { fill: var(--page); stroke: var(--grid); stroke-width: 1.2;
+  rx: 8; transition: stroke .4s, fill .4s, opacity .4s; }
+.gnode text { fill: var(--ink); font-size: 11.5px; font-weight: 600; }
+.gnode text.gsub { fill: var(--ink-2); font-size: 10px; font-weight: 400; }
+.gnode.ok rect { stroke: var(--ok, #3fb950); }
+.gnode.err rect { stroke: var(--crit, #f85149); }
+.gnode.cancelled { opacity: .38; }
+.gnode.cancelled rect { stroke-dasharray: 4 3; }
+.gnode.pending { opacity: .55; }
+.gnode.running rect { stroke: var(--seq); animation: gpulse 1.4s ease-in-out infinite; }
+@keyframes gpulse {
+  0%, 100% { stroke-width: 1.2; stroke-opacity: 1; }
+  50%      { stroke-width: 3;   stroke-opacity: .55; }
+}
+.gnode.fresh { animation: gin .5s ease-out; }
+@keyframes gin { from { opacity: 0; transform: translateY(6px); }
+                 to   { opacity: 1; transform: none; } }
+.gedge { fill: none; stroke: var(--grid); stroke-width: 1.4;
+  transition: stroke .4s; }
+.gedge.ok { stroke: var(--ok, #3fb950); stroke-opacity: .65; }
+.gedge.active { stroke: var(--seq); stroke-dasharray: 6 5;
+  animation: gflow 1s linear infinite; }
+@keyframes gflow { to { stroke-dashoffset: -11; } }
+.gscore { font-size: 10px; fill: var(--ink-2); }
 /* ---- library / settings ---- */
 .settings-grid { display: grid; grid-template-columns: 150px 1fr auto auto; gap: 6px 10px;
   align-items: center; background: var(--surface); border: 1px solid var(--border);
@@ -305,6 +335,19 @@ tr:last-child td { border-bottom: none; }
   </section>
 
   <section>
+    <h2>Pipeline <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">— live turn graph</span></h2>
+    <div class="pipeline">
+      <div class="phead">
+        <label style="display:flex;gap:5px;align-items:center">
+          <input type="checkbox" id="gFollow" checked> follow latest</label>
+        <select id="gTaskSel" style="font-size:12px"></select>
+        <span id="gStatus"></span>
+      </div>
+      <div id="graph"></div>
+    </div>
+  </section>
+
+  <section>
     <h2 id="tasksHeading">Tasks</h2>
     <div id="edits"></div>
     <div id="tasks"></div>
@@ -388,6 +431,12 @@ $("#budgetInp").onchange = e => post("budget", e.target.value);
 $("#checklistSel").onchange = e => post("checklist", e.target.value);
 $("#sandboxSel").onchange = e => post("sandbox", e.target.value);
 $("#planSel").onchange = e => post("plan", e.target.value);
+$("#gFollow").onchange = () => renderGraph(lastEvents);
+$("#gTaskSel").onchange = e => {
+  $("#gFollow").checked = false;
+  gSel.task = e.target.value;
+  renderGraph(lastEvents);
+};
 $("#strategySel").onchange = e => post("strategy", e.target.value);
 $("#ensembleSel").onchange = e => post("ensemble", e.target.value);
 $("#cutoffInp").onchange = e => post("cutoff", e.target.value);
@@ -587,6 +636,8 @@ function renderTasks(events) {
         <button class="msgbtn" onclick="toggleMessages(event, '${esc(task)}')">messages</button>
         <button class="msgbtn" onclick="copyRequest(event, '${esc(task)}')"
           title="copy the exact request text — search for it in OpenCode/Hermes to edit that message, or resend it to resume from checkpoint (!rewind <unit#> first to redo a unit)">⧉ request</button>
+        <button class="msgbtn" onclick="focusGraph(event, '${esc(task)}')"
+          title="show this turn in the pipeline graph">⛓ graph</button>
       </summary>
       <div class="tl">${rows.join("")}
         ${escalated ? `<div class="esc">${esc(escalated)}</div>` : ""}
@@ -604,6 +655,247 @@ function renderTasks(events) {
       el.innerHTML = msgCache.get(task);
     }
   }
+}
+
+// ---- pipeline graph: live turn DAG built from trace events ----
+// Reconciled in place every refresh: existing nodes transition their state
+// via CSS, new nodes animate in, the newest stage of an unfinished turn
+// pulses. No re-render flicker.
+const gSel = {task: null};
+const gDone = new Set();   // node ids already rendered for gSel.task
+
+function graphModel(evs) {
+  const N = [], E = [];
+  const add = (id, label, sub, state, col, row) =>
+    N.push({id, label, sub, state, col, row});
+  const done = evs.find(e => e.kind === "turn_end" || e.kind === "agent_end");
+  const dd = done ? done.data : {};
+  const score = s => s == null ? "" : Number(s).toFixed(2);
+
+  const startEv = evs.find(e => e.kind === "turn_start" || e.kind === "agent_turn");
+  add("start", "goal", (startEv?.data?.task_preview || "").slice(0, 24),
+      "ok", 0, 0);
+  const c = evs.find(e =>
+    ["contract", "contract_skipped", "contract_failed"].includes(e.kind));
+  add("contract", "contract",
+      !c ? "…" : c.kind === "contract"
+        ? `${(c.data.constraints || []).length} constraints · ${c.data.difficulty || ""}`
+        : c.kind === "contract_skipped" ? "skipped" : "failed",
+      !c ? (done ? "ok" : "running")
+         : c.kind === "contract_failed" ? "err" : "ok", 1, 0);
+  E.push(["start", "contract"]);
+
+  const ens = evs.find(e => e.kind === "ensemble_start");
+  const plan = evs.find(e => e.kind === "plan" && (e.data.units || []).length);
+
+  if (ens) {                                   // best / union / fuse
+    const models = ens.data.models || [];
+    const mode = ens.data.mode || "fuse";
+    const sc = evs.find(e => e.kind === "short_circuit");
+    const winner = evs.find(e => e.kind === "ensemble_winner");
+    const midRow = (models.length - 1) / 2;
+    models.forEach((m, i) => {
+      const ex = evs.find(e => e.kind === "execute" && e.model === m);
+      const code = evs.find(e => e.kind === "execute_code" && e.model === m);
+      const cand = evs.find(e => e.kind === "ensemble_candidate" && e.model === m);
+      let state, sub;
+      if (cand) { state = "ok"; sub = `score ${score(cand.data.score)}`; }
+      else if (sc || winner || done) { state = "cancelled"; sub = "cancelled"; }
+      else if (ex) { state = "running"; sub = "verifying…"; }
+      else { state = "running"; sub = "generating…"; }
+      if (code) sub += code.data.ok ? " · ▶✓" : " · ▶✗";
+      add("cand:" + m, m, sub, state, 2, i);
+      E.push(["contract", "cand:" + m]);
+    });
+    const syn = evs.find(e => e.kind === "synthesis");
+    const fver = evs.find(e => e.kind === "verify" && e.data.stage === "ensemble-fusion");
+    const rejected = evs.find(e => e.kind === "ensemble_fusion_rejected");
+    let hasMerge = mode !== "best" && !sc;
+    if (hasMerge) {
+      // the synthesis event lands only AFTER the merge call returns, so the
+      // merge is "running" from the moment every candidate has verified
+      const candsDone = models.every(m =>
+        evs.some(e => e.kind === "ensemble_candidate" && e.model === m));
+      add("merge", mode === "union" ? "union merge" : "fusion",
+          fver ? `score ${score(fver.data.score)}${rejected ? " · rejected" : ""}`
+               : syn ? "verifying…" : candsDone && !done ? "merging…"
+               : done ? "" : "…",
+          fver ? (rejected ? "err" : "ok")
+               : done ? "cancelled"
+               : (syn || candsDone) ? "running" : "pending",
+          3, midRow);
+      models.forEach(m => E.push(["cand:" + m, "merge"]));
+    }
+    const wsub = winner
+      ? `${winner.model}${winner.data.score != null ? " · " + score(winner.data.score) : ""}` : "";
+    add("end", done ? (dd.escalated ? "⛔ result" : "✓ result") : "result",
+        done ? `${wsub}${dd.spent != null ? ` · $${dd.spent.toFixed(3)}` : ""}` : wsub || "…",
+        done ? (dd.escalated ? "err" : "ok") : "pending",
+        hasMerge ? 4 : 3, sc ? 0 : midRow);
+    if (sc) E.push(["cand:" + sc.model, "end"]);
+    else if (hasMerge) E.push(["merge", "end"]);
+    else models.forEach(m => E.push(["cand:" + m, "end"]));
+  } else if (plan) {                           // decomposed turn: unit DAG
+    const units = plan.data.units || [];
+    add("plan", "plan", `${units.length} units`, "ok", 2, 0);
+    E.push(["contract", "plan"]);
+    const midRow = (units.length - 1) / 2;
+    units.forEach((u, i) => {
+      const uev = evs.filter(e => e.data?.unit === i + 1);
+      const uver = uev.filter(e => e.kind === "verify").pop();
+      add("unit:" + i, `unit ${i + 1}`,
+          uver ? `score ${score(uver.data.score)}` : String(u).slice(0, 24),
+          uver ? (uver.data.passed ? "ok" : "err")
+               : uev.length ? "running" : done ? "cancelled" : "pending",
+          3, i);
+      E.push(["plan", "unit:" + i]);
+    });
+    const sver = evs.filter(e => e.kind === "verify" && e.data.stage === "synthesis").pop();
+    const syn = evs.find(e => e.kind === "synthesis" && e.data?.unit == null);
+    add("synth", "synthesis",
+        sver ? `score ${score(sver.data.score)}` : syn ? "verifying…" : "…",
+        sver ? "ok" : syn ? "running" : done ? "cancelled" : "pending",
+        4, midRow);
+    units.forEach((u, i) => E.push(["unit:" + i, "synth"]));
+    add("end", done ? (dd.escalated ? "⛔ result" : "✓ result") : "result",
+        done ? `$${(dd.spent ?? 0).toFixed(3)}` : "…",
+        done ? (dd.escalated ? "err" : "ok") : "pending", 5, midRow);
+    E.push(["synth", "end"]);
+  } else {                                     // single path: attempt chain
+    const exs = evs.filter(e => e.kind === "execute");
+    const vers = evs.filter(e => e.kind === "verify" && !e.data.stage);
+    const codes = evs.filter(e => e.kind === "execute_code");
+    const referee = evs.find(e => e.kind === "referee");
+    const n = Math.max(exs.length, 1);
+    for (let i = 0; i < n; i++) {
+      const ex = exs[i], ver = vers[i], code = codes[i];
+      let sub = ver ? `score ${score(ver.data.score)}`
+                    : ex ? "verifying…" : "generating…";
+      if (code) sub += code.data.ok ? " · ▶✓" : " · ▶✗";
+      add("att:" + i, (ex?.model || "executor") + (i ? ` · try ${i + 1}` : ""),
+          sub,
+          ver ? (ver.data.passed ? "ok" : "err") : done ? "ok" : "running",
+          2 + i, 0);
+      E.push([i ? "att:" + (i - 1) : "contract", "att:" + i]);
+    }
+    if (referee) {
+      add("referee", "referee",
+          (referee.data.strategy || "").replace("_", " "), "ok", 2 + n, 0.9);
+      E.push(["att:" + (n - 1), "referee"]);
+    }
+    add("end", done ? (dd.escalated ? "⛔ result" : "✓ result") : "result",
+        done ? `score ${score(dd.score)} · $${(dd.spent ?? 0).toFixed(3)}` : "…",
+        done ? (dd.escalated ? "err" : "ok") : "pending", 2 + n + (referee ? 1 : 0), 0);
+    E.push(["att:" + (n - 1), "end"]);
+  }
+  return {nodes: N, edges: E};
+}
+
+const GW = 168, GH = 46, GX = 46, GY = 14, GPAD = 8;
+const svgNS = "http://www.w3.org/2000/svg";
+function gpos(n) {
+  return [GPAD + n.col * (GW + GX), GPAD + n.row * (GH + GY)];
+}
+function gtrim(s, n) { s = String(s ?? ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; }
+
+function renderGraph(events) {
+  // candidate tasks, newest first, honoring the sidebar selection
+  const tasks = [], seen = new Set();
+  for (const e of events) {
+    if (e.task === "-" || seen.has(e.task)) continue;
+    if (sel.session && e.session !== sel.session) continue;
+    seen.add(e.task);
+    tasks.push(e.task);
+    if (tasks.length >= 10) break;
+  }
+  const selEl = $("#gTaskSel");
+  const opts = tasks.map(t => {
+    const p = events.find(e => e.task === t && e.data?.task_preview)?.data.task_preview;
+    return `<option value="${esc(t)}">${esc(t)} — ${esc((p || "").slice(0, 40))}</option>`;
+  }).join("");
+  if (selEl.innerHTML !== opts) selEl.innerHTML = opts;
+  if ($("#gFollow").checked || !gSel.task || !tasks.includes(gSel.task))
+    gSel.task = tasks[0] || null;
+  selEl.value = gSel.task || "";
+  const box = $("#graph");
+  if (!gSel.task) {
+    box.innerHTML = `<div style="color:var(--muted);font-size:12px">no turns yet</div>`;
+    gDone.clear();
+    return;
+  }
+  const evs = events.filter(e => e.task === gSel.task).sort((a, b) => a.ts - b.ts);
+  const model = graphModel(evs);
+  const running = !evs.some(e => e.kind === "turn_end" || e.kind === "agent_end");
+  $("#gStatus").innerHTML = `<span class="badge${running ? "" : " ok"}">` +
+    `${running ? "● live" : "✓ complete"}</span>`;
+
+  let svg = box.querySelector("svg");
+  if (svg && svg.dataset.task !== gSel.task) { box.innerHTML = ""; svg = null; gDone.clear(); }
+  const cols = Math.max(...model.nodes.map(n => n.col)) + 1;
+  const rows = Math.max(...model.nodes.map(n => n.row)) + 1;
+  const w = GPAD * 2 + cols * GW + (cols - 1) * GX;
+  const h = GPAD * 2 + rows * GH + (rows - 1) * GY + 8;
+  if (!svg) {
+    svg = document.createElementNS(svgNS, "svg");
+    svg.dataset.task = gSel.task;
+    svg.innerHTML = `<g class="gedges"></g><g class="gnodes"></g>`;
+    box.appendChild(svg);
+  }
+  svg.setAttribute("width", w); svg.setAttribute("height", h);
+
+  const byId = new Map(model.nodes.map(n => [n.id, n]));
+  const eg = svg.querySelector(".gedges");
+  for (const [a, b] of model.edges) {
+    const na = byId.get(a), nb = byId.get(b);
+    if (!na || !nb) continue;
+    const [ax, ay] = gpos(na), [bx, by] = gpos(nb);
+    const x1 = ax + GW, y1 = ay + GH / 2, x2 = bx, y2 = by + GH / 2;
+    const mx = (x1 + x2) / 2;
+    const d = `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
+    const cls = "gedge" + (nb.state === "running" ? " active"
+      : (na.state === "ok" && (nb.state === "ok" || nb.state === "err")) ? " ok" : "");
+    const id = `ge:${a}>${b}`;
+    let p = svg.getElementById(id);
+    if (!p) {
+      p = document.createElementNS(svgNS, "path");
+      p.id = id; eg.appendChild(p);
+    }
+    if (p.getAttribute("d") !== d) p.setAttribute("d", d);
+    if (p.getAttribute("class") !== cls) p.setAttribute("class", cls);
+  }
+  const ng = svg.querySelector(".gnodes");
+  for (const n of model.nodes) {
+    const [x, y] = gpos(n);
+    const id = `gn:${n.id}`;
+    let g = svg.getElementById(id);
+    if (!g) {
+      g = document.createElementNS(svgNS, "g");
+      g.id = id;
+      g.innerHTML = `<rect width="${GW}" height="${GH}" rx="8"></rect>` +
+        `<text x="10" y="19" class="glabel"></text>` +
+        `<text x="10" y="35" class="gsub"></text>`;
+      ng.appendChild(g);
+      g.setAttribute("class", `gnode fresh ${n.state}`);
+      setTimeout(() => g.classList.remove("fresh"), 600);
+    } else {
+      const cls = `gnode ${n.state}`;
+      if (g.getAttribute("class") !== cls && !g.classList.contains("fresh"))
+        g.setAttribute("class", cls);
+    }
+    g.setAttribute("transform", `translate(${x},${y})`);
+    const [lab, sub] = [gtrim(n.label, 24), gtrim(n.sub, 30)];
+    const tl = g.querySelector(".glabel"), ts = g.querySelector(".gsub");
+    if (tl.textContent !== lab) tl.textContent = lab;
+    if (ts.textContent !== sub) ts.textContent = sub;
+  }
+}
+
+function focusGraph(e, task) {
+  e.stopPropagation(); e.preventDefault();
+  $("#gFollow").checked = false;
+  gSel.task = task;
+  renderGraph(lastEvents);
+  document.querySelector(".pipeline").scrollIntoView({behavior: "smooth", block: "center"});
 }
 
 // Edit history: divergences of the conversation prefix — each one forked a
@@ -1165,6 +1457,7 @@ async function refresh() {
           .then(r => r.json())
       : []);
     renderTasks(evs);
+    renderGraph(evs);
     renderStats(stats);
     renderEfficiency(eff);
     renderBalance(bal);

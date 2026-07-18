@@ -448,7 +448,12 @@ persists), a Load-balancing panel
 (`/admin/balance`: per-provider 5h/week/month window usage vs the limits
 declared in `providers.<name>.limits`, with subscription channels re-priced
 at nominal twin rates, "≈ N requests left" estimates matching how the Go
-docs express limits, and live circuit/cooldown state), task cards with
+docs express limits, and live circuit/cooldown state), a Pipeline panel
+(live SVG graph of the followed turn built from trace events — goal →
+contract → parallel candidates / unit DAG / attempt chain → merge →
+result; nodes reconcile in place each refresh, the current stage pulses,
+new nodes animate in, cancelled candidates dim; auto-follows the latest
+turn or pins one via its task card's "⛓ graph" button), task cards with
 verification score bars, a per-task "⧉ request" quick-copy (the exact
 request text — locator for editing/rewinding that message in the client,
 and the checkpoint-resume key when resent verbatim), an **edit history**
