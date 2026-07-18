@@ -60,6 +60,13 @@ class Library:
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)"
         )
+        self._conn.execute(
+            """CREATE TABLE IF NOT EXISTS session_aliases (
+                alias TEXT PRIMARY KEY,    -- client-computed session id
+                target TEXT NOT NULL,      -- conversation it continues
+                ts REAL NOT NULL
+            )"""
+        )
         self._conn.commit()
         self._ensure_default_project()
 
@@ -216,6 +223,32 @@ class Library:
             except sqlite3.OperationalError:
                 pass
         self._conn.commit()
+
+    # ---- session aliases (!attach): a client thread whose first message
+    # hashes differently can be pinned onto an existing conversation ----
+
+    def resolve_alias(self, session: str) -> str:
+        cur = self._conn.execute(
+            "SELECT target FROM session_aliases WHERE alias=?", (session,))
+        row = cur.fetchone()
+        return row[0] if row else session
+
+    def set_alias(self, alias: str, target: str) -> None:
+        """Targets are resolved before storing, so chains stay one hop."""
+        target = self.resolve_alias(target)
+        if alias == target:
+            raise ValueError("a conversation cannot attach to itself")
+        self._conn.execute(
+            "INSERT INTO session_aliases VALUES (?,?,?) "
+            "ON CONFLICT(alias) DO UPDATE SET target=excluded.target, ts=excluded.ts",
+            (alias, target, time.time()))
+        self._conn.commit()
+
+    def drop_alias(self, alias: str) -> bool:
+        cur = self._conn.execute(
+            "DELETE FROM session_aliases WHERE alias=?", (alias,))
+        self._conn.commit()
+        return cur.rowcount > 0
 
     def sessions(self, project_id: str | None = None) -> list[dict[str, Any]]:
         q = "SELECT session, project_id, title, created_ts, last_ts, turns FROM sessions"

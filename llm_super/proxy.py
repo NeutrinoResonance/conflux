@@ -168,16 +168,21 @@ async def chat_completions(request: Request):
     stream = bool(body.get("stream", False))
     cfg, control = state["cfg"], state["control"]
 
+    # A client thread may be !attach-ed onto another conversation: resolve
+    # the content-derived id through the alias table before anything
+    # session-scoped runs.
+    raw_session = _session_id(messages)
+    session = state["library"].resolve_alias(raw_session)
+
     # In-band control commands short-circuit everything.
     reply = handle(_last_user_text(messages), control, list(cfg.models),
                    checkpoints=state["checkpoints"],
-                   session=_session_id(messages),
-                   history=state["history"])
+                   session=session,
+                   history=state["history"],
+                   library=state["library"], raw_session=raw_session)
     if reply is not None:
-        state["trace"].record(_session_id(messages), "-", "control", command=_last_user_text(messages))
+        state["trace"].record(session, "-", "control", command=_last_user_text(messages))
         return _sse(reply, model_name) if stream else JSONResponse(_completion_body(reply, model_name))
-
-    session = _session_id(messages)
 
     # New-conversation gate (SPEC §7): in "dumb command mode" an unknown
     # conversation's first non-command message returns a warning WITHOUT

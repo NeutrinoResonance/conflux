@@ -515,6 +515,15 @@ sessions on every prefix rewrite, and each was getting a full supervised
 turn. Explicit passthrough model names are exempt (naming a raw model is
 already an explicit choice).
 
+*Conversation navigation (implemented):* `!conversations` lists recent
+sessions (id · age · turns · title, current one marked) and
+`!attach <id-prefix>` pins the CURRENT client thread onto an existing
+conversation via a persistent session-alias table (`!attach off`
+detaches). Both are ingress-only — no model call. This is the deliberate
+answer to client prefix rewrites: no heuristic session linking; the user
+stitches threads explicitly, and checkpoints/edit history/context follow
+the attached conversation.
+
 ### 7.3 Escalate-to-human as a repair strategy
 `ASK USER` is a first-class referee action (targets FM-2.2 — the system
 itself must not fail to ask for clarification): the stream returns a concrete

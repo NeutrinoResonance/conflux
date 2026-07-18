@@ -112,6 +112,9 @@ HELP = """llm-super in-band commands (never forwarded to models):
   !checkpoints         list resumable checkpoints for this conversation
   !rewind <unit#>|all  forget a completed unit (or all) so resending re-runs it
   !edits               show this conversation's edit/rewind history (branches)
+  !conversations       list recent conversations (id · age · turns · title)
+  !attach <id-prefix>  continue an existing conversation from THIS client
+                       thread (no model call; !attach off to detach)
   !gate on|off         confirmation gate for NEW conversations (on: first
                        message returns a warning, no model call; continuing confirms)
   !help                this message"""
@@ -119,7 +122,8 @@ HELP = """llm-super in-band commands (never forwarded to models):
 
 def handle(text: str, state: ControlState, model_names: list[str],
            checkpoints=None, session: str | None = None,
-           history=None) -> str | None:
+           history=None, library=None,
+           raw_session: str | None = None) -> str | None:
     """If `text` is a control command, apply it and return the reply.
     Returns None for normal (non-control) messages."""
     stripped = text.strip()
@@ -220,6 +224,50 @@ def handle(text: str, state: ControlState, model_names: list[str],
                     + ("" if state.cutoff is None else
                        f"; cutoff {state.cutoff:.2f} may end turns early"))
         return "usage: !strategy single | exploit | best <2-4> | union <2-4> | fuse <2-4>"
+    if cmd == "conversations":
+        if library is None:
+            return "conversation list unavailable in this context"
+        rows = library.sessions()
+        if not rows:
+            return "no conversations yet"
+        import time as _time
+        lines = []
+        for r in rows[:15]:
+            age_m = (_time.time() - r["last_ts"]) / 60
+            age = f"{age_m:.0f}m" if age_m < 120 else f"{age_m / 60:.1f}h"
+            here = "  ← you are here" if r["session"] == session else ""
+            title = " ".join((r["title"] or "(untitled)").split())[:60]
+            lines.append(f"- {r['session']} · {age} ago · {r['turns']} turn(s) · "
+                         f"{title}{here}")
+        return ("conversations (newest first; !attach <id-prefix> continues "
+                "one from THIS client thread):\n" + "\n".join(lines))
+    if cmd == "attach":
+        if library is None:
+            return "attach unavailable in this context"
+        src = raw_session or session
+        if not arg:
+            return "usage: !attach <session-id-prefix> | off   (!conversations to list)"
+        if arg in ("off", "detach"):
+            return ("detached — this thread is its own conversation again"
+                    if library.drop_alias(src)
+                    else "this thread was not attached to anything")
+        matches = [r for r in library.sessions() if r["session"].startswith(arg)]
+        if not matches:
+            return f"no conversation id starts with {arg!r} (!conversations to list)"
+        if len(matches) > 1:
+            return (f"{arg!r} matches {len(matches)} conversations — give more "
+                    "characters (!conversations to list)")
+        target = matches[0]["session"]
+        if target in (session, src):
+            return "already in that conversation"
+        try:
+            library.set_alias(src, target)
+        except ValueError as e:
+            return str(e)
+        return (f"attached — messages in this client thread now continue "
+                f"conversation {target} (\"{(matches[0]['title'] or '')[:50]}\"). "
+                "Checkpoints, edit history, and context follow it; "
+                "!attach off to detach")
     if cmd == "gate":
         if arg in ("on", "off"):
             state.gate_enabled = arg == "on"
