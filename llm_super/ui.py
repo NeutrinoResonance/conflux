@@ -9,6 +9,7 @@ PAGE = r"""<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>llm-super control plane</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛰️</text></svg>">
 <style>
 :root {
   color-scheme: light;
@@ -176,7 +177,12 @@ tr:last-child td { border-bottom: none; }
 .paused-banner::before { content: "⏸ "; }
 /* ---- layout: sidebar + content ---- */
 .layout { display: flex; gap: 18px; align-items: flex-start; }
-.sidebar { flex: 0 0 240px; position: sticky; top: 12px; }
+/* min-width:0 everywhere: without it, long nowrap conversation titles set
+   the flex min-content floor and blow the sidebar out past its basis,
+   squeezing .content into a strip */
+.sidebar { flex: 0 0 260px; min-width: 0; max-width: 260px;
+  position: sticky; top: 12px; }
+.content { flex: 1; min-width: 0; }
 .content { flex: 1 1 auto; min-width: 0; }
 @media (max-width: 820px) { .layout { flex-direction: column; }
   .sidebar { position: static; flex-basis: auto; width: 100%; } }
@@ -193,7 +199,7 @@ tr:last-child td { border-bottom: none; }
   border-radius: 6px; cursor: pointer; font-size: 12.5px; color: var(--ink-2); }
 .sitem:hover { background: var(--page); }
 .sitem.sel { background: var(--page); color: var(--ink); box-shadow: inset 2px 0 0 var(--seq); }
-.sitem .st { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sitem .st { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sitem .sx { color: var(--muted); font-size: 12px; visibility: hidden; }
 .sitem:hover .sx { visibility: visible; }
 .iconbtn { background: none; border: none; cursor: pointer; padding: 0 3px;
