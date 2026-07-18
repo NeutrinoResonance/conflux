@@ -137,7 +137,9 @@ class Orchestrator:
         last: ProviderError | None = None
         for i, model in enumerate(chain):
             try:
-                res = await self.client.chat(model, messages, max_tokens=8192)
+                res = await self.client.chat(
+                    model, messages,
+                    max_tokens=self.cfg.supervision.max_output_tokens)
                 if i:
                     log("executor_fallback", model=model.name, from_model=chain[0].name)
                 return res, model
@@ -212,6 +214,22 @@ class Orchestrator:
             budget.add(res.cost_usd)
             log("execute", model=executor.name, cost_usd=res.cost_usd,
                 tokens_in=res.tokens_in, tokens_out=res.tokens_out, attempt=attempts)
+
+            # Token starvation: reasoning models can burn the whole completion
+            # budget on thought and return NO visible answer. Verifying an
+            # empty string wastes a verifier round — feed the cause back.
+            if not res.text.strip():
+                fm_seen.append("FM-X.6")
+                log("fm_event", model=executor.name, fm_id="FM-X.6",
+                    confidence=0.95,
+                    evidence=f"empty answer at {res.tokens_out} completion tokens")
+                feedback = (
+                    "Your previous reply was EMPTY — the entire token budget "
+                    "was consumed (likely by internal reasoning) before any "
+                    "answer text was produced. Answer directly and concisely "
+                    "this time: begin with the deliverable, no preamble.")
+                prev_text = ""
+                continue
 
             # heuristic monitors
             events = run_monitors(res.text, task_text)

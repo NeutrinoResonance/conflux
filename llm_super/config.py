@@ -50,6 +50,8 @@ class Supervision:
     verify_repeats: int = 1
     adversarial_repeats: int = 3   # K for the adversarial tier (variance ↓ 1/K)
     max_repairs: int = 2
+    max_output_tokens: int = 16384  # executor completion budget; reasoning
+    # models can burn 8k on thought alone and return an EMPTY answer
     budget_usd_per_task: float = 0.50
     trailer: bool = True
     turn_timeout_s: float = 1800.0

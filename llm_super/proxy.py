@@ -179,11 +179,13 @@ async def chat_completions(request: Request):
     session = _session_id(messages)
     state["library"].touch_session(session, _last_user_text(messages))
 
-    # Pass-through mode for registry model names.
+    # Pass-through mode for registry model names. Default max_tokens matches
+    # the supervised executor path (8192): reasoning models can burn 4096
+    # entirely on thought and return an EMPTY answer at the ceiling.
     if model_name in cfg.models:
         try:
             res = await state["client"].chat(cfg.model(model_name), messages,
-                                             max_tokens=body.get("max_tokens", 4096),
+                                             max_tokens=body.get("max_tokens", 8192),
                                              temperature=body.get("temperature", 0.2))
         except ProviderError as e:
             return JSONResponse({"error": {"message": str(e)}}, status_code=502)
