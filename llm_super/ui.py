@@ -107,8 +107,10 @@ button.danger  { background: var(--critical); border-color: var(--critical); col
 .scorebar .fill { display: block; height: 100%; border-radius: 4px; background: var(--seq); }
 .scorebar .n { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--ink-2); }
 /* ---- goal timeline ---- */
+/* accented boxes have SQUARE left corners: the identity/selection stripe
+   must read as one straight vertical line, never a rounded one */
 details.turn { background: var(--surface); border: 1px solid var(--border);
-               border-radius: 8px; margin-bottom: 10px; }
+               border-radius: 0 8px 8px 0; margin-bottom: 10px; }
 details.turn > summary { list-style: none; cursor: pointer; padding: 10px 14px;
   display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; }
 details.turn > summary::-webkit-details-marker { display: none; }
@@ -128,24 +130,43 @@ details.turn[open] > summary::before { content: "▾"; }
 .sitem .cdot { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; }
 details.turn { border-left: 3px solid var(--task-hue, var(--border)); }
 .pipeline { border-left: 3px solid var(--task-hue, var(--border)); }
-#graph svg.flash .gnode rect { animation: gflash 1.2s ease-out 2; }
+#graph svg.flash .gnode .gbox { animation: gflash 1.2s ease-out 2; }
 @keyframes gflash { 0% { stroke-width: 4; } 100% { stroke-width: 1.2; } }
-/* probability strip for the score math */
-.crit { display: grid; grid-template-columns: 130px 1fr 84px; gap: 10px;
+/* graph↔timeline color coding: every graph node and the timeline row that
+   backs it share one stable hue — node stripe, row rail, and unit dot all
+   painted from the same --row-hue. Hovering a node lights its row up;
+   clicking pulses it. */
+.node.linked, details.node.linked, details.unit.linked {
+  border-left-color: var(--row-hue); }
+details.unit.linked::before { background: var(--row-hue); }
+.rowhover { background: color-mix(in srgb, var(--row-hue, var(--seq)) 18%, transparent); }
+details.turn.rowhover > summary { background:
+  color-mix(in srgb, var(--task-hue, var(--seq)) 14%, transparent); }
+.gnode:hover .gbox { stroke-width: 2.5; }
+.hl { animation: rowhl .9s ease-out 2; }
+@keyframes rowhl {
+  0%, 55% { outline: 2px solid var(--row-hue, var(--task-hue, var(--seq)));
+            outline-offset: 2px; }
+  100%    { outline: 2px solid transparent; outline-offset: 2px; }
+}
+/* probability strip for the score math. Class is deliberately NOT "crit":
+   that name belongs to .badge.crit and a bare .crit grid rule once leaked
+   into the badges and stretched them into empty 3-column grids. */
+.scorerow { display: grid; grid-template-columns: 130px 1fr 84px; gap: 10px;
   align-items: center; margin: 4px 0; }
-.crit .cname { font-size: 11.5px; color: var(--ink-2); overflow: hidden;
+.scorerow .cname { font-size: 11.5px; color: var(--ink-2); overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
 .pstrip { display: flex; gap: 2px; height: 14px; border-radius: 4px; overflow: hidden; }
 .pstrip .seg { min-width: 2px; border-radius: 3px; position: relative; }
 .pstrip .seg .sl { position: absolute; inset: 0; display: flex; align-items: center;
   justify-content: center; font-size: 9.5px; color: var(--ink); }
-.crit .ev { font-size: 11px; color: var(--ink); text-align: right;
+.scorerow .ev { font-size: 11px; color: var(--ink); text-align: right;
   font-family: ui-monospace, monospace; }
 .scorehelp { font-size: 11px; color: var(--muted); margin-top: 6px; }
 .scorehelp summary { cursor: pointer; }
-.payload .cap { font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+.cap { font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
   color: var(--muted); margin: 8px 0 3px; font-family: inherit; }
-.payload .cap.mdl { color: var(--seq); }
+.cap.mdl { color: var(--seq); }
 .payload pre.blk { margin: 0; white-space: pre-wrap; font-size: 11.5px;
   max-height: 280px; overflow-y: auto; font-family: ui-monospace, monospace; }
 .payload pre.blk.mdl { border-left: 3px solid var(--seq); padding-left: 8px; }
@@ -176,7 +197,6 @@ details.unit > summary { list-style: none; cursor: pointer; color: var(--ink); }
 details.unit > summary::-webkit-details-marker { display: none; }
 details.unit .subtl { margin: 4px 0 4px 4px; }
 .esc { margin-top: 8px; font-size: 13px; color: var(--ink); }
-.esc::before { content: "⛔ "; }
 .msgbtn { font-size: 11px; padding: 2px 10px; margin-left: auto; }
 .msgview { border-top: 1px solid var(--grid); padding: 10px 14px; }
 .msg { margin-bottom: 8px; }
@@ -218,16 +238,16 @@ tr:last-child td { border-bottom: none; }
 @media (max-width: 820px) { .layout { flex-direction: column; }
   .sidebar { position: static; flex-basis: auto; width: 100%; } }
 .proj { background: var(--surface); border: 1px solid var(--border);
-        border-radius: 8px; margin-bottom: 8px; }
+        border-radius: 0 8px 8px 0; margin-bottom: 8px; }
 .proj > .ph { display: flex; align-items: center; gap: 6px; padding: 8px 10px;
   cursor: pointer; font-size: 13px; }
-.proj > .ph.sel { background: var(--page); border-radius: 8px 8px 0 0;
+.proj > .ph.sel { background: var(--page); border-radius: 0 8px 0 0;
   box-shadow: inset 3px 0 0 var(--seq); }
 .proj > .ph .pname { font-weight: 600; flex: 1; }
 .proj > .ph .pcount { font-size: 11px; color: var(--muted); }
 .slist { padding: 2px 6px 8px; }
 .sitem { display: flex; align-items: center; gap: 6px; padding: 4px 8px;
-  border-radius: 6px; cursor: pointer; font-size: 12.5px; color: var(--ink-2); }
+  border-radius: 0 6px 6px 0; cursor: pointer; font-size: 12.5px; color: var(--ink-2); }
 .sitem:hover { background: var(--page); }
 .sitem.sel { background: var(--page); color: var(--ink); box-shadow: inset 2px 0 0 var(--seq); }
 .sitem .st { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -239,20 +259,25 @@ tr:last-child td { border-bottom: none; }
 .miniadd { width: 100%; margin-top: 4px; font-size: 12px; padding: 5px; }
 /* ---- pipeline graph ---- */
 .pipeline { background: var(--surface); border: 1px solid var(--border);
-  border-radius: 8px; padding: 10px 12px; overflow-x: auto; }
+  border-radius: 0 8px 8px 0; padding: 10px 12px; }
+#graph { overflow-x: auto; }
 .pipeline .phead { display: flex; gap: 10px; align-items: center;
   font-size: 12px; color: var(--ink-2); margin-bottom: 4px; }
 .pipeline svg { display: block; }
-.gnode rect { fill: var(--page); stroke: var(--grid); stroke-width: 1.2;
-  rx: 8; transition: stroke .4s, fill .4s, opacity .4s; }
+/* node box: square left corners + the task's identity stripe, the exact
+   visual language of the turn cards below — same hue, same straight line */
+.gnode { cursor: pointer; }
+.gnode .gbox { fill: var(--page); stroke: var(--grid); stroke-width: 1.2;
+  transition: stroke .4s, fill .4s, opacity .4s; }
+.gnode .gaccent { fill: var(--task-hue, var(--grid)); }
 .gnode text { fill: var(--ink); font-size: 11.5px; font-weight: 600; }
 .gnode text.gsub { fill: var(--ink-2); font-size: 10px; font-weight: 400; }
-.gnode.ok rect { stroke: var(--ok, #3fb950); }
-.gnode.err rect { stroke: var(--crit, #f85149); }
+.gnode.ok .gbox { stroke: var(--ok, #3fb950); }
+.gnode.err .gbox { stroke: var(--crit, #f85149); }
 .gnode.cancelled { opacity: .38; }
-.gnode.cancelled rect { stroke-dasharray: 4 3; }
+.gnode.cancelled .gbox { stroke-dasharray: 4 3; }
 .gnode.pending { opacity: .55; }
-.gnode.running rect { stroke: var(--seq); animation: gpulse 1.4s ease-in-out infinite; }
+.gnode.running .gbox { stroke: var(--seq); animation: gpulse 1.4s ease-in-out infinite; }
 @keyframes gpulse {
   0%, 100% { stroke-width: 1.2; stroke-opacity: 1; }
   50%      { stroke-width: 3;   stroke-opacity: .55; }
@@ -379,7 +404,10 @@ tr:last-child td { border-bottom: none; }
   </section>
 
   <section>
-    <h2 id="tasksHeading">Tasks</h2>
+    <h2 style="display:flex;gap:14px;align-items:center"><span id="tasksHeading">Tasks</span>
+      <label style="font-weight:400;text-transform:none;letter-spacing:0;font-size:12px;
+                    display:flex;gap:5px;align-items:center;cursor:pointer;color:var(--muted)">
+        <input type="checkbox" id="autoLoadOut"> auto-load model output</label></h2>
     <div id="edits"></div>
     <div id="tasks"></div>
   </section>
@@ -557,6 +585,8 @@ document.addEventListener("toggle", e => {
   const id = e.target.dataset && e.target.dataset.nid;
   if (!id) return;
   if (e.target.open) openNodes.add(id); else openNodes.delete(id);
+  // expanding a group reveals new output slots — fill them if auto-load is on
+  if (e.target.open) autoLoadVisible();
 }, true);
 
 function hhmmss(ts) { return new Date(ts * 1000).toLocaleTimeString(); }
@@ -564,7 +594,7 @@ function hhmmss(ts) { return new Date(ts * 1000).toLocaleTimeString(); }
 // One timeline node. body!=null → expandable <details>.
 function node(nid, cls, ts, html, body) {
   const t = `<span class="t">${hhmmss(ts)}</span>`;
-  if (!body) return `<div class="node ${cls}">${t}${html}</div>`;
+  if (!body) return `<div class="node ${cls}" data-nid="${nid}">${t}${html}</div>`;
   return `<details class="node ${cls}" data-nid="${nid}"${openNodes.has(nid) ? " open" : ""}>
     <summary>${t}${html} <span class="more">details</span></summary>
     <div class="payload">${body}</div></details>`;
@@ -607,7 +637,7 @@ function scoreMath(d) {
       mid = `<span class="cname" style="font-style:italic">discrete read — letter ` +
         `${String.fromCharCode(64 + (c.point || 1))} (no usable logprobs this call)</span>`;
     }
-    return `<div class="crit"><span class="cname" title="${esc(c.criterion)}">${esc(c.criterion)}</span>` +
+    return `<div class="scorerow"><span class="cname" title="${esc(c.criterion)}">${esc(c.criterion)}</span>` +
       `${mid}<span class="ev">E = ${c.expected}/${scale}</span></div>`;
   }).join("");
   const mean = d.criteria_detail.reduce((sum, c) => sum + c.expected, 0)
@@ -630,7 +660,8 @@ function scoreMath(d) {
 
 // Inline output loading: find the upstream payload matching a timeline node
 // (nth non-reviewer call to that model) and show the response text in place.
-const outCache = new Map();
+const outCache = new Map();   // task -> Promise of messages (promise, not
+                              // value: parallel auto-loads share one fetch)
 const ioLoaded = new Map();   // elId -> rendered html; survives re-renders
 async function loadOut(ev, task, model, nth, kind, elId) {
   ev.preventDefault(); ev.stopPropagation();
@@ -638,9 +669,9 @@ async function loadOut(ev, task, model, nth, kind, elId) {
   if (!el) return;
   el.innerHTML = "loading…";
   if (!outCache.has(task))
-    outCache.set(task, await fetch(`/admin/messages?task=${encodeURIComponent(task)}&n=300`)
+    outCache.set(task, fetch(`/admin/messages?task=${encodeURIComponent(task)}&n=300`)
       .then(r => r.json()).catch(() => []));
-  const rows = outCache.get(task)
+  const rows = (await outCache.get(task))
     .filter(r => r.kind === "upstream" && r.model === model)
     .sort((a, b) => (a.ts || 0) - (b.ts || 0))
     .map(r => r.payload || {});
@@ -664,6 +695,27 @@ async function loadOut(ev, task, model, nth, kind, elId) {
   }
   ioLoaded.set(elId, html);
   el.innerHTML = html;
+}
+
+// Auto-load: with the checkbox on, every VISIBLE (expanded) output slot is
+// loaded without clicking. Collapsed rows stay unfetched until opened.
+function autoLoadVisible() {
+  if (!$("#autoLoadOut").checked) return;
+  for (const el of document.querySelectorAll("#tasks .ioout")) {
+    // checkVisibility, not offsetParent: Chrome hides closed-<details>
+    // content via content-visibility, which offsetParent can't see
+    if (el.innerHTML || !el.checkVisibility()) continue;
+    const btn = el.previousElementSibling;
+    if (btn && btn.classList.contains("msgbtn")) btn.click();
+  }
+}
+{
+  const alo = $("#autoLoadOut");
+  alo.checked = localStorage.autoLoadOut === "1";
+  alo.onchange = () => {
+    localStorage.autoLoadOut = alo.checked ? "1" : "";
+    if (alo.checked) autoLoadVisible();
+  };
 }
 
 // Translate a trace event into a human-readable timeline node.
@@ -860,6 +912,7 @@ function renderTasks(events) {
       el.innerHTML = msgCache.get(task);
     }
   }
+  autoLoadVisible();
 }
 
 // ---- pipeline graph: live turn DAG built from trace events ----
@@ -871,15 +924,17 @@ const gDone = new Set();   // node ids already rendered for gSel.task
 
 function graphModel(evs) {
   const N = [], E = [];
-  const add = (id, label, sub, state, col, row) =>
-    N.push({id, label, sub, state, col, row});
+  // ref links a graph node to its timeline anchor in the task card:
+  // {ev} → that event's row, {unit} → the unit group.
+  const add = (id, label, sub, state, col, row, ref) =>
+    N.push({id, label, sub, state, col, row, ref});
   const done = evs.find(e => e.kind === "turn_end" || e.kind === "agent_end");
   const dd = done ? done.data : {};
   const score = s => s == null ? "" : Number(s).toFixed(2);
 
   const startEv = evs.find(e => e.kind === "turn_start" || e.kind === "agent_turn");
   add("start", "goal", (startEv?.data?.task_preview || "").slice(0, 24),
-      "ok", 0, 0);
+      "ok", 0, 0, startEv && {ev: startEv});
   const c = evs.find(e =>
     ["contract", "contract_skipped", "contract_failed"].includes(e.kind));
   add("contract", "contract",
@@ -887,7 +942,7 @@ function graphModel(evs) {
         ? `${(c.data.constraints || []).length} constraints · ${c.data.difficulty || ""}`
         : c.kind === "contract_skipped" ? "skipped" : "failed",
       !c ? (done ? "ok" : "running")
-         : c.kind === "contract_failed" ? "err" : "ok", 1, 0);
+         : c.kind === "contract_failed" ? "err" : "ok", 1, 0, c && {ev: c});
   E.push(["start", "contract"]);
 
   const ens = evs.find(e => e.kind === "ensemble_start");
@@ -909,7 +964,8 @@ function graphModel(evs) {
       else if (ex) { state = "running"; sub = "verifying…"; }
       else { state = "running"; sub = "generating…"; }
       if (code) sub += code.data.ok ? " · ▶✓" : " · ▶✗";
-      add("cand:" + m, m, sub, state, 2, i);
+      const cref = cand || ex;
+      add("cand:" + m, m, sub, state, 2, i, cref && {ev: cref});
       E.push(["contract", "cand:" + m]);
     });
     const syn = evs.find(e => e.kind === "synthesis");
@@ -928,7 +984,7 @@ function graphModel(evs) {
           fver ? (rejected ? "err" : "ok")
                : done ? "cancelled"
                : (syn || candsDone) ? "running" : "pending",
-          3, midRow);
+          3, midRow, (fver || syn) && {ev: fver || syn});
       models.forEach(m => E.push(["cand:" + m, "merge"]));
     }
     const wsub = winner
@@ -936,13 +992,13 @@ function graphModel(evs) {
     add("end", done ? (dd.escalated ? "⛔ result" : "✓ result") : "result",
         done ? `${wsub}${dd.spent != null ? ` · $${dd.spent.toFixed(3)}` : ""}` : wsub || "…",
         done ? (dd.escalated ? "err" : "ok") : "pending",
-        hasMerge ? 4 : 3, sc ? 0 : midRow);
+        hasMerge ? 4 : 3, sc ? 0 : midRow, (done || winner) && {ev: done || winner});
     if (sc) E.push(["cand:" + sc.model, "end"]);
     else if (hasMerge) E.push(["merge", "end"]);
     else models.forEach(m => E.push(["cand:" + m, "end"]));
   } else if (plan) {                           // decomposed turn: unit DAG
     const units = plan.data.units || [];
-    add("plan", "plan", `${units.length} units`, "ok", 2, 0);
+    add("plan", "plan", `${units.length} units`, "ok", 2, 0, {ev: plan});
     E.push(["contract", "plan"]);
     const midRow = (units.length - 1) / 2;
     units.forEach((u, i) => {
@@ -952,7 +1008,7 @@ function graphModel(evs) {
           uver ? `score ${score(uver.data.score)}` : String(u).slice(0, 24),
           uver ? (uver.data.passed ? "ok" : "err")
                : uev.length ? "running" : done ? "cancelled" : "pending",
-          3, i);
+          3, i, {unit: i + 1});
       E.push(["plan", "unit:" + i]);
     });
     const sver = evs.filter(e => e.kind === "verify" && e.data.stage === "synthesis").pop();
@@ -960,11 +1016,12 @@ function graphModel(evs) {
     add("synth", "synthesis",
         sver ? `score ${score(sver.data.score)}` : syn ? "verifying…" : "…",
         sver ? "ok" : syn ? "running" : done ? "cancelled" : "pending",
-        4, midRow);
+        4, midRow, (sver || syn) && {ev: sver || syn});
     units.forEach((u, i) => E.push(["unit:" + i, "synth"]));
     add("end", done ? (dd.escalated ? "⛔ result" : "✓ result") : "result",
         done ? `$${(dd.spent ?? 0).toFixed(3)}` : "…",
-        done ? (dd.escalated ? "err" : "ok") : "pending", 5, midRow);
+        done ? (dd.escalated ? "err" : "ok") : "pending", 5, midRow,
+        done && {ev: done});
     E.push(["synth", "end"]);
   } else {                                     // single path: attempt chain
     const exs = evs.filter(e => e.kind === "execute");
@@ -980,23 +1037,29 @@ function graphModel(evs) {
       add("att:" + i, (ex?.model || "executor") + (i ? ` · try ${i + 1}` : ""),
           sub,
           ver ? (ver.data.passed ? "ok" : "err") : done ? "ok" : "running",
-          2 + i, 0);
+          2 + i, 0, (ex || ver) && {ev: ex || ver});
       E.push([i ? "att:" + (i - 1) : "contract", "att:" + i]);
     }
     if (referee) {
       add("referee", "referee",
-          (referee.data.strategy || "").replace("_", " "), "ok", 2 + n, 0.9);
+          (referee.data.strategy || "").replace("_", " "), "ok", 2 + n, 0.9,
+          {ev: referee});
       E.push(["att:" + (n - 1), "referee"]);
     }
     add("end", done ? (dd.escalated ? "⛔ result" : "✓ result") : "result",
         done ? `score ${score(dd.score)} · $${(dd.spent ?? 0).toFixed(3)}` : "…",
-        done ? (dd.escalated ? "err" : "ok") : "pending", 2 + n + (referee ? 1 : 0), 0);
+        done ? (dd.escalated ? "err" : "ok") : "pending", 2 + n + (referee ? 1 : 0), 0,
+        done && {ev: done});
     E.push(["att:" + (n - 1), "end"]);
   }
   return {nodes: N, edges: E};
 }
 
 const GW = 168, GH = 46, GX = 46, GY = 14, GPAD = 8;
+// node outline: square left corners (the identity stripe sits flush against
+// them as a straight line), rounded right corners — same shape as the cards
+const GBOX = `M0,0 H${GW - 8} Q${GW},0 ${GW},8 V${GH - 8} ` +
+  `Q${GW},${GH} ${GW - 8},${GH} H0 Z`;
 const svgNS = "http://www.w3.org/2000/svg";
 function gpos(n) {
   return [GPAD + n.col * (GW + GX), GPAD + n.row * (GH + GY)];
@@ -1045,6 +1108,18 @@ function renderGraph(events) {
     svg = document.createElementNS(svgNS, "svg");
     svg.dataset.task = gSel.task;
     svg.innerHTML = `<g class="gedges"></g><g class="gnodes"></g>`;
+    svg.addEventListener("click", ev => {
+      const g = ev.target.closest(".gnode");
+      if (g && g.dataset.goto) gotoTimeline(svg.dataset.task, g.dataset.goto);
+    });
+    svg.addEventListener("pointerover", ev => {
+      const g = ev.target.closest(".gnode");
+      if (g && g.dataset.goto) hoverRow(svg.dataset.task, g.dataset.goto, true);
+    });
+    svg.addEventListener("pointerout", ev => {
+      const g = ev.target.closest(".gnode");
+      if (g && g.dataset.goto) hoverRow(svg.dataset.task, g.dataset.goto, false);
+    });
     box.appendChild(svg);
   }
   // Fit-to-width: the graph scales down to the panel instead of forcing a
@@ -1082,9 +1157,11 @@ function renderGraph(events) {
     if (!g) {
       g = document.createElementNS(svgNS, "g");
       g.id = id;
-      g.innerHTML = `<rect width="${GW}" height="${GH}" rx="8"></rect>` +
-        `<text x="10" y="19" class="glabel"></text>` +
-        `<text x="10" y="35" class="gsub"></text>`;
+      g.innerHTML = `<path class="gbox" d="${GBOX}"></path>` +
+        `<rect class="gaccent" width="3" height="${GH}"></rect>` +
+        `<text x="12" y="19" class="glabel"></text>` +
+        `<text x="12" y="35" class="gsub"></text>` +
+        `<title>jump to this step in the task timeline</title>`;
       ng.appendChild(g);
       g.setAttribute("class", `gnode fresh ${n.state}`);
       setTimeout(() => g.classList.remove("fresh"), 600);
@@ -1094,11 +1171,60 @@ function renderGraph(events) {
         g.setAttribute("class", cls);
     }
     g.setAttribute("transform", `translate(${x},${y})`);
+    let goto = gSel.task + ":turn";
+    if (n.ref && n.ref.unit != null) goto = `${gSel.task}:unit:${n.ref.unit}`;
+    else if (n.ref && n.ref.ev) {
+      const i = evs.indexOf(n.ref.ev);
+      if (i >= 0) goto = `${gSel.task}:${i}:${n.ref.ev.kind}`;
+    }
+    g.dataset.goto = goto;
+    // shared identity hue: this node's stripe and its timeline row are
+    // painted from the same value, so the pairing is readable at a glance
+    const hue = n.ref ? hueFor(goto) : hueFor(gSel.task);
+    g.querySelector(".gaccent").style.fill = hue;
+    const row = document.querySelector(`#tasks [data-nid="${CSS.escape(goto)}"]`);
+    if (row) {
+      row.style.setProperty("--row-hue", hue);
+      row.classList.add("linked");
+      row.classList.toggle("rowhover", gHover === goto);
+    }
     const [lab, sub] = [gtrim(n.label, 24), gtrim(n.sub, 30)];
     const tl = g.querySelector(".glabel"), ts = g.querySelector(".gsub");
     if (tl.textContent !== lab) tl.textContent = lab;
     if (ts.textContent !== sub) ts.textContent = sub;
   }
+}
+
+// Hovering a graph node lights up its timeline row (or, if that row is
+// inside a collapsed card, the card header) in the shared hue.
+let gHover = null;
+function hoverRow(task, goto, on) {
+  gHover = on ? goto : null;
+  let row = document.querySelector(`#tasks [data-nid="${CSS.escape(goto)}"]`);
+  if (row && row.offsetParent === null)
+    row = document.querySelector(
+      `#tasks details.turn[data-nid="${CSS.escape(task + ":turn")}"]`);
+  if (row) row.classList.toggle("rowhover", on);
+}
+
+// Graph → tasks: open the turn's card, reveal the timeline row that backs
+// the clicked node, and pulse it in the shared hue.
+function gotoTimeline(task, nid) {
+  const card = document.querySelector(
+    `details.turn[data-nid="${CSS.escape(task + ":turn")}"]`);
+  if (!card) { flash("turn is not in the current task list"); return; }
+  openNodes.add(task + ":turn");
+  card.open = true;
+  let target = document.querySelector(`#tasks [data-nid="${CSS.escape(nid)}"]`) || card;
+  for (let el = target; el && el !== card.parentElement;
+       el = el.parentElement)
+    if (el.tagName === "DETAILS") {
+      el.open = true;
+      if (el.dataset.nid) openNodes.add(el.dataset.nid);
+    }
+  target.scrollIntoView({behavior: "smooth", block: "center"});
+  target.classList.add("hl");
+  setTimeout(() => target.classList.remove("hl"), 1900);
 }
 
 function focusGraph(e, task) {
@@ -1275,8 +1401,8 @@ async function renameSession(sid, cur) {
 async function assignSession(sid, pid) {
   await libPost({action: "assign_session", session: sid, project_id: pid}); refresh();
 }
-function selectProject(pid) { sel = {project: pid, session: null}; renderSidebar(); renderLibrary(); renderTasks(lastEvents); }
-function selectSession(sid, pid) { sel = {project: pid, session: sid}; renderSidebar(); renderTasks(lastEvents); }
+function selectProject(pid) { sel = {project: pid, session: null}; renderSidebar(); renderLibrary(); renderTasks(lastEvents); renderGraph(lastEvents); }
+function selectSession(sid, pid) { sel = {project: pid, session: sid}; renderSidebar(); renderTasks(lastEvents); renderGraph(lastEvents); }
 
 function renderSidebar() {
   const byProj = new Map(library.projects.map(p => [p.id, []]));
