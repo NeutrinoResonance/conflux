@@ -79,6 +79,7 @@ class CriterionScore:
     point: int                 # text-parsed score
     continuous: bool           # False = degraded to discrete judge
     reasoning_tail: str = ""
+    dist: dict = field(default_factory=dict)  # letter -> prob at the score position
 
 
 @dataclass
@@ -105,9 +106,10 @@ def _letter_value(tok: str, scale: int) -> int | None:
 
 def _score_from_logprobs(
     lp_content: list[dict[str, Any]], text: str, scale: int
-) -> tuple[float, int, bool]:
-    """Return (expected score, point score, was_continuous)."""
+) -> tuple[float, int, bool, dict]:
+    """Return (expected score, point score, was_continuous, letter->prob)."""
     point = _parse_point(text, scale)
+    empty: dict = {}
     # Locate the first letter token at/after the LAST '<score>' in the text.
     acc = ""
     starts = []
@@ -116,24 +118,26 @@ def _score_from_logprobs(
         acc += tok.get("token", "")
     tag = acc.rfind("<score>")
     if tag < 0:
-        return float(point), point, False
+        return float(point), point, False, empty
     idx = None
     for i, tok in enumerate(lp_content):
         if starts[i] >= tag and _letter_value(tok.get("token", ""), scale) is not None:
             idx = i
             break
     if idx is None:
-        return float(point), point, False
+        return float(point), point, False, empty
     dist: dict[int, float] = {}
     for a in lp_content[idx].get("top_logprobs") or []:
         v = _letter_value(a.get("token", ""), scale)
         if v is not None:
             dist[v] = dist.get(v, 0.0) + math.exp(a["logprob"])
     if not dist:
-        return float(point), point, False
+        return float(point), point, False, empty
     total = sum(dist.values())
     expected = sum(v * p for v, p in dist.items()) / total
-    return expected, point, True
+    letters = {chr(ord("A") + v - 1): round(p / total, 4)
+               for v, p in sorted(dist.items(), key=lambda kv: -kv[1])}
+    return expected, point, True, letters
 
 
 def _parse_point(text: str, scale: int) -> int:
@@ -266,7 +270,7 @@ class Verifier:
                     tokens += res.tokens_in + res.tokens_out
                     tin += res.tokens_in
                     tout += res.tokens_out
-                    expected, point, continuous = _score_from_logprobs(
+                    expected, point, continuous, dist = _score_from_logprobs(
                         res.logprob_content, res.text, scale
                     )
                     if continuous or not model.logprobs:
@@ -281,6 +285,7 @@ class Verifier:
                 point=point_last,
                 continuous=continuous_all,
                 reasoning_tail=tail,
+                dist=dist,
             )
 
         # Criteria are independent judgments — run them concurrently.

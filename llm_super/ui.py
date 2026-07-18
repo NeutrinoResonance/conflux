@@ -120,6 +120,9 @@ details.turn[open] > summary::before { content: "▾"; }
 .gid { font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted); }
 .gcost { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); }
 .tl { border-top: 1px solid var(--grid); padding: 10px 14px 12px; }
+.node.sub { margin-left: 26px; }
+.iopre { white-space: pre-wrap; font-size: 11.5px; margin: 6px 0 0;
+  max-height: 300px; overflow-y: auto; color: var(--ink-2); }
 .node, details.node { position: relative; margin-left: 8px; padding: 3px 0 3px 20px;
   border-left: 2px solid var(--grid); font-size: 12.5px; color: var(--ink-2); }
 .node::before, details.node::before { content: ""; position: absolute; left: -5px;
@@ -514,6 +517,61 @@ function node(nid, cls, ts, html, body) {
     <div class="payload">${body}</div></details>`;
 }
 
+// The verifier's score math, from the criteria_detail logged per verify:
+// per criterion the letter distribution at the <score> position, its
+// expectation, then the combination formula (SPEC §6 / arXiv:2607.05391).
+function scoreMath(d) {
+  if (!d.criteria_detail || !d.criteria_detail.length)
+    return d.criteria
+      ? Object.entries(d.criteria).map(([k, v]) => `${k}: ${v}`).join("\n")
+      : null;
+  const scale = d.scale || 20;
+  const rows = d.criteria_detail.map(c => {
+    const dist = Object.entries(c.dist || {}).slice(0, 5)
+      .map(([L, pr]) => `${L}:${(pr * 100).toFixed(1)}%`).join("  ");
+    return c.continuous
+      ? `${esc(c.criterion)}:  P(letter) = { ${dist} }  →  E = ${c.expected}/${scale}`
+      : `${esc(c.criterion)}:  discrete read (no usable logprobs) — letter ` +
+        `${String.fromCharCode(64 + (c.point || 1))}  →  E = ${c.expected}/${scale}`;
+  });
+  const mean = d.criteria_detail.reduce((s, c) => s + c.expected, 0)
+    / d.criteria_detail.length;
+  rows.push("");
+  rows.push(`score = (mean(E) − 1) / (scale − 1) = (${mean.toFixed(2)} − 1) / ${scale - 1}`
+    + ` = ${((mean - 1) / (scale - 1)).toFixed(4)}`);
+  rows.push(`E = Σ letter·P(letter), read from the top-5 logprobs at the <score> tag`
+    + ` (A=1 … ${String.fromCharCode(64 + scale)}=${scale}; digits would tokenize`
+    + ` into multiple tokens and corrupt the read)`);
+  return rows.join("\n");
+}
+
+// Inline output loading: find the upstream payload matching a timeline node
+// (nth non-reviewer call to that model) and show the response text in place.
+const outCache = new Map();
+async function loadOut(ev, task, model, nth, kind, elId) {
+  ev.preventDefault(); ev.stopPropagation();
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.textContent = "loading…";
+  if (!outCache.has(task))
+    outCache.set(task, await fetch(`/admin/messages?task=${encodeURIComponent(task)}&n=300`)
+      .then(r => r.json()).catch(() => []));
+  const rows = outCache.get(task)
+    .filter(r => r.kind === "upstream" && r.model === model)
+    .sort((a, b) => (a.ts || 0) - (b.ts || 0))
+    .map(r => r.payload || {});
+  const last = p => JSON.stringify((((p.request || {}).messages) || []).slice(-1));
+  const isReview = p => last(p).includes("expert reviewer verifying");
+  const isMerge = p => last(p).includes("independent solutions to the same task")
+    || last(p).includes("Assemble them into one");
+  let pool = rows.filter(p => !isReview(p));
+  pool = kind === "synthesis" ? pool.filter(isMerge) : pool.filter(p => !isMerge(p));
+  const p = pool[nth] ?? pool[pool.length - 1];
+  let txt = "(no recorded payload — pruned by retention, or a different server wrote it)";
+  if (p) { try { txt = p.response.choices[0].message.content || "(empty answer)"; } catch (e) {} }
+  el.textContent = txt.slice(0, 6000);
+}
+
 // Translate a trace event into a human-readable timeline node.
 function nodeFor(task, e, idx) {
   const d = e.data || {};
@@ -533,21 +591,44 @@ function nodeFor(task, e, idx) {
                                     (d.units||[]).map((u,i) => `${i+1}. ${esc(u)}`).join("\n") || null);
     case "resume":      return node(nid, "ok", e.ts, `↻ resumed from checkpoint — units done: ${(d.completed||[]).map(x=>x+1).join(", ") || "none"} (prior spend $${(d.prior_spent||0).toFixed(4)})`);
     case "wave_start":  return node(nid, "", e.ts, `∥ wave ${d.wave} started — units ${(d.units||[]).join(", ")} in parallel`);
-    case "execute":     return node(nid, "", e.ts, `⚙ attempt ${d.attempt||1} —${model}${toks}${cost}`);
+    case "execute":     return node(nid, "", e.ts, `⚙ attempt ${d.attempt||1} —${model}${toks}${cost}`,
+                                    `<button class="msgbtn" onclick="loadOut(event,'${esc(task)}','${esc(e.model||"")}',${d._nth||0},'execute','io_${nid.replace(/[^a-zA-Z0-9]/g,"_")}')">load model output</button><pre class="iopre" id="io_${nid.replace(/[^a-zA-Z0-9]/g,"_")}"></pre>`);
     case "execute_code":return node(nid, d.ok ? "ok" : "err", e.ts,
-                                    `⏵ sandbox ${d.ok ? "passed" : "FAILED"} — ${esc(d.backend)} · exit ${d.exit_code} · ${d.duration_s}s`,
-                                    d.stderr ? esc(d.stderr) : null);
+                                    `⏵ sandbox ${d.ok ? "passed" : "FAILED"} — extracted code ran via ${esc(d.backend)} · exit ${d.exit_code} · ${d.duration_s}s${e.model ? " · " + esc(e.model) + "'s answer" : ""}`,
+                                    [d.stdout ? "stdout:\n" + esc(d.stdout) : null,
+                                     d.stderr ? "stderr:\n" + esc(d.stderr) : null,
+                                     "(the transcript above is handed to the verifier as execution evidence)"]
+                                      .filter(Boolean).join("\n\n"));
     case "fm_event":    return node(nid, "fm", e.ts,
                                     `⚠ <b>${esc(e.fm_id || d.fm_id)}</b>${d.scope === "session" ? " (cross-turn)" : ""} · confidence ${d.confidence ?? "?"}`,
                                     esc(d.evidence || ""));
     case "verify":      return node(nid, d.passed ? "ok" : "err", e.ts,
-                                    `${d.passed ? "✓" : "✗"} verified by${model} — score <b>${(d.score ?? 0).toFixed(2)}</b>${d.stage ? " ("+esc(d.stage)+")" : ""}${cost}`,
-                                    d.criteria ? Object.entries(d.criteria).map(([k,v]) => `${k}: ${v}`).join("\n") : null);
+                                    `${d.passed ? "✓" : "✗"} verified by${model} — score <b>${(d.score ?? 0).toFixed(2)}</b>${d.tier && d.tier !== "standard" ? " · " + esc(d.tier) + " tier" : ""}${d.stage ? " ("+esc(d.stage)+")" : ""}${cost}`,
+                                    scoreMath(d));
     case "verify_error":return node(nid, "err", e.ts, `✗ verification unavailable — ${esc(d.error||"")}`);
     case "executor_error":    return node(nid, "err", e.ts, `⚙ executor failed —${model}`, esc(d.error||""));
     case "executor_fallback": return node(nid, "", e.ts, `⇄ failed over to <b>${esc(e.model)}</b>`);
     case "budget_stop": return node(nid, "err", e.ts, `$ budget stop — $${(d.spent||0).toFixed(3)} of $${(d.budget||0).toFixed(2)}`);
-    case "synthesis":   return node(nid, "", e.ts, `Σ assembled final answer —${model}${toks}${cost}`);
+    case "synthesis":   return node(nid, "", e.ts,
+                                    `Σ merge/assembly call —${model}${toks}${cost} · candidate outputs (with reviewer scores) become the prompt; the result must out-score the best input to win`,
+                                    `<button class="msgbtn" onclick="loadOut(event,'${esc(task)}','${esc(e.model||"")}',${d._nth||0},'synthesis','io_${nid.replace(/[^a-zA-Z0-9]/g,"_")}')">load merged output</button><pre class="iopre" id="io_${nid.replace(/[^a-zA-Z0-9]/g,"_")}"></pre>`);
+    case "ensemble_start": return node(nid, "", e.ts,
+                                    `⑂ <b>${esc(d.mode||"ensemble")}</b> strategy — ${(d.models||[]).length} candidates in parallel: ${(d.models||[]).map(esc).join(", ")}${d.cutoff ? ` · short-circuit cutoff ${d.cutoff}` : ""} (indented events below belong to this fan-out)`);
+    case "ensemble_candidate": return node(nid, "", e.ts,
+                                    `◇ candidate verified —${model} · score <b>${(d.score ?? 0).toFixed(2)}</b> by ${esc(d.verifier||"?")}${cost}`,
+                                    scoreMath(d));
+    case "short_circuit": return node(nid, "ok", e.ts,
+                                    `⚡ short-circuit —${model} reached cutoff ${d.cutoff} · ${d.cancelled} pending candidate(s) cancelled`);
+    case "ensemble_winner": return node(nid, "ok", e.ts,
+                                    `★ fan-out winner — <b>${esc(d.model || e.model || "")}</b> · score ${(d.score ?? 0).toFixed(2)} (${esc(d.mode||"")})`,
+                                    d.candidates ? "candidate scoreboard:\n" + Object.entries(d.candidates).map(([m, sc]) => `  ${m}: ${sc}`).join("\n") : null);
+    case "ensemble_fusion_rejected": return node(nid, "err", e.ts,
+                                    `✂ merge rejected — scored ${(d.fusion_score ?? 0).toFixed(2)}, below best candidate ${(d.score ?? 0).toFixed(2)} — best candidate returned instead`);
+    case "ensemble_degraded": return node(nid, "err", e.ts, `⑂ fan-out degraded to single supervised attempt — ${esc(d.reason||"")}`);
+    case "referee":     return node(nid, d.strategy === "ask_user" ? "err" : "", e.ts,
+                                    `↻ referee after failed attempt ${d.attempt} — decision: <b>${esc((d.strategy||"").replace(/_/g, " "))}</b>${d.target ? " → <b>" + esc(d.target) + "</b>" : ""} · ${d.source === "rule" ? "rule (free retries left)" : "LLM referee"}${cost}`,
+                                    esc(d.rationale || "") || null);
+    case "gate":        return node(nid, "", e.ts, `🚪 new-conversation gate — warned, nothing spent`, esc(d.preview || "") || null);
     case "tool_step":   return node(nid, "", e.ts, `🔧 agent tool step —${model} · ${d.n_calls||1} call(s)${cost}`);
     case "unit_done":   return null; // rendered as the unit group summary
     case "turn_end": case "agent_end":
@@ -596,14 +677,34 @@ function renderTasks(events) {
          ? `<span class="badge">🔧 agent tool step</span>`
          : `<span class="badge">… running</span>`);
 
+    // Annotate per-model call ordinals so inline "load output" can find the
+    // matching upstream payload later.
+    const ord = {};
+    for (const e of evs) {
+      if (e.kind === "execute" || e.kind === "synthesis") {
+        const key = e.kind + ":" + (e.model || "");
+        e.data = e.data || {};
+        e.data._nth = ord[key] = (ord[key] ?? -1) + 1;
+      }
+    }
     // Build the timeline: unit-tagged events fold into per-unit groups,
-    // inserted at the position of the unit's first event.
+    // inserted at the position of the unit's first event; events inside an
+    // ensemble fan-out are indented under their ensemble_start.
     const rows = [];
     const unitRendered = new Set();
+    let inEns = false;
     evs.forEach((e, idx) => {
+      if (e.kind === "ensemble_start") inEns = true;
+      const ensChild = inEns && (
+        ["execute", "execute_code", "ensemble_candidate", "short_circuit",
+         "synthesis", "fm_event", "executor_error", "executor_fallback",
+         "verify_error"].includes(e.kind)
+        || (e.kind === "verify" && e.data?.stage === "ensemble-fusion"));
+      if (e.kind === "ensemble_winner" || e.kind === "ensemble_degraded") inEns = false;
       const u = e.data?.unit;
       if (u == null || e.kind === "wave_start") {
-        const r = nodeFor(task, e, idx);
+        let r = nodeFor(task, e, idx);
+        if (r && ensChild) r = r.replace('class="node', 'class="node sub');
         if (r) rows.push(r);
         return;
       }
@@ -635,7 +736,7 @@ function renderTasks(events) {
         <span class="gid">${esc(task)}</span>
         <button class="msgbtn" onclick="toggleMessages(event, '${esc(task)}')">messages</button>
         <button class="msgbtn" onclick="copyRequest(event, '${esc(task)}')"
-          title="copy the exact request text — search for it in OpenCode/Hermes to edit that message, or resend it to resume from checkpoint (!rewind <unit#> first to redo a unit)">⧉ request</button>
+          title="copy the exact request text — for LOCATING this message in your client (edit/rewind). To continue the conversation, prefer !attach <session-prefix> from the client: no re-run, context preserved. Resending this text re-runs the turn (completed units resume from checkpoint; a single turn's repair progress does not carry over).">⧉ request</button>
         <button class="msgbtn" onclick="focusGraph(event, '${esc(task)}')"
           title="show this turn in the pipeline graph">⛓ graph</button>
       </summary>

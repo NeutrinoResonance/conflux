@@ -90,6 +90,14 @@ class TurnReport:
         return "\n".join(lines)
 
 
+def _crit_detail(report: VerifyReport) -> list[dict]:
+    """Per-criterion score math for the UI: letter distribution at the score
+    position, expectation, and whether the read was continuous."""
+    return [{"criterion": c.criterion, "expected": round(c.expected, 2),
+             "point": c.point, "continuous": c.continuous, "dist": c.dist}
+            for c in report.criteria]
+
+
 class Orchestrator:
     UNIT_CONCURRENCY = 3   # parallel units per wave (provider-rate friendly)
 
@@ -264,7 +272,7 @@ class Orchestrator:
                 log("execute_code", model=executor.name, backend=exec_res.backend,
                     ok=exec_res.ok, exit_code=exec_res.exit_code,
                     duration_s=round(exec_res.duration_s, 1),
-                    stderr=exec_res.stderr[:400])
+                    stdout=exec_res.stdout[:400], stderr=exec_res.stderr[:400])
                 if exec_res.ran:
                     evidence = exec_res.transcript()
                     if not exec_res.ok:
@@ -307,6 +315,7 @@ class Orchestrator:
                 tokens_in=report.tokens_in, tokens_out=report.tokens_out,
                 score=report.score, passed=report.passed, tier=report.tier,
                 criteria={c.criterion: round(c.expected, 2) for c in report.criteria},
+                criteria_detail=_crit_detail(report), scale=self.cfg.supervision.score_scale,
                 continuous=all(c.continuous for c in report.criteria))
 
             if best_report is None or report.score > best_report.score:
@@ -428,7 +437,7 @@ class Orchestrator:
         log("execute_code", model=model, backend=exec_res.backend,
             ok=exec_res.ok, exit_code=exec_res.exit_code,
             duration_s=round(exec_res.duration_s, 1),
-            stderr=exec_res.stderr[:400])
+            stdout=exec_res.stdout[:400], stderr=exec_res.stderr[:400])
         return exec_res.transcript() if exec_res.ran else None
 
     # ---------- ensemble turn (SPEC §6.1, opt-in via !ensemble) ----------
@@ -485,6 +494,8 @@ class Orchestrator:
             budget.add(rep.cost_usd)
             log("ensemble_candidate", model=m.name, score=rep.score,
                 cost_usd=rep.cost_usd, verifier=rep.verifier,
+                criteria_detail=_crit_detail(rep),
+                scale=self.cfg.supervision.score_scale,
                 tokens_in=rep.tokens_in, tokens_out=rep.tokens_out)
             return (m, res, rep)
 
@@ -554,6 +565,8 @@ class Orchestrator:
                     log("verify", model=frep.verifier, cost_usd=frep.cost_usd,
                         tokens_in=frep.tokens_in, tokens_out=frep.tokens_out,
                         score=frep.score, passed=frep.passed,
+                        criteria_detail=_crit_detail(frep),
+                        scale=self.cfg.supervision.score_scale,
                         stage="ensemble-fusion")
                     # the merged answer must EARN the win — a merge that
                     # scores below the best candidate is discarded
@@ -664,7 +677,9 @@ class Orchestrator:
             budget.add(report.cost_usd)
             log("verify", model=report.verifier, cost_usd=report.cost_usd,
                 tokens_in=report.tokens_in, tokens_out=report.tokens_out,
-                score=report.score, passed=report.passed, stage="agentic-final")
+                score=report.score, passed=report.passed,
+                criteria_detail=_crit_detail(report),
+                scale=self.cfg.supervision.score_scale, stage="agentic-final")
             if report.score > best_score:
                 best_data, best_score = data, report.score
             if report.passed and not events:
@@ -953,7 +968,9 @@ class Orchestrator:
                 budget.add(report.cost_usd)
                 log("verify", model=report.verifier, cost_usd=report.cost_usd,
                     tokens_in=report.tokens_in, tokens_out=report.tokens_out,
-                    score=report.score, passed=report.passed, stage="synthesis")
+                    score=report.score, passed=report.passed,
+                    criteria_detail=_crit_detail(report),
+                    scale=self.cfg.supervision.score_scale, stage="synthesis")
                 if final_report is None or report.score > final_report.score:
                     final_text, final_report = res.text, report
                 if report.passed:
