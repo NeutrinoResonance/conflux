@@ -110,3 +110,19 @@ a `▶✓ / ▶✗` sandbox marker in the sub-label; the referee appears as a
 node on the single path; merges appear as union/fusion nodes whose
 sub-label shows score and rejection. The graph is a map — the timeline
 rows (and their expansions) are the territory.
+
+## 6. Visual conventions (added same day, after live feedback)
+
+- **Identity hues**: every conversation (sidebar dot) and task (card left
+  border, pipeline panel border) carries a stable color derived from its
+  id — the pipeline border matches whichever task the graph shows.
+- **⛔ needs input**: hover the badge for what it means; click it to jump
+  to the graph (nodes flash). The card's ⛔ line is the supervisor's
+  reason/question; resolve by replying in that conversation (!attach).
+- **⚠ FM badges**: hover for the one-line meaning; the timeline's ⚠ row
+  expands to the full explanation (what it detects, what the supervisor
+  does about it). Taxonomy lives in FM_INFO in ui.py and SPEC §3/§5.
+- **Score math**: per-criterion probability strips (darker segment =
+  higher letter), E chips, the combination formula, and a "how this
+  score works" explainer. A strip pinned at one letter with 100% is
+  verifier saturation made visible.

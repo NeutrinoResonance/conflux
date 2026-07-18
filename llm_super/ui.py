@@ -124,6 +124,25 @@ details.turn[open] > summary::before { content: "▾"; }
 /* provenance convention: every expansion block is labeled. Model-generated
    text gets the accent border + tint; system-computed data gets the plain
    border. They must never be confusable. */
+/* identity hues: every task and conversation carries a stable accent */
+.sitem .cdot { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; }
+details.turn { border-left: 3px solid var(--task-hue, var(--border)); }
+.pipeline { border-left: 3px solid var(--task-hue, var(--border)); }
+#graph svg.flash .gnode rect { animation: gflash 1.2s ease-out 2; }
+@keyframes gflash { 0% { stroke-width: 4; } 100% { stroke-width: 1.2; } }
+/* probability strip for the score math */
+.crit { display: grid; grid-template-columns: 130px 1fr 84px; gap: 10px;
+  align-items: center; margin: 4px 0; }
+.crit .cname { font-size: 11.5px; color: var(--ink-2); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.pstrip { display: flex; gap: 2px; height: 14px; border-radius: 4px; overflow: hidden; }
+.pstrip .seg { min-width: 2px; border-radius: 3px; position: relative; }
+.pstrip .seg .sl { position: absolute; inset: 0; display: flex; align-items: center;
+  justify-content: center; font-size: 9.5px; color: var(--ink); }
+.crit .ev { font-size: 11px; color: var(--ink); text-align: right;
+  font-family: ui-monospace, monospace; }
+.scorehelp { font-size: 11px; color: var(--muted); margin-top: 6px; }
+.scorehelp summary { cursor: pointer; }
 .payload .cap { font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
   color: var(--muted); margin: 8px 0 3px; font-family: inherit; }
 .payload .cap.mdl { color: var(--seq); }
@@ -464,7 +483,32 @@ function scorebar(score) {
           <span class="fill" style="width:${pct}%"></span></span>
           <span class="n">${score.toFixed(2)}</span></span>`;
 }
-function fmBadge(id) { return `<span class="badge fm">⚠ ${esc(id)}</span>`; }
+// Failure-mode taxonomy (SPEC §3/§5) — every badge explains itself.
+const FM_INFO = {
+  "FM-X.1": ["incomplete work", "The answer contains stubs/placeholders or defers work back to the user instead of doing it.", "The repair loop demands the full implementation; recurring hits lower the model's routing stats."],
+  "FM-X.2": ["breadth thrash", "Many rapid, mutually dissimilar turns — the driving agent is skimming across subtasks without finishing any (cross-turn monitor).", "Advisory: consider !plan on, or steering the client to finish one thread."],
+  "FM-X.3": ["execution failure", "Code extracted from the answer was RUN in the sandbox and failed (non-zero exit).", "The failing transcript is fed back to the executor; unresolved failures block a pass."],
+  "FM-X.4": ["unevidenced claim", "The answer claims success (e.g. 'tests pass') without showing evidence.", "The verifier is told to trust execution evidence over claims; the repair prompt demands proof or removal."],
+  "FM-X.6": ["token starvation", "The model spent its entire output budget on internal reasoning and returned an EMPTY answer.", "Auto-retried with feedback to answer directly; raise supervision.max_output_tokens if it recurs."],
+  "FM-1.3": ["step repetition", "A step/attempt is nearly identical to the previous one — feedback is not being incorporated (in-turn: repair loop; cross-turn: the driving agent).", "Forces the referee to make a structural change (switch model / escalate / decompose) instead of another retry."],
+  "FM-1.4": ["context loss", "The conversation sent by the client SHRANK versus what was seen before — history was trimmed or compacted.", "Advisory: earlier constraints may be gone; consider re-stating them or !attach-ing the original conversation."],
+  "FM-2.1": ["context loss", "Prior conversation content is missing from the current request.", "Advisory: re-state dropped requirements."],
+  "FM-2.3": ["progress stall", "Verifier scores are flat or declining across several turns — the task is not converging.", "Advisory: change approach (!use <model>, !plan on) or intervene."],
+  "FM-2.6": ["reasoning–action gap", "The answer ENDS by announcing an action it never performs ('Next, I will…').", "Repair demands performing the action or removing the announcement."],
+  "FM-3.1": ["premature termination", "The answer is far shorter than the task warrants — it stopped before completing the objective.", "Repair demands the complete deliverable."],
+};
+function fmTitle(id) {
+  const i = FM_INFO[id];
+  return i ? `${id} — ${i[0]}: ${i[1]}` : `${id} — failure-mode monitor hit (see docs/observability-and-conversations.md)`;
+}
+function fmBadge(id) { return `<span class="badge fm" title="${esc(fmTitle(id))}">⚠ ${esc(id)}</span>`; }
+
+// Stable identity hue for a task / conversation id.
+function hueFor(id) {
+  let h = 0;
+  for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  return `hsl(${h} 60% 52%)`;
+}
 
 function renderStatus(st, cfgModels) {
   const paused = !!st.paused;
@@ -545,23 +589,43 @@ function scoreMath(d) {
                Object.entries(d.criteria).map(([k, v]) => `${k}: ${v}`).join("\n"))
       : null;
   const scale = d.scale || 20;
-  const rows = d.criteria_detail.map(c => {
-    const dist = Object.entries(c.dist || {}).slice(0, 5)
-      .map(([L, pr]) => `${L}:${(pr * 100).toFixed(1)}%`).join("  ");
-    return c.continuous
-      ? `${esc(c.criterion)}:  P(letter) = { ${dist} }  →  E = ${c.expected}/${scale}`
-      : `${esc(c.criterion)}:  discrete read (no usable logprobs) — letter ` +
-        `${String.fromCharCode(64 + (c.point || 1))}  →  E = ${c.expected}/${scale}`;
-  });
-  const mean = d.criteria_detail.reduce((s, c) => s + c.expected, 0)
+  const strips = d.criteria_detail.map(c => {
+    const entries = Object.entries(c.dist || {});
+    const total = entries.reduce((sum, [, pr]) => sum + pr, 0) || 1;
+    let mid;
+    if (c.continuous && entries.length) {
+      const segs = entries.map(([L, pr]) => {
+        const pct = 100 * pr / total;
+        const val = L.charCodeAt(0) - 64;
+        return `<span class="seg" style="flex:${pct.toFixed(2)} 0 0;` +
+          `background:var(--seq);opacity:${(0.2 + 0.8 * val / scale).toFixed(2)}"` +
+          ` title="P(${L}) = ${(100 * pr / total).toFixed(1)}% · letter value ${val}/${scale}">` +
+          `${pct > 14 ? `<span class="sl">${L} · ${(100 * pr / total).toFixed(0)}%</span>` : ""}</span>`;
+      }).join("");
+      mid = `<div class="pstrip" title="token probabilities at the score position (darker = higher letter)">${segs}</div>`;
+    } else {
+      mid = `<span class="cname" style="font-style:italic">discrete read — letter ` +
+        `${String.fromCharCode(64 + (c.point || 1))} (no usable logprobs this call)</span>`;
+    }
+    return `<div class="crit"><span class="cname" title="${esc(c.criterion)}">${esc(c.criterion)}</span>` +
+      `${mid}<span class="ev">E = ${c.expected}/${scale}</span></div>`;
+  }).join("");
+  const mean = d.criteria_detail.reduce((sum, c) => sum + c.expected, 0)
     / d.criteria_detail.length;
-  rows.push("");
-  rows.push(`score = (mean(E) − 1) / (scale − 1) = (${mean.toFixed(2)} − 1) / ${scale - 1}`
-    + ` = ${((mean - 1) / (scale - 1)).toFixed(4)}`);
-  rows.push(`E = Σ letter·P(letter), read from the top-5 logprobs at the &lt;score&gt; tag`
-    + ` (A=1 … ${String.fromCharCode(64 + scale)}=${scale}; digits would tokenize`
-    + ` into multiple tokens and corrupt the read)`);
-  return sysBlk("score math (from the verifier's logged logprobs)", rows.join("\n"));
+  const formula = `score = (mean(E) − 1) / (scale − 1) = (${mean.toFixed(2)} − 1) / ${scale - 1}` +
+    ` = <b>${((mean - 1) / (scale - 1)).toFixed(4)}</b>`;
+  const help = `<details class="scorehelp"><summary>？ how this score works</summary>` +
+    `The cross-family reviewer analyzes the answer against each criterion and ends with a ` +
+    `single letter grade in &lt;score&gt; tags (A=1 … ${String.fromCharCode(64 + scale)}=${scale}; ` +
+    `letters because multi-digit numbers split into several tokens on some tokenizers and ` +
+    `corrupt the read). Instead of trusting that one letter, llm-super reads the top-5 token ` +
+    `probabilities AT the letter position — the bars above, darker = higher letter — and takes ` +
+    `the expectation E = Σ letter·P(letter): a continuous score that keeps the reviewer's ` +
+    `uncertainty. Criteria are averaged and normalized to [0,1]; the turn passes at ` +
+    `supervision.pass_threshold (default 0.70). A bar pinned at one letter with 100% means the ` +
+    `reviewer had no doubt — many of those in a row is verifier saturation, worth noticing.</details>`;
+  return `<div class="cap">⚙ score math (from the verifier's logged logprobs) — computed by llm-super</div>` +
+    strips + `<div class="ev" style="text-align:left;margin-top:6px">${formula}</div>` + help;
 }
 
 // Inline output loading: find the upstream payload matching a timeline node
@@ -631,7 +695,10 @@ function nodeFor(task, e, idx) {
                                       .filter(Boolean).join(""));
     case "fm_event":    return node(nid, "fm", e.ts,
                                     `⚠ <b>${esc(e.fm_id || d.fm_id)}</b>${d.scope === "session" ? " (cross-turn)" : ""} · confidence ${d.confidence ?? "?"}`,
-                                    d.evidence ? sysBlk("monitor evidence (may quote model text)", esc(d.evidence)) : null);
+                                    (() => { const i = FM_INFO[e.fm_id || d.fm_id];
+                                      return (d.evidence ? sysBlk("monitor evidence (may quote model text)", esc(d.evidence)) : "")
+                                        + (i ? sysBlk(`what ${esc(e.fm_id || d.fm_id)} (“${i[0]}”) means`, esc(i[1]) + "\n\nWhat the supervisor does: " + esc(i[2])) : "");
+                                    })() || null);
     case "verify":      return node(nid, d.passed ? "ok" : "err", e.ts,
                                     `${d.passed ? "✓" : "✗"} verified by${model} — score <b>${(d.score ?? 0).toFixed(2)}</b>${d.tier && d.tier !== "standard" ? " · " + esc(d.tier) + " tier" : ""}${d.stage ? " ("+esc(d.stage)+")" : ""}${cost}`,
                                     scoreMath(d));
@@ -701,7 +768,9 @@ function renderTasks(events) {
     const planUnits = evs.find(e => e.kind === "plan")?.data?.units || [];
     const agentic = evs.some(e => e.kind === "agent_turn" || e.kind === "tool_step");
     const status = end
-      ? (escalated ? `<span class="badge crit">⛔ needs input</span>`
+      ? (escalated ? `<span class="badge crit" style="cursor:pointer"
+             title="NEEDS INPUT: the supervisor stopped WITHOUT a verified answer — its reason/question is the ⛔ line inside this card (and the red result node in the graph; click this badge to jump there). To resolve: reply in this conversation (!attach it from your client), adjust the request, or !rewind and resend."
+             onclick="focusGraph(event, '${esc(task)}')">⛔ needs input</span>`
                    : `<span class="badge ok">✓ done</span>`)
       : (agentic && !verifies.length
          ? `<span class="badge">🔧 agent tool step</span>`
@@ -756,7 +825,7 @@ function renderTasks(events) {
 
     const tnid = `${task}:turn`;
     const open = openNodes.has(tnid) || n === 1;  // newest goal starts expanded
-    cards.push(`<details class="turn" data-nid="${tnid}"${open ? " open" : ""}>
+    cards.push(`<details class="turn" data-nid="${tnid}"${open ? " open" : ""} style="--task-hue:${hueFor(task)}">
       <summary>
         ${status}
         <span class="goal" title="${esc(preview || "")}">${esc((preview || "(no prompt recorded)").slice(0, 150))}</span>
@@ -771,7 +840,7 @@ function renderTasks(events) {
           title="show this turn in the pipeline graph">⛓ graph</button>
       </summary>
       <div class="tl">${rows.join("")}
-        ${escalated ? `<div class="esc">${esc(escalated)}</div>` : ""}
+        ${escalated ? `<div class="esc"><div class="cap">⛔ needs input — the supervisor stopped without a verified answer. Reply in this conversation to resolve:</div>${esc(escalated)}</div>` : ""}
       </div>
       <div class="msgview" id="msg-${esc(task)}" style="display:none"></div>
     </details>`);
@@ -959,6 +1028,7 @@ function renderGraph(events) {
     gDone.clear();
     return;
   }
+  document.querySelector(".pipeline").style.setProperty("--task-hue", hueFor(gSel.task));
   const evs = events.filter(e => e.task === gSel.task).sort((a, b) => a.ts - b.ts);
   const model = graphModel(evs);
   const running = !evs.some(e => e.kind === "turn_end" || e.kind === "agent_end");
@@ -1032,6 +1102,8 @@ function focusGraph(e, task) {
   gSel.task = task;
   renderGraph(lastEvents);
   document.querySelector(".pipeline").scrollIntoView({behavior: "smooth", block: "center"});
+  const svg = $("#graph").querySelector("svg");
+  if (svg) { svg.classList.add("flash"); setTimeout(() => svg.classList.remove("flash"), 2600); }
 }
 
 // Edit history: divergences of the conversation prefix — each one forked a
@@ -1222,6 +1294,7 @@ function renderSidebar() {
       </div>
       ${open ? `<div class="slist">${ss.length ? ss.map(s => `
         <div class="sitem ${sel.session===s.session?"sel":""}">
+          <span class="cdot" style="background:${hueFor(s.session)}"></span>
           <span class="st" title="${esc(s.title||s.session)}" onclick="selectSession('${esc(s.session)}','${esc(p.id)}')">${esc(s.title||"(untitled)")}</span>
           <select class="sx" title="move to project" onchange="assignSession('${esc(s.session)}',this.value)">${projOpts}</select>
           <span class="sx iconbtn" title="rename" onclick="renameSession('${esc(s.session)}','${esc(s.title||"")}')">✎</span>
