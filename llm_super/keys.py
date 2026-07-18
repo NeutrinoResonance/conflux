@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 
 HERMES_AUTH = Path.home() / ".hermes" / "auth.json"
+HERMES_SHARED_NOUS_AUTH = Path.home() / ".hermes" / "shared" / "nous_auth.json"
 OPENCODE_AUTH = Path.home() / ".local" / "share" / "opencode" / "auth.json"
 
 
@@ -45,22 +46,37 @@ def _opencode_key(provider: str) -> str:
 
 
 def try_refresh(key_source: str, timeout: float = 60.0) -> bool:
-    """Attempt to refresh an expired credential. Hermes re-mints its agent
-    key as a side effect of `hermes auth status <provider>`; other schemes
-    have no refresh path. Returns True if a refresh was performed."""
+    """Attempt to refresh an expired credential through the Hermes CLI.
+
+    ``hermes auth status nous`` validates expiry but does not force rotation
+    of a still-unexpired key that the inference service has rejected.  The
+    supported forced-refresh path is ``hermes auth add nous --type oauth``:
+    accepting its existing-shared-credential prompt rehydrates the session,
+    forces an OAuth refresh, and persists the new inference key.  Feeding one
+    newline makes that flow usable by the unattended proxy.
+
+    If the shared OAuth state is absent, do not start a device-code login that
+    cannot be completed by a background server.  Other key-source schemes do
+    not currently have an unattended refresh path.
+    """
     scheme, _, arg = key_source.partition(":")
-    if scheme != "hermes":
+    if scheme != "hermes" or arg != "nous" or not HERMES_SHARED_NOUS_AUTH.exists():
         return False
     import subprocess
 
     try:
         proc = subprocess.run(
-            ["hermes", "auth", "status", arg],
-            capture_output=True, timeout=timeout, text=True,
+            ["hermes", "auth", "add", "nous", "--type", "oauth",
+             "--no-browser", "--timeout", str(max(5, int(timeout) - 5))],
+            input="\n", capture_output=True, timeout=timeout, text=True,
         )
     except (OSError, subprocess.TimeoutExpired):
         return False
-    return proc.returncode == 0 and "logged in" in (proc.stdout + proc.stderr)
+    output = proc.stdout + proc.stderr
+    return proc.returncode == 0 and (
+        "Imported nous OAuth credentials" in output
+        or "Saved nous OAuth device-code credentials" in output
+    )
 
 
 def resolve(key_source: str) -> str:

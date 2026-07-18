@@ -30,6 +30,8 @@ class Decision:
     rationale: str = ""
     source: str = "rule"       # rule (deterministic) | llm
     cost_usd: float = 0.0
+    tokens_in: int = 0
+    tokens_out: int = 0
 
 
 _PROMPT = """You are the referee in a supervised multi-model ensemble. An \
@@ -155,6 +157,8 @@ async def decide(
         return fallback
 
     fallback.cost_usd = res.cost_usd
+    fallback.tokens_in = res.tokens_in
+    fallback.tokens_out = res.tokens_out
     m = re.search(r"\{.*\}", res.text, re.DOTALL)
     if not m:
         return fallback
@@ -175,4 +179,6 @@ async def decide(
         rationale=str(raw.get("rationale", ""))[:300],
         source="llm",
         cost_usd=res.cost_usd,
+        tokens_in=res.tokens_in,
+        tokens_out=res.tokens_out,
     )

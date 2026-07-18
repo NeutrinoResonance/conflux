@@ -9,6 +9,18 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
+PAUSED_NOTICE = (
+    "[llm-super] supervisor is paused; no model was called. "
+    "Send !resume, then resend the request to continue."
+)
+
+PAUSED_BOUNDARY_NOTICE = (
+    "[llm-super] supervisor paused at the next execution boundary. "
+    "An in-flight model call had already started, but no newly proposed tool "
+    "action was released. Send !resume, then resend the request to continue."
+)
+
+
 @dataclass
 class ControlState:
     paused: bool = False

@@ -13,7 +13,7 @@ import httpx
 
 from . import reqlog
 from .config import Config, Model, Provider
-from .keys import resolve, try_refresh
+from .keys import KeyResolutionError, resolve, try_refresh
 
 # Some gateways emit unescaped control chars inside reasoning text.
 _CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
@@ -166,6 +166,36 @@ class Client:
     async def aclose(self) -> None:
         await self._http.aclose()
 
+    @staticmethod
+    def _headers(provider: Provider, model: Model) -> dict[str, str]:
+        """Resolve request credentials as a provider failure.
+
+        Key lookup is deliberately lazy, but callers route around provider
+        failures only when they are expressed as ``ProviderError``.  Letting a
+        ``KeyResolutionError`` escape would turn a missing provider credential
+        into an HTTP 500 and prevent a configured fallback from running.
+        """
+        try:
+            key = resolve(provider.key_source)
+        except KeyResolutionError as e:
+            raise ProviderError(
+                model.name, 0,
+                f"credential resolution failed for provider {provider.name}: {e}",
+            ) from e
+        return {
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+        }
+
+    async def _refresh_auth(self, provider: Provider) -> bool:
+        """Run a provider's credential refresh path at most once per cooldown."""
+        now = time.monotonic()
+        last = self._last_key_refresh.get(provider.name)
+        if last is not None and now - last <= 300:
+            return False
+        self._last_key_refresh[provider.name] = now
+        return await asyncio.to_thread(try_refresh, provider.key_source)
+
     async def raw_chat(self, model: Model, body: dict[str, Any]) -> dict[str, Any]:
         """Forward a full OpenAI-format request body (tools and all) to the
         provider, preserving the response shape. Used for agentic tool-call
@@ -176,32 +206,50 @@ class Client:
         out = dict(body)
         out["model"] = model.id
         out.pop("stream", None)
+        # The upstream call is deliberately non-streaming so the orchestrator
+        # can inspect a complete tool response.  ``stream_options`` is only
+        # meaningful with streaming enabled, and stricter OpenAI-compatible
+        # gateways reject it when ``stream`` is absent.
+        out.pop("stream_options", None)
         last_exc: Exception | None = None
-        for attempt in range(2):
-            if attempt:
-                await asyncio.sleep(1.5)
+        transient_failures = 0
+        while transient_failures < 2:
             try:
                 resp = await self._http.post(
                     f"{provider.base_url}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {resolve(provider.key_source)}",
-                        "Content-Type": "application/json",
-                    },
+                    headers=self._headers(provider, model),
                     json=out,
                 )
             except httpx.HTTPError as e:
                 last_exc = ProviderError(model.name, 0, f"transport error: {e}")
+                transient_failures += 1
+                if transient_failures < 2:
+                    await asyncio.sleep(1.5)
                 continue
             text = _CTRL.sub(" ", resp.text)
             try:
                 data = json.loads(text, strict=False)
             except json.JSONDecodeError as e:
                 last_exc = ProviderError(model.name, resp.status_code, f"unparseable body: {e}")
+                transient_failures += 1
+                if transient_failures < 2:
+                    await asyncio.sleep(1.5)
                 continue
             self._check_limit(provider, model, resp.status_code, data)
             if resp.status_code >= 500:
                 last_exc = ProviderError(model.name, resp.status_code, json.dumps(data))
+                transient_failures += 1
+                if transient_failures < 2:
+                    await asyncio.sleep(1.5)
                 continue
+            if resp.status_code in (401, 403):
+                # Keep agentic requests in parity with chat(): the Nous agent
+                # key rotates, and a successful forced refresh earns a retry.
+                # Authentication retries do not consume the transient-failure
+                # allowance, so 5xx -> 401 -> refresh -> success still works.
+                if await self._refresh_auth(provider):
+                    continue
+                raise ProviderError(model.name, resp.status_code, json.dumps(data))
             if resp.status_code != 200 or "choices" not in data:
                 raise ProviderError(model.name, resp.status_code, json.dumps(data))
             self._note_success(provider, model, breaker)
@@ -242,10 +290,7 @@ class Client:
             try:
                 resp = await self._http.post(
                     f"{provider.base_url}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {resolve(provider.key_source)}",
-                        "Content-Type": "application/json",
-                    },
+                    headers=self._headers(provider, model),
                     json=body,
                 )
             except httpx.HTTPError as e:
@@ -265,12 +310,8 @@ class Client:
                 # Expired credential (the Nous agent key rotates ~daily).
                 # Self-heal: trigger the provider's refresh path once per
                 # cooldown, then retry the request with the new key.
-                now = time.monotonic()
-                if now - self._last_key_refresh.get(provider.name, 0) > 300:
-                    self._last_key_refresh[provider.name] = now
-                    refreshed = await asyncio.to_thread(try_refresh, provider.key_source)
-                    if refreshed:
-                        continue
+                if await self._refresh_auth(provider):
+                    continue
                 raise ProviderError(model.name, resp.status_code, json.dumps(data))
             if resp.status_code != 200 or "choices" not in data:
                 # other 4xx: our request is wrong for this provider — don't

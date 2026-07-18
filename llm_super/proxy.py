@@ -26,7 +26,7 @@ from . import report as report_mod
 from . import retention
 from .checkpoint import Checkpoints
 from .config import load
-from .control import ControlState, gate_warning, handle
+from .control import PAUSED_NOTICE, ControlState, gate_warning, handle
 from .history import History
 from .library import DEFAULT_SETTINGS, Library
 from .orchestrator import Orchestrator, _last_user_text
@@ -90,7 +90,23 @@ def _session_id(messages: list[dict]) -> str:
     return "anon"
 
 
-def _completion_body(text: str, model: str) -> dict:
+def _usage(prompt_tokens: int = 0, completion_tokens: int = 0) -> dict[str, int]:
+    prompt = int(prompt_tokens or 0)
+    completion = int(completion_tokens or 0)
+    return {
+        "prompt_tokens": prompt,
+        "completion_tokens": completion,
+        "total_tokens": prompt + completion,
+    }
+
+
+def _completion_body(
+    text: str,
+    model: str,
+    *,
+    prompt_tokens: int = 0,
+    completion_tokens: int = 0,
+) -> dict:
     return {
         "id": f"chatcmpl-{uuid.uuid4().hex[:24]}",
         "object": "chat.completion",
@@ -103,34 +119,58 @@ def _completion_body(text: str, model: str) -> dict:
                 "finish_reason": "stop",
             }
         ],
-        "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+        "usage": _usage(prompt_tokens, completion_tokens),
     }
 
 
-def _sse_raw(data: dict, model: str):
+def _sse_raw(data: dict, model: str, *, include_usage: bool = False):
     """Convert a complete (non-streamed) completion — possibly containing
-    tool_calls — into a minimal OpenAI-format SSE stream."""
+    tool_calls and provider-specific reasoning state — into an OpenAI-format
+    SSE stream without discarding fields the client needs on its next turn."""
     cid = data.get("id") or f"chatcmpl-{uuid.uuid4().hex[:24]}"
     choice = data["choices"][0]
     msg = choice.get("message") or {}
     finish = choice.get("finish_reason") or "stop"
+    created = data.get("created") or int(time.time())
+    top_extensions = {
+        key: value for key, value in data.items()
+        if key not in {"id", "object", "created", "model", "choices", "usage"}
+        and value is not None
+    }
+    message_extensions = {
+        key: value for key, value in msg.items()
+        if key not in {"role", "content", "tool_calls"} and value is not None
+    }
 
     def chunk(delta: dict, fin: str | None = None) -> str:
         return "data: " + json.dumps({
             "id": cid, "object": "chat.completion.chunk",
-            "created": int(time.time()), "model": model,
+            "created": created, "model": model,
             "choices": [{"index": 0, "delta": delta, "finish_reason": fin}],
+            **top_extensions,
         }) + "\n\n"
 
     async def gen():
-        yield chunk({"role": "assistant"})
-        if msg.get("content"):
-            for i in range(0, len(msg["content"]), 512):
-                yield chunk({"content": msg["content"][i: i + 512]})
+        yield chunk({"role": msg.get("role", "assistant")})
+        if message_extensions:
+            yield chunk(message_extensions)
+        content = msg.get("content")
+        if isinstance(content, str) and content:
+            for i in range(0, len(content), 512):
+                yield chunk({"content": content[i: i + 512]})
+        elif content is not None and not isinstance(content, str):
+            yield chunk({"content": content})
         if msg.get("tool_calls"):
             deltas = [{**tc, "index": i} for i, tc in enumerate(msg["tool_calls"])]
             yield chunk({"tool_calls": deltas})
         yield chunk({}, finish)
+        if include_usage and data.get("usage") is not None:
+            yield "data: " + json.dumps({
+                "id": cid, "object": "chat.completion.chunk",
+                "created": created, "model": model,
+                "choices": [], "usage": data["usage"],
+                **top_extensions,
+            }) + "\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(gen(), media_type="text/event-stream")
@@ -184,6 +224,20 @@ async def chat_completions(request: Request):
         state["trace"].record(session, "-", "control", command=_last_user_text(messages))
         return _sse(reply, model_name) if stream else JSONResponse(_completion_body(reply, model_name))
 
+    # Pause is a no-spend ingress gate for every virtual-super request,
+    # including agentic tool turns.  Explicit registry-model passthrough is
+    # intentionally unaffected.  In-flight calls also check the flag at the
+    # orchestrator boundary before releasing a newly generated tool call.
+    if control.paused and model_name not in cfg.models:
+        state["trace"].record(
+            session, "-", "pause_block",
+            agentic=bool(body.get("tools") or body.get("tool_choice")),
+            preview=_last_user_text(messages)[:150],
+        )
+        return _sse(PAUSED_NOTICE, model_name) if stream else JSONResponse(
+            _completion_body(PAUSED_NOTICE, model_name)
+        )
+
     # New-conversation gate (SPEC §7): in "dumb command mode" an unknown
     # conversation's first non-command message returns a warning WITHOUT
     # calling any model; continuing (or resending) confirms. Commands above
@@ -192,6 +246,7 @@ async def chat_completions(request: Request):
                else cfg.supervision.confirm_new_sessions)
     if (gate_on and model_name not in cfg.models
             and session not in state["armed_sessions"]
+            and not state["library"].has_session(session)
             and not state["history"].recent_turns(session, 1)):
         state["armed_sessions"].add(session)
         state["trace"].record(session, "-", "gate",
@@ -207,6 +262,32 @@ async def chat_completions(request: Request):
     # entirely on thought and return an EMPTY answer at the ceiling.
     if model_name in cfg.models:
         try:
+            # Explicit registry models are unsupervised passthrough, including
+            # tool-carrying agent requests.  Sending those through chat()
+            # would silently discard the tool definitions and tool_calls.
+            if body.get("tools") or body.get("tool_choice"):
+                data = await state["client"].raw_chat(cfg.model(model_name), body)
+                usage = data.get("usage") or {}
+                selected = cfg.model(model_name)
+                state["trace"].record(
+                    session, "-", "passthrough", model=model_name,
+                    tokens_in=usage.get("prompt_tokens", 0),
+                    tokens_out=usage.get("completion_tokens", 0),
+                    cost_usd=selected.cost(
+                        usage.get("prompt_tokens", 0),
+                        usage.get("completion_tokens", 0),
+                    ),
+                    agentic=True,
+                )
+                data["model"] = model_name
+                if not stream:
+                    return JSONResponse(data)
+                include_usage = bool(
+                    (body.get("stream_options") or {}).get("include_usage")
+                )
+                return _sse_raw(
+                    data, model_name, include_usage=include_usage
+                )
             res = await state["client"].chat(cfg.model(model_name), messages,
                                              max_tokens=body.get("max_tokens", 8192),
                                              temperature=body.get("temperature", 0.2))
@@ -232,7 +313,10 @@ async def chat_completions(request: Request):
         data["model"] = model_name
         if not stream:
             return JSONResponse(data)
-        return _sse_raw(data, model_name)
+        include_usage = bool(
+            (body.get("stream_options") or {}).get("include_usage")
+        )
+        return _sse_raw(data, model_name, include_usage=include_usage)
 
     # Supervised mode (bounded by a hard wall-clock timeout).
     timeout = cfg.supervision.turn_timeout_s
@@ -255,7 +339,11 @@ async def chat_completions(request: Request):
                 f"[llm-super] turn exceeded the {timeout:.0f}s wall-clock limit "
                 "and was stopped; partial work is in the trace (!status, /admin/events)",
                 model_name))
-        return JSONResponse(_completion_body(render(report), model_name))
+        return JSONResponse(_completion_body(
+            render(report), model_name,
+            prompt_tokens=report.tokens_in,
+            completion_tokens=report.tokens_out,
+        ))
 
     # Streaming: long supervised turns need keepalives or clients drop the
     # connection. SSE comment lines are ignored by OpenAI-compatible clients.
@@ -268,9 +356,14 @@ async def chat_completions(request: Request):
             "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
         }) + "\n\n"
 
+    include_usage = bool(
+        (body.get("stream_options") or {}).get("include_usage")
+    )
+
     async def gen():
         task = asyncio.create_task(state["orch"].run_turn(session, messages))
         start = time.monotonic()
+        report = None
         yield chunk({"role": "assistant"})
         while True:
             done, _ = await asyncio.wait({task}, timeout=15.0)
@@ -285,12 +378,20 @@ async def chat_completions(request: Request):
                 return
             yield ": keepalive\n\n"
         try:
-            text = render(task.result())
+            report = task.result()
+            text = render(report)
         except Exception as e:
             text = f"[llm-super] turn failed: {e}"
         for i in range(0, len(text), 512):
             yield chunk({"content": text[i: i + 512]})
         yield chunk({}, "stop")
+        if include_usage and report is not None:
+            yield "data: " + json.dumps({
+                "id": cid, "object": "chat.completion.chunk",
+                "created": int(time.time()), "model": model_name,
+                "choices": [],
+                "usage": _usage(report.tokens_in, report.tokens_out),
+            }) + "\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(gen(), media_type="text/event-stream")

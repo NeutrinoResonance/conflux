@@ -12,6 +12,7 @@ Every step is traced.
 
 from __future__ import annotations
 
+import time
 import uuid
 from dataclasses import dataclass, field
 
@@ -24,7 +25,7 @@ from . import reqlog
 from . import sandbox
 from .checkpoint import Checkpoints, turn_key
 from .config import Config, Model
-from .control import ControlState
+from .control import PAUSED_BOUNDARY_NOTICE, PAUSED_NOTICE, ControlState
 from .history import History, diff_prefix, similarity
 from .monitors import FMEvent, run_monitors, run_session_monitors
 from .providers import ChatResult, Client, ProviderError
@@ -36,9 +37,13 @@ from .verifier import Verifier, VerifyReport
 class Budget:
     cap: float
     spent: float = 0.0
+    tokens_in: int = 0
+    tokens_out: int = 0
 
-    def add(self, cost: float) -> None:
+    def add(self, cost: float, tokens_in: int = 0, tokens_out: int = 0) -> None:
         self.spent += cost
+        self.tokens_in += int(tokens_in or 0)
+        self.tokens_out += int(tokens_out or 0)
 
     @property
     def exhausted(self) -> bool:
@@ -66,6 +71,8 @@ class TurnReport:
     verify: VerifyReport | None
     fm_events: list[str] = field(default_factory=list)
     cost_usd: float = 0.0
+    tokens_in: int = 0
+    tokens_out: int = 0
     escalated: str = ""
     units: int = 0
     session_notes: list[str] = field(default_factory=list)
@@ -96,6 +103,23 @@ def _crit_detail(report: VerifyReport) -> list[dict]:
     return [{"criterion": c.criterion, "expected": round(c.expected, 2),
              "point": c.point, "continuous": c.continuous, "dist": c.dist}
             for c in report.criteria]
+
+
+def _agent_text_completion(text: str, model: str = "super") -> dict:
+    """A minimal raw completion for supervisor-generated agent notices."""
+    return {
+        "id": f"chatcmpl-{uuid.uuid4().hex[:24]}",
+        "object": "chat.completion",
+        "created": int(time.time()),
+        "model": model,
+        "choices": [{
+            "index": 0,
+            "message": {"role": "assistant", "content": text},
+            "finish_reason": "stop",
+        }],
+        "usage": {"prompt_tokens": 0, "completion_tokens": 0,
+                  "total_tokens": 0},
+    }
 
 
 class Orchestrator:
@@ -219,7 +243,7 @@ class Orchestrator:
             res, executor = executed
             if executor.name not in models_tried:
                 models_tried.append(executor.name)
-            budget.add(res.cost_usd)
+            budget.add(res.cost_usd, res.tokens_in, res.tokens_out)
             log("execute", model=executor.name, cost_usd=res.cost_usd,
                 tokens_in=res.tokens_in, tokens_out=res.tokens_out, attempt=attempts)
 
@@ -310,7 +334,7 @@ class Orchestrator:
                     best_text = res.text
                 escalated = "verification unavailable (provider errors); response is UNVERIFIED"
                 break
-            budget.add(report.cost_usd)
+            budget.add(report.cost_usd, report.tokens_in, report.tokens_out)
             log("verify", model=report.verifier, cost_usd=report.cost_usd,
                 tokens_in=report.tokens_in, tokens_out=report.tokens_out,
                 score=report.score, passed=report.passed, tier=report.tier,
@@ -344,10 +368,11 @@ class Orchestrator:
                 verify_feedback=report.feedback, attempts=attempts,
                 models_tried=models_tried, allow_decompose=allow_decompose,
                 tier=tier, repair_stats=self.history.repair_stats())
-            budget.add(decision.cost_usd)
+            budget.add(decision.cost_usd, decision.tokens_in, decision.tokens_out)
             log("referee", strategy=decision.strategy, source=decision.source,
                 target=decision.target_model, rationale=decision.rationale,
-                cost_usd=decision.cost_usd, attempt=attempts)
+                cost_usd=decision.cost_usd, tokens_in=decision.tokens_in,
+                tokens_out=decision.tokens_out, attempt=attempts)
 
             # breakpoints again, now that verify/referee spend has landed and
             # we know whether the ladder is escalating structurally
@@ -479,7 +504,7 @@ class Orchestrator:
             if executed is None:
                 return None
             res, m = executed
-            budget.add(res.cost_usd)
+            budget.add(res.cost_usd, res.tokens_in, res.tokens_out)
             log("execute", model=m.name, cost_usd=res.cost_usd,
                 tokens_in=res.tokens_in, tokens_out=res.tokens_out,
                 attempt=1, ensemble=True)
@@ -491,7 +516,7 @@ class Orchestrator:
             except Exception as e:
                 log("verify_error", model=m.name, error=str(e)[:300])
                 return None
-            budget.add(rep.cost_usd)
+            budget.add(rep.cost_usd, rep.tokens_in, rep.tokens_out)
             log("ensemble_candidate", model=m.name, score=rep.score,
                 cost_usd=rep.cost_usd, verifier=rep.verifier,
                 criteria_detail=_crit_detail(rep),
@@ -552,7 +577,7 @@ class Orchestrator:
                 log, 1)
             if executed is not None:
                 fres, fm = executed
-                budget.add(fres.cost_usd)
+                budget.add(fres.cost_usd, fres.tokens_in, fres.tokens_out)
                 log("synthesis", model=fm.name, cost_usd=fres.cost_usd,
                     tokens_in=fres.tokens_in, tokens_out=fres.tokens_out,
                     attempt=1, ensemble=True)
@@ -561,7 +586,7 @@ class Orchestrator:
                     frep = await self.verifier.verify(
                         task=task_text, output=fres.text, contract=constraints,
                         executor_family=fm.family, evidence=fevidence)
-                    budget.add(frep.cost_usd)
+                    budget.add(frep.cost_usd, frep.tokens_in, frep.tokens_out)
                     log("verify", model=frep.verifier, cost_usd=frep.cost_usd,
                         tokens_in=frep.tokens_in, tokens_out=frep.tokens_out,
                         score=frep.score, passed=frep.passed,
@@ -619,10 +644,59 @@ class Orchestrator:
         self.trace.record_exchange(session, task_id, "client_request", None, body)
         log("agent_turn", model=chain[0].name, task_preview=task_text[:200],
             n_messages=len(messages))
+
+        def finish(data: dict, *, response_model: str | None = None,
+                   score: float | None = None,
+                   fm_events: list[str] | None = None,
+                   escalated: str = "") -> dict:
+            """Persist every final agent response through one exit path.
+
+            Tool-call responses are deliberately excluded: they are mid-loop
+            exchanges, not completed conversation turns.  Final text, paused,
+            budget-stopped, and verification-unavailable responses all land in
+            both the exchange ledger and cross-turn history.
+            """
+            msg = (data.get("choices", [{}])[0].get("message") or {})
+            text = msg.get("content") or ""
+            log("agent_end", score=score, answer_preview=text[:150],
+                escalated=escalated)
+            self.trace.record_exchange(
+                session, task_id, "client_response", response_model, data
+            )
+            self.history.record_turn(
+                session, task_text, text, score, fm_events or [], len(messages)
+            )
+            return data
+
+        upstream_calls = 0
+
+        def paused(boundary: str, *, model: str | None = None,
+                   suppressed_tool_calls: int = 0) -> dict:
+            log("pause_stop", model=model, boundary=boundary,
+                suppressed_tool_calls=suppressed_tool_calls)
+            notice = PAUSED_NOTICE if upstream_calls == 0 else PAUSED_BOUNDARY_NOTICE
+            return finish(
+                _agent_text_completion(notice, body.get("model") or "super"),
+                escalated="supervisor paused",
+            )
+
+        # The proxy enforces this before entering the orchestrator.  Keep the
+        # same boundary here for direct callers and for a pause that races with
+        # request dispatch.
+        if self.control.paused:
+            return paused("before_upstream")
+
         feedback = ""
         best_data: dict | None = None
         best_score = -1.0
+        best_events: list[str] = []
+        best_model: str | None = None
+        last_data: dict | None = None
+        last_events: list[str] = []
+        last_model: str | None = None
         for attempt in range(2):  # initial + one verified repair
+            if self.control.paused:
+                return paused("before_attempt")
             req = dict(body)
             if feedback:
                 req["messages"] = list(messages) + [{
@@ -633,7 +707,10 @@ class Orchestrator:
                 }]
             data = None
             for m in chain:
+                if self.control.paused:
+                    return paused("before_fallback", model=m.name)
                 try:
+                    upstream_calls += 1
                     data = await self.client.raw_chat(m, req)
                     model = m
                     break
@@ -644,8 +721,22 @@ class Orchestrator:
             usage = data.get("usage") or {}
             cost = model.cost(usage.get("prompt_tokens", 0),
                               usage.get("completion_tokens", 0))
-            budget.add(cost)
+            budget.add(
+                cost,
+                usage.get("prompt_tokens", 0),
+                usage.get("completion_tokens", 0),
+            )
             msg = (data["choices"][0].get("message") or {})
+            last_data, last_model = data, model.name
+
+            # Best-effort in-flight pause: the upstream generation may already
+            # have been billed, but a newly proposed client-side tool action is
+            # not released after the next guaranteed graph boundary.
+            if self.control.paused:
+                return paused(
+                    "after_upstream", model=model.name,
+                    suppressed_tool_calls=len(msg.get("tool_calls") or []),
+                )
             if msg.get("tool_calls"):
                 log("tool_step", model=model.name, cost_usd=cost,
                     tokens_in=usage.get("prompt_tokens", 0),
@@ -661,11 +752,20 @@ class Orchestrator:
                 tokens_out=usage.get("completion_tokens", 0),
                 attempt=attempt + 1, agentic=True)
             events = run_monitors(text, task_text)
+            event_ids = sorted({ev.fm_id for ev in events})
+            last_events = event_ids
             for ev in events:
                 log("fm_event", model=model.name, fm_id=ev.fm_id,
                     confidence=ev.confidence, evidence=ev.evidence)
             if budget.exhausted:
-                return best_data or data
+                return finish(
+                    best_data or data,
+                    response_model=best_model or model.name,
+                    score=best_score if best_data is not None else None,
+                    fm_events=best_events if best_data is not None else event_ids,
+                    escalated=(f"budget exhausted (${budget.spent:.3f} of "
+                               f"${budget.cap:.2f})"),
+                )
             try:
                 report = await self.verifier.verify(
                     task=task_text, output=text, contract=[],
@@ -673,8 +773,14 @@ class Orchestrator:
                     evidence=_tool_transcript(req.get("messages", messages)))
             except Exception as e:
                 log("verify_error", error=str(e)[:300])
-                return best_data or data
-            budget.add(report.cost_usd)
+                return finish(
+                    best_data or data,
+                    response_model=best_model or model.name,
+                    score=best_score if best_data is not None else None,
+                    fm_events=best_events if best_data is not None else event_ids,
+                    escalated="verification unavailable",
+                )
+            budget.add(report.cost_usd, report.tokens_in, report.tokens_out)
             log("verify", model=report.verifier, cost_usd=report.cost_usd,
                 tokens_in=report.tokens_in, tokens_out=report.tokens_out,
                 score=report.score, passed=report.passed,
@@ -682,23 +788,24 @@ class Orchestrator:
                 scale=self.cfg.supervision.score_scale, stage="agentic-final")
             if report.score > best_score:
                 best_data, best_score = data, report.score
+                best_events, best_model = event_ids, model.name
             if report.passed and not events:
-                log("agent_end", score=report.score, answer_preview=text[:150])
-                self.trace.record_exchange(session, task_id, "client_response",
-                                           model.name, data)
-                return data
+                return finish(data, response_model=model.name,
+                              score=report.score, fm_events=event_ids)
             parts = [ev.feedback for ev in events]
             if not report.passed:
                 parts.append(report.feedback)
             feedback = " ".join(p for p in parts if p)
-        final = best_data if best_data is not None else data
-        log("agent_end", score=best_score if best_score >= 0 else None,
-            answer_preview=((final["choices"][0].get("message") or {})
-                            .get("content") or "")[:150],
+        final = best_data if best_data is not None else last_data
+        assert final is not None  # data=None raises above; narrows the type here
+        return finish(
+            final,
+            response_model=best_model or last_model,
+            score=best_score if best_score >= 0 else None,
+            fm_events=best_events if best_data is not None else last_events,
             escalated=("best attempt below quality bar"
-                       if best_score < sup.pass_threshold else ""))
-        self.trace.record_exchange(session, task_id, "client_response", None, final)
-        return final
+                       if best_score < sup.pass_threshold else ""),
+        )
 
     # ---------- full turn ----------
 
@@ -738,7 +845,7 @@ class Orchestrator:
             constraints, difficulty, cres = await contract_mod.extract(
                 self.client, self.cfg, task_text)
             if cres:
-                budget.add(cres.cost_usd)
+                budget.add(cres.cost_usd, cres.tokens_in, cres.tokens_out)
                 log("contract", model=self.cfg.utility, cost_usd=cres.cost_usd,
                     tokens_in=cres.tokens_in, tokens_out=cres.tokens_out,
                     constraints=constraints, difficulty=difficulty)
@@ -789,11 +896,13 @@ class Orchestrator:
             ):
                 units, pres = await planner.plan(self.client, self.cfg, task_text)
                 if pres:
-                    budget.add(pres.cost_usd)
+                    budget.add(pres.cost_usd, pres.tokens_in, pres.tokens_out)
                 log("plan", model=self.cfg.utility,
                     units=[u.description for u in units],
                     deps=[u.depends_on for u in units],
-                    cost_usd=pres.cost_usd if pres else 0)
+                    cost_usd=pres.cost_usd if pres else 0,
+                    tokens_in=pres.tokens_in if pres else 0,
+                    tokens_out=pres.tokens_out if pres else 0)
 
         if not units:
             if self.control.multi_mode():
@@ -810,11 +919,13 @@ class Orchestrator:
             if unit.decompose:
                 units, pres = await planner.plan(self.client, self.cfg, task_text)
                 if pres:
-                    budget.add(pres.cost_usd)
+                    budget.add(pres.cost_usd, pres.tokens_in, pres.tokens_out)
                 log("plan", model=self.cfg.utility,
                     units=[u.description for u in units],
                     deps=[u.depends_on for u in units],
                     cost_usd=pres.cost_usd if pres else 0,
+                    tokens_in=pres.tokens_in if pres else 0,
+                    tokens_out=pres.tokens_out if pres else 0,
                     trigger="referee_decompose")
                 if not units:
                     unit.escalated = ("referee requested decomposition but "
@@ -837,6 +948,7 @@ class Orchestrator:
                     text=unit.text, task_id=task_id, executor=unit.executor or executor_name,
                     attempts=unit.attempts, verify=unit.verify,
                     fm_events=unit.fm_events, cost_usd=budget.spent,
+                    tokens_in=budget.tokens_in, tokens_out=budget.tokens_out,
                     escalated=unit.escalated, session_notes=session_notes,
                 )
 
@@ -952,7 +1064,7 @@ class Orchestrator:
                 if not executed:
                     break
                 res, m = executed
-                budget.add(res.cost_usd)
+                budget.add(res.cost_usd, res.tokens_in, res.tokens_out)
                 log("synthesis", model=m.name, cost_usd=res.cost_usd,
                     tokens_in=res.tokens_in, tokens_out=res.tokens_out,
                     attempt=attempt + 1)
@@ -965,7 +1077,7 @@ class Orchestrator:
                     log("verify_error", error=str(e)[:300])
                     final_text = res.text
                     break
-                budget.add(report.cost_usd)
+                budget.add(report.cost_usd, report.tokens_in, report.tokens_out)
                 log("verify", model=report.verifier, cost_usd=report.cost_usd,
                     tokens_in=report.tokens_in, tokens_out=report.tokens_out,
                     score=report.score, passed=report.passed,
@@ -1002,6 +1114,7 @@ class Orchestrator:
             text=final_text, task_id=task_id, executor=executor_name,
             attempts=total_attempts, verify=best,
             fm_events=sorted(set(all_fm)), cost_usd=budget.spent + prior_spent,
+            tokens_in=budget.tokens_in, tokens_out=budget.tokens_out,
             escalated=escalated, units=len(results), session_notes=session_notes,
         )
 

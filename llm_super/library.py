@@ -193,6 +193,19 @@ class Library:
 
     # ---- sessions ----
 
+    def has_session(self, session: str) -> bool:
+        """Whether a conversation has been accepted before.
+
+        Unlike the process-local new-session gate set, this survives a proxy
+        restart.  Agentic conversations may have many persisted exchanges but
+        no rows in ``History.turns`` until they produce a final text answer,
+        so the sessions table is the durable knownness source.
+        """
+        row = self._conn.execute(
+            "SELECT 1 FROM sessions WHERE session=? LIMIT 1", (session,)
+        ).fetchone()
+        return row is not None
+
     def touch_session(self, session: str, title: str) -> None:
         cur = self._conn.execute("SELECT session FROM sessions WHERE session=?", (session,))
         now = time.time()
