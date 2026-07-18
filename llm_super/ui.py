@@ -1047,7 +1047,12 @@ function renderGraph(events) {
     svg.innerHTML = `<g class="gedges"></g><g class="gnodes"></g>`;
     box.appendChild(svg);
   }
-  svg.setAttribute("width", w); svg.setAttribute("height", h);
+  // Fit-to-width: the graph scales down to the panel instead of forcing a
+  // horizontal scroll; small graphs stay at natural size (maxWidth).
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  svg.style.width = "100%";
+  svg.style.maxWidth = w + "px";
+  svg.style.height = "auto";
 
   const byId = new Map(model.nodes.map(n => [n.id, n]));
   const eg = svg.querySelector(".gedges");
@@ -1665,8 +1670,20 @@ async function refresh() {
       ? await fetch(`/admin/edits?session=${encodeURIComponent(sel.session)}`)
           .then(r => r.json())
       : []);
+    // Scroll anchoring: live growth above the viewport (graph rows, new
+    // timeline events) must not shove what the user is reading. Anchor on
+    // the section nearest the viewport top (section shells are stable
+    // across re-renders) and compensate any height delta afterwards.
+    const anchor = [...document.querySelectorAll("main section, .layout")]
+      .filter(el => el.getBoundingClientRect().top <= 120)
+      .pop();
+    const anchorTop = anchor ? anchor.getBoundingClientRect().top : null;
     renderTasks(evs);
     renderGraph(evs);
+    if (anchor && anchorTop !== null) {
+      const delta = anchor.getBoundingClientRect().top - anchorTop;
+      if (Math.abs(delta) > 1) window.scrollBy(0, delta);
+    }
     renderStats(stats);
     renderEfficiency(eff);
     renderBalance(bal);
