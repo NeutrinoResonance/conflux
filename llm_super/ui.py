@@ -121,8 +121,17 @@ details.turn[open] > summary::before { content: "▾"; }
 .gcost { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); }
 .tl { border-top: 1px solid var(--grid); padding: 10px 14px 12px; }
 .node.sub { margin-left: 26px; }
-.iopre { white-space: pre-wrap; font-size: 11.5px; margin: 6px 0 0;
-  max-height: 300px; overflow-y: auto; color: var(--ink-2); }
+/* provenance convention: every expansion block is labeled. Model-generated
+   text gets the accent border + tint; system-computed data gets the plain
+   border. They must never be confusable. */
+.payload .cap { font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--muted); margin: 8px 0 3px; font-family: inherit; }
+.payload .cap.mdl { color: var(--seq); }
+.payload pre.blk { margin: 0; white-space: pre-wrap; font-size: 11.5px;
+  max-height: 280px; overflow-y: auto; font-family: ui-monospace, monospace; }
+.payload pre.blk.mdl { border-left: 3px solid var(--seq); padding-left: 8px; }
+.payload pre.blk.sys { border-left: 3px solid var(--grid); padding-left: 8px;
+  color: var(--ink-2); }
 .node, details.node { position: relative; margin-left: 8px; padding: 3px 0 3px 20px;
   border-left: 2px solid var(--grid); font-size: 12.5px; color: var(--ink-2); }
 .node::before, details.node::before { content: ""; position: absolute; left: -5px;
@@ -517,13 +526,23 @@ function node(nid, cls, ts, html, body) {
     <div class="payload">${body}</div></details>`;
 }
 
+// Provenance-labeled expansion blocks: model text vs system-computed data
+// must never be confusable (accent border + MODEL caption vs plain SYSTEM).
+function mdlBlk(label, text) {
+  return `<div class="cap mdl">🤖 ${label}</div><pre class="blk mdl">${text}</pre>`;
+}
+function sysBlk(label, text) {
+  return `<div class="cap">⚙ ${label} — computed by llm-super</div><pre class="blk sys">${text}</pre>`;
+}
+
 // The verifier's score math, from the criteria_detail logged per verify:
 // per criterion the letter distribution at the <score> position, its
 // expectation, then the combination formula (SPEC §6 / arXiv:2607.05391).
 function scoreMath(d) {
   if (!d.criteria_detail || !d.criteria_detail.length)
     return d.criteria
-      ? Object.entries(d.criteria).map(([k, v]) => `${k}: ${v}`).join("\n")
+      ? sysBlk("per-criterion expected scores",
+               Object.entries(d.criteria).map(([k, v]) => `${k}: ${v}`).join("\n"))
       : null;
   const scale = d.scale || 20;
   const rows = d.criteria_detail.map(c => {
@@ -539,20 +558,21 @@ function scoreMath(d) {
   rows.push("");
   rows.push(`score = (mean(E) − 1) / (scale − 1) = (${mean.toFixed(2)} − 1) / ${scale - 1}`
     + ` = ${((mean - 1) / (scale - 1)).toFixed(4)}`);
-  rows.push(`E = Σ letter·P(letter), read from the top-5 logprobs at the <score> tag`
+  rows.push(`E = Σ letter·P(letter), read from the top-5 logprobs at the &lt;score&gt; tag`
     + ` (A=1 … ${String.fromCharCode(64 + scale)}=${scale}; digits would tokenize`
     + ` into multiple tokens and corrupt the read)`);
-  return rows.join("\n");
+  return sysBlk("score math (from the verifier's logged logprobs)", rows.join("\n"));
 }
 
 // Inline output loading: find the upstream payload matching a timeline node
 // (nth non-reviewer call to that model) and show the response text in place.
 const outCache = new Map();
+const ioLoaded = new Map();   // elId -> rendered html; survives re-renders
 async function loadOut(ev, task, model, nth, kind, elId) {
   ev.preventDefault(); ev.stopPropagation();
   const el = document.getElementById(elId);
   if (!el) return;
-  el.textContent = "loading…";
+  el.innerHTML = "loading…";
   if (!outCache.has(task))
     outCache.set(task, await fetch(`/admin/messages?task=${encodeURIComponent(task)}&n=300`)
       .then(r => r.json()).catch(() => []));
@@ -560,16 +580,26 @@ async function loadOut(ev, task, model, nth, kind, elId) {
     .filter(r => r.kind === "upstream" && r.model === model)
     .sort((a, b) => (a.ts || 0) - (b.ts || 0))
     .map(r => r.payload || {});
-  const last = p => JSON.stringify((((p.request || {}).messages) || []).slice(-1));
-  const isReview = p => last(p).includes("expert reviewer verifying");
-  const isMerge = p => last(p).includes("independent solutions to the same task")
-    || last(p).includes("Assemble them into one");
+  const lastMsg = p => (((p.request || {}).messages) || []).slice(-1)[0] || {};
+  const lastTxt = p => { const c = lastMsg(p).content; return typeof c === "string" ? c : JSON.stringify(c); };
+  const isReview = p => (lastTxt(p) || "").includes("expert reviewer verifying");
+  const isMerge = p => (lastTxt(p) || "").includes("independent solutions to the same task")
+    || (lastTxt(p) || "").includes("Assemble them into one");
   let pool = rows.filter(p => !isReview(p));
   pool = kind === "synthesis" ? pool.filter(isMerge) : pool.filter(p => !isMerge(p));
   const p = pool[nth] ?? pool[pool.length - 1];
-  let txt = "(no recorded payload — pruned by retention, or a different server wrote it)";
-  if (p) { try { txt = p.response.choices[0].message.content || "(empty answer)"; } catch (e) {} }
-  el.textContent = txt.slice(0, 6000);
+  let html;
+  if (!p) {
+    html = sysBlk("payload lookup", "no recorded payload — pruned by retention, or a different server instance wrote it");
+  } else {
+    let outTxt = "(empty answer)";
+    try { outTxt = p.response.choices[0].message.content || "(empty answer)"; } catch (e) {}
+    html = mdlBlk(`input — prompt sent to ${esc(model)} (assembled by llm-super; may embed task, feedback, or candidate texts)`,
+                  esc(lastTxt(p).slice(0, 4000)))
+         + mdlBlk(`output — ${esc(model)}'s response, verbatim`, esc(outTxt.slice(0, 6000)));
+  }
+  ioLoaded.set(elId, html);
+  el.innerHTML = html;
 }
 
 // Translate a trace event into a human-readable timeline node.
@@ -584,24 +614,24 @@ function nodeFor(task, e, idx) {
     case "turn_start":  return node(nid, "", e.ts, `goal started —${model} routing=${esc(d.routed||"static")}`);
     case "agent_turn":  return node(nid, "", e.ts, `agent goal started —${model} (${d.n_messages||"?"} msgs in conversation)`);
     case "contract":    return node(nid, "", e.ts, `☑ checklist extracted — <b>${(d.constraints||[]).length} constraints</b>${cost}`,
-                                    (d.constraints||[]).map(c => "• " + esc(c)).join("\n") || null);
+                                    (d.constraints||[]).length ? mdlBlk("checklist extracted by the utility model", (d.constraints||[]).map(c => "• " + esc(c)).join("\n")) : null);
     case "contract_skipped": return node(nid, "", e.ts, "☑ checklist skipped (user setting)");
     case "contract_failed":  return node(nid, "err", e.ts, "☑ checklist extraction failed (provider) — continuing without");
     case "plan":        return node(nid, "", e.ts, `⧉ plan — <b>${(d.units||[]).length ? (d.units||[]).length + " units" : "single pass"}</b>${cost}`,
-                                    (d.units||[]).map((u,i) => `${i+1}. ${esc(u)}`).join("\n") || null);
+                                    (d.units||[]).length ? mdlBlk("decomposition proposed by the planner model", (d.units||[]).map((u,i) => `${i+1}. ${esc(u)}`).join("\n")) : null);
     case "resume":      return node(nid, "ok", e.ts, `↻ resumed from checkpoint — units done: ${(d.completed||[]).map(x=>x+1).join(", ") || "none"} (prior spend $${(d.prior_spent||0).toFixed(4)})`);
     case "wave_start":  return node(nid, "", e.ts, `∥ wave ${d.wave} started — units ${(d.units||[]).join(", ")} in parallel`);
     case "execute":     return node(nid, "", e.ts, `⚙ attempt ${d.attempt||1} —${model}${toks}${cost}`,
-                                    `<button class="msgbtn" onclick="loadOut(event,'${esc(task)}','${esc(e.model||"")}',${d._nth||0},'execute','io_${nid.replace(/[^a-zA-Z0-9]/g,"_")}')">load model output</button><pre class="iopre" id="io_${nid.replace(/[^a-zA-Z0-9]/g,"_")}"></pre>`);
+                                    `<button class="msgbtn" onclick="loadOut(event,'${esc(task)}','${esc(e.model||"")}',${d._nth||0},'execute','io_${nid.replace(/[^a-zA-Z0-9]/g,"_")}')">load model output</button><div class="ioout" id="io_${nid.replace(/[^a-zA-Z0-9]/g,"_")}"></div>`);
     case "execute_code":return node(nid, d.ok ? "ok" : "err", e.ts,
                                     `⏵ sandbox ${d.ok ? "passed" : "FAILED"} — extracted code ran via ${esc(d.backend)} · exit ${d.exit_code} · ${d.duration_s}s${e.model ? " · " + esc(e.model) + "'s answer" : ""}`,
-                                    [d.stdout ? "stdout:\n" + esc(d.stdout) : null,
-                                     d.stderr ? "stderr:\n" + esc(d.stderr) : null,
-                                     "(the transcript above is handed to the verifier as execution evidence)"]
-                                      .filter(Boolean).join("\n\n"));
+                                    [d.stdout ? sysBlk("sandbox stdout (what the extracted code printed when run)", esc(d.stdout)) : null,
+                                     d.stderr ? sysBlk("sandbox stderr", esc(d.stderr)) : null,
+                                     `<div class="cap">handed to the verifier as execution evidence</div>`]
+                                      .filter(Boolean).join(""));
     case "fm_event":    return node(nid, "fm", e.ts,
                                     `⚠ <b>${esc(e.fm_id || d.fm_id)}</b>${d.scope === "session" ? " (cross-turn)" : ""} · confidence ${d.confidence ?? "?"}`,
-                                    esc(d.evidence || ""));
+                                    d.evidence ? sysBlk("monitor evidence (may quote model text)", esc(d.evidence)) : null);
     case "verify":      return node(nid, d.passed ? "ok" : "err", e.ts,
                                     `${d.passed ? "✓" : "✗"} verified by${model} — score <b>${(d.score ?? 0).toFixed(2)}</b>${d.tier && d.tier !== "standard" ? " · " + esc(d.tier) + " tier" : ""}${d.stage ? " ("+esc(d.stage)+")" : ""}${cost}`,
                                     scoreMath(d));
@@ -611,7 +641,7 @@ function nodeFor(task, e, idx) {
     case "budget_stop": return node(nid, "err", e.ts, `$ budget stop — $${(d.spent||0).toFixed(3)} of $${(d.budget||0).toFixed(2)}`);
     case "synthesis":   return node(nid, "", e.ts,
                                     `Σ merge/assembly call —${model}${toks}${cost} · candidate outputs (with reviewer scores) become the prompt; the result must out-score the best input to win`,
-                                    `<button class="msgbtn" onclick="loadOut(event,'${esc(task)}','${esc(e.model||"")}',${d._nth||0},'synthesis','io_${nid.replace(/[^a-zA-Z0-9]/g,"_")}')">load merged output</button><pre class="iopre" id="io_${nid.replace(/[^a-zA-Z0-9]/g,"_")}"></pre>`);
+                                    `<button class="msgbtn" onclick="loadOut(event,'${esc(task)}','${esc(e.model||"")}',${d._nth||0},'synthesis','io_${nid.replace(/[^a-zA-Z0-9]/g,"_")}')">load merged output</button><div class="ioout" id="io_${nid.replace(/[^a-zA-Z0-9]/g,"_")}"></div>`);
     case "ensemble_start": return node(nid, "", e.ts,
                                     `⑂ <b>${esc(d.mode||"ensemble")}</b> strategy — ${(d.models||[]).length} candidates in parallel: ${(d.models||[]).map(esc).join(", ")}${d.cutoff ? ` · short-circuit cutoff ${d.cutoff}` : ""} (indented events below belong to this fan-out)`);
     case "ensemble_candidate": return node(nid, "", e.ts,
@@ -621,20 +651,20 @@ function nodeFor(task, e, idx) {
                                     `⚡ short-circuit —${model} reached cutoff ${d.cutoff} · ${d.cancelled} pending candidate(s) cancelled`);
     case "ensemble_winner": return node(nid, "ok", e.ts,
                                     `★ fan-out winner — <b>${esc(d.model || e.model || "")}</b> · score ${(d.score ?? 0).toFixed(2)} (${esc(d.mode||"")})`,
-                                    d.candidates ? "candidate scoreboard:\n" + Object.entries(d.candidates).map(([m, sc]) => `  ${m}: ${sc}`).join("\n") : null);
+                                    d.candidates ? sysBlk("candidate scoreboard", Object.entries(d.candidates).map(([m, sc]) => `${m}: ${sc}`).join("\n")) : null);
     case "ensemble_fusion_rejected": return node(nid, "err", e.ts,
                                     `✂ merge rejected — scored ${(d.fusion_score ?? 0).toFixed(2)}, below best candidate ${(d.score ?? 0).toFixed(2)} — best candidate returned instead`);
     case "ensemble_degraded": return node(nid, "err", e.ts, `⑂ fan-out degraded to single supervised attempt — ${esc(d.reason||"")}`);
     case "referee":     return node(nid, d.strategy === "ask_user" ? "err" : "", e.ts,
                                     `↻ referee after failed attempt ${d.attempt} — decision: <b>${esc((d.strategy||"").replace(/_/g, " "))}</b>${d.target ? " → <b>" + esc(d.target) + "</b>" : ""} · ${d.source === "rule" ? "rule (free retries left)" : "LLM referee"}${cost}`,
-                                    esc(d.rationale || "") || null);
+                                    d.rationale ? mdlBlk("referee rationale (model-generated)", esc(d.rationale)) : null);
     case "gate":        return node(nid, "", e.ts, `🚪 new-conversation gate — warned, nothing spent`, esc(d.preview || "") || null);
     case "tool_step":   return node(nid, "", e.ts, `🔧 agent tool step —${model} · ${d.n_calls||1} call(s)${cost}`);
     case "unit_done":   return null; // rendered as the unit group summary
     case "turn_end": case "agent_end":
       return node(nid, d.escalated ? "err" : "ok", e.ts,
                   `${d.escalated ? "⛔" : "✓"} finished${d.score != null ? ` — score <b>${Number(d.score).toFixed(2)}</b>` : ""}${d.spent != null ? ` · spent $${d.spent.toFixed(4)}` : ""}`,
-                  d.answer_preview ? "→ " + esc(d.answer_preview) : null);
+                  d.answer_preview ? mdlBlk("answer preview (model output)", esc(d.answer_preview)) : null);
     default:            return node(nid, "", e.ts, esc(e.kind) + model + cost);
   }
 }
@@ -748,6 +778,11 @@ function renderTasks(events) {
   }
   $("#tasks").innerHTML = cards.join("") ||
     `<div class="card" style="color:var(--muted)">no supervised turns yet — point a client at /v1 with model "super"</div>`;
+  // restore inline model-output loads wiped by the re-render
+  for (const [elId, html] of ioLoaded) {
+    const el = document.getElementById(elId);
+    if (el) el.innerHTML = html;
+  }
   // restore message views wiped by the re-render
   for (const task of msgShown) {
     const el = document.getElementById("msg-" + task);
