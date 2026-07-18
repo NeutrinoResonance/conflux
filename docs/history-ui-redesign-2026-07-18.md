@@ -1,8 +1,48 @@
 # History UI redesign — evidence-backed specification (2026-07-18)
 
-Status: **proposal only**. This document does not change the running UI. It
-defines the smallest architecture that makes long agent histories readable,
-auditable, and performant.
+Status: **first implementation slice completed 2026-07-18**. The running
+server now provides the separate `/history` view, read-only scoped history
+endpoints, the exact eight-session NetBSD endeavor fixture, server-side
+poll/warning folding, cursor pagination, transcript-delta metadata, and a
+single on-demand raw dialog. Existing trace storage was intentionally left
+unchanged: durable endeavor tables, capture-time identities, full-text search,
+and the later analytics/schema phases below remain proposed work.
+
+Implementation validation used the live NetBSD database, the full unit suite,
+Chrome DevTools MCP accessibility snapshots, desktop and narrow screenshots,
+keyboard interaction, raw-drilldown checks, console/network inspection, and a
+performance trace. The initial browser pass found and fixed an Evidence-tab
+pagination omission. Adversarial API checks then found and fixed filter-unsafe
+cursors and out-of-range SQLite IDs. A separate implementation review found
+and drove fixes for false-success terminal classification, unsafe fallback
+titles/warning text, partial-fixture acceptance, error taxonomy, traceability,
+and stale browser responses. The final pre-commit audit also found and fixed
+three boundary bugs: raw payload text surviving dialog close/browser caching,
+an unescaped database-derived timeline label, and tool-result association by
+globally reused provider call ID instead of `(session, call ID)`. The last bug
+now has a two-recovery-session collision regression test.
+
+Progressive detail rendering reduced the observed unthrottled desktop LCP from
+2,957 ms to 1,319 ms on the same local NetBSD history route; observed CLS was
+0.00. The expensive legacy timeline projection remains asynchronous and does
+not block the first useful endeavor detail paint.
+
+Known remaining limitations are recorded rather than hidden:
+
+- timeline derivation still reparses legacy exchange payloads for every page
+  (about 0.8 seconds alone and about 3.9 seconds for four concurrent NetBSD
+  projections in this snapshot); progressive rendering keeps that work out of
+  the initial detail-paint waterfall, but capture-time projections or a
+  per-request parsed-payload map remain future performance work;
+- Analytics and Settings still link to anchored sections on the Live page;
+- History refresh is manual; incremental live updates are not implemented;
+- the migrated NetBSD fixture includes typed artifact sizes, hashes, and build/
+  guest markers, but generic runs do not yet capture those evidence records
+  automatically;
+- the compatibility layer has exact/manual grouping plus conservative
+  one-session fallback, not durable endeavor/phase/step tables or FTS; and
+- raw admin endpoints rely on the server's loopback-only deployment boundary;
+  authentication is still required before exposing them on another interface.
 
 Companion evidence:
 
@@ -726,4 +766,3 @@ The most valuable reviewable slice is:
 That slice directly removes the nausea-inducing behavior while preserving a
 clear path to the durable schema. It should land before visual polishing or
 new analytics widgets.
-

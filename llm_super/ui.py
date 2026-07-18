@@ -68,6 +68,11 @@ body {
 main { max-width: 1560px; margin: 0 auto; padding: 20px 20px 60px; }
 h1 { font-size: 18px; margin: 0 0 2px; }
 .sub { color: var(--muted); font-size: 12px; margin-bottom: 16px; }
+.topnav { display: flex; gap: 4px; margin: 8px 0 14px; }
+.topnav a { color: var(--ink-2); text-decoration: none; font-size: 12px;
+  padding: 4px 9px; border-radius: 6px; }
+.topnav a:hover { background: var(--grid); color: var(--ink); }
+.topnav a[aria-current="page"] { color: var(--seq); background: color-mix(in srgb, var(--seq) 12%, transparent); }
 section { margin-top: 22px; }
 h2 { font-size: 13px; color: var(--ink-2); text-transform: uppercase;
      letter-spacing: .04em; margin: 0 0 8px; }
@@ -313,7 +318,13 @@ tr:last-child td { border-bottom: none; }
 <body>
 <main>
   <h1>llm-super</h1>
-  <div class="sub">control plane — <span id="clock">…</span> · auto-refresh 2s</div>
+  <div class="sub">live control plane — <span id="clock">…</span> · auto-refresh 2s</div>
+  <nav class="topnav" aria-label="Primary">
+    <a href="/" aria-current="page">Live</a>
+    <a href="/history">History</a>
+    <a href="#analytics-section">Analytics</a>
+    <a href="#settings-section">Settings</a>
+  </nav>
   <div class="paused-banner" id="pausedBanner">Supervision is paused — new turns will not execute until resumed.</div>
 
   <div class="tiles" id="tiles"></div>
@@ -412,7 +423,7 @@ tr:last-child td { border-bottom: none; }
     <div id="tasks"></div>
   </section>
 
-  <section>
+  <section id="settings-section">
     <h2>Extraction settings <span id="settingsScope" style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span></h2>
     <div id="settings"></div>
     <div class="exportbar" id="exportbar"></div>
@@ -424,7 +435,7 @@ tr:last-child td { border-bottom: none; }
     <div id="retention"></div>
   </section>
 
-  <section>
+  <section id="analytics-section">
     <h2>Model outcomes</h2>
     <div id="stats"></div>
   </section>

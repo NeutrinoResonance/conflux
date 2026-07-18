@@ -15,10 +15,10 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
-from . import ui
+from . import history_ui, ui
 
 from . import balance as balance_mod
 from . import export as export_mod
@@ -28,6 +28,7 @@ from .checkpoint import Checkpoints
 from .config import load
 from .control import PAUSED_NOTICE, ControlState, gate_warning, handle
 from .history import History
+from .history_view import HistoryView
 from .library import DEFAULT_SETTINGS, Library
 from .orchestrator import Orchestrator, _last_user_text
 from .providers import Client, ProviderError  # noqa: F401 (ProviderError used below)
@@ -410,6 +411,89 @@ async def models():
 @app.get("/", include_in_schema=False)
 async def dashboard():
     return HTMLResponse(ui.PAGE)
+
+
+@app.get("/history", include_in_schema=False)
+async def history_dashboard():
+    """Low-noise, endeavor-oriented history UI."""
+    return HTMLResponse(history_ui.PAGE)
+
+
+async def _history_query(method: str, *args, **kwargs):
+    """Run one scoped projection against a short-lived read-only connection.
+
+    The rest of the proxy owns several long-lived SQLite handles. History is
+    intentionally isolated from them: no migration, no shared connection
+    across worker threads, and no cumulative raw payloads unless the caller
+    selects ``raw_exchange`` explicitly.
+    """
+    trace_path = state.get("trace_path", "traces.db")
+
+    def query():
+        with HistoryView(trace_path) as view:
+            return getattr(view, method)(*args, **kwargs)
+
+    try:
+        return await asyncio.to_thread(query)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="history item not found") from exc
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail="history database unavailable") from exc
+
+
+@app.get("/admin/history/endeavors")
+async def admin_history_endeavors(
+    project: str | None = None,
+    status: str | None = None,
+    q: str | None = None,
+    cursor: str | None = None,
+    limit: int = 50,
+):
+    return await _history_query(
+        "list_endeavors", project_id=project, status=status, query=q,
+        cursor=cursor, limit=limit,
+    )
+
+
+@app.get("/admin/history/endeavors/{endeavor_id}")
+async def admin_history_endeavor(endeavor_id: str):
+    return await _history_query("get_endeavor", endeavor_id)
+
+
+@app.get("/admin/history/endeavors/{endeavor_id}/runs")
+async def admin_history_runs(
+    endeavor_id: str, cursor: str | None = None, limit: int = 50,
+):
+    return await _history_query(
+        "list_runs", endeavor_id, cursor=cursor, limit=limit,
+    )
+
+
+@app.get("/admin/history/endeavors/{endeavor_id}/timeline")
+async def admin_history_timeline(
+    endeavor_id: str,
+    routine: str = "collapse",
+    cursor: str | None = None,
+    limit: int = 50,
+):
+    if routine not in {"collapse", "all"}:
+        raise HTTPException(
+            status_code=400, detail="routine must be 'collapse' or 'all'"
+        )
+    return await _history_query(
+        "timeline", endeavor_id, cursor=cursor, limit=limit,
+        collapse_polling=routine == "collapse",
+    )
+
+
+@app.get("/admin/history/exchanges/{exchange_id}/raw")
+async def admin_history_raw_exchange(exchange_id: int, response: Response):
+    """Explicit, one-row raw drill-down; summary endpoints never call this."""
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    return await _history_query("raw_exchange", exchange_id)
 
 
 @app.get("/admin/status")
