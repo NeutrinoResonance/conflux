@@ -12,6 +12,7 @@ from llm_super.history_view import (
     HistoryView,
     NETBSD_ARM64_ENDEAVOR,
 )
+from llm_super.message_summaries import PROMPT_VERSION, index_sources
 
 
 def _response(*, finish: str = "stop", call_id: str | None = None,
@@ -129,6 +130,25 @@ class HistoryViewTest(unittest.TestCase):
             groupings=groupings,
             include_documented_fixtures=fixture,
         )
+
+    def add_summary(self, exchange_id: int, pointer: str, headline: str,
+                    summary: str) -> None:
+        row = self.conn.execute(
+            "SELECT input_sha256, role FROM message_summary_sources "
+            "WHERE exchange_id=? AND json_pointer=?",
+            (exchange_id, pointer),
+        ).fetchone()
+        self.assertIsNotNone(row)
+        self.conn.execute(
+            """INSERT OR REPLACE INTO message_summaries
+                 (input_sha256,prompt_version,role,headline,summary,generator,
+                  model,source_chars,created_ts)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (row[0], PROMPT_VERSION, row[1], headline, summary, "claude-cli",
+             "claude-sonnet-test", 10, self.now),
+        )
+        self.now += 1
+        self.conn.commit()
 
     def test_explicit_grouping_safe_fallback_alias_and_cursor_pagination(self) -> None:
         for index in range(5):
@@ -334,6 +354,91 @@ class HistoryViewTest(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, encoded)
         self.assertLess(len(encoded), 10_000)
+
+    def test_generated_summaries_supply_context_decisions_and_tool_results(self) -> None:
+        self.session("summarized")
+        first_response = _response(
+            finish="tool_calls", call_id="compile-1", command="make release"
+        )
+        self.event("summarized", "one", "agent_turn")
+        self.event("summarized", "one", "tool_step")
+        self.task_exchanges(
+            "summarized", "one",
+            {"messages": [{"role": "user", "content": "RAW_BUILD_REQUEST"}]},
+            first_response,
+        )
+        second_messages = [
+            {"role": "user", "content": "RAW_BUILD_REQUEST"},
+            first_response["choices"][0]["message"],
+            {"role": "tool", "tool_call_id": "compile-1", "content": json.dumps({
+                "exit_code": 0, "stdout": "RAW_BUILD_OUTPUT",
+            })},
+        ]
+        self.event("summarized", "two", "agent_turn")
+        self.event("summarized", "two", "agent_end")
+        self.task_exchanges(
+            "summarized", "two", {"messages": second_messages}, _response()
+        )
+        index_sources(self.db)
+
+        client_requests = self.conn.execute(
+            "SELECT id,task FROM exchanges WHERE kind='client_request' ORDER BY id"
+        ).fetchall()
+        client_responses = self.conn.execute(
+            "SELECT id,task FROM exchanges WHERE kind='client_response' ORDER BY id"
+        ).fetchall()
+        request_ids = {task: identifier for identifier, task in client_requests}
+        response_ids = {task: identifier for identifier, task in client_responses}
+        self.add_summary(
+            request_ids["one"], "/messages/0", "Compile NetBSD",
+            "The user asks for a cross-architecture NetBSD build.",
+        )
+        request_hash, request_role = self.conn.execute(
+            "SELECT input_sha256,role FROM message_summary_sources "
+            "WHERE exchange_id=? AND json_pointer='/messages/0'",
+            (request_ids["one"],),
+        ).fetchone()
+        self.conn.execute(
+            "INSERT INTO message_summaries VALUES (?,?,?,?,?,?,?,?,?)",
+            (request_hash, "obsolete-prompt", request_role, "Stale context",
+             "This must not be selected.", "claude-cli", "old-model", 10,
+             self.now + 1_000),
+        )
+        self.conn.commit()
+        self.add_summary(
+            response_ids["one"], "/choices/0/message", "Start compilation",
+            "The agent launches the release build.",
+        )
+        self.add_summary(
+            request_ids["two"], "/messages/2", "Compilation succeeded",
+            "The build command completed with exit code zero.",
+        )
+        self.add_summary(
+            response_ids["two"], "/choices/0/message", "Build complete",
+            "The agent reports that the requested work is done.",
+        )
+
+        with self.view() as view:
+            detail = view.get_endeavor("session:summarized")
+            run = view.list_runs("session:summarized", limit=10)["items"][0]
+            timeline = view.timeline(
+                "session:summarized", collapse_polling=False, limit=10
+            )["items"]
+
+        self.assertEqual(detail["context_summary"]["headline"], "Compile NetBSD")
+        self.assertEqual(run["context_summary"]["headline"], "Compile NetBSD")
+        self.assertGreater(detail["message_summary_coverage"]["occurrences"], 4)
+        self.assertEqual(timeline[0]["message_delta"]["summaries"][0]["headline"],
+                         "Compile NetBSD")
+        self.assertEqual(timeline[0]["response_summary"]["headline"],
+                         "Start compilation")
+        self.assertEqual(timeline[0]["provider_summaries"], [])
+        self.assertEqual(timeline[0]["tool_calls"][0]["result_summary"]["headline"],
+                         "Compilation succeeded")
+        self.assertEqual(timeline[1]["response_summary"]["headline"], "Build complete")
+        encoded = json.dumps({"detail": detail, "run": run, "timeline": timeline})
+        self.assertNotIn("RAW_BUILD_REQUEST", encoded)
+        self.assertNotIn("RAW_BUILD_OUTPUT", encoded)
 
     def test_tool_results_are_scoped_to_their_recovery_session(self) -> None:
         for sid in ("alpha", "beta"):

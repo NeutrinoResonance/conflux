@@ -24,6 +24,7 @@ import gzip
 import json
 import lzma
 import os
+import sqlite3
 import subprocess
 import time
 from pathlib import Path
@@ -64,6 +65,11 @@ def build_bundle(trace, library, *, session: str | None = None,
             "turns": library_turns(trace, sid),
             "events": [e for e in trace.recent(100000) if e.get("session") == sid],
             "exchanges": exchanges,
+            # Generated prose is a derived index over immutable exchanges.
+            # Keep its occurrence pointers in exports so a restored bundle can
+            # retain the readable history view without re-sending content to a
+            # summarizer.  Older databases simply produce an empty list.
+            "message_summaries": library_message_summaries(trace, sid),
         })
     return {
         "schema": "llm-super/conversation-bundle@1",
@@ -79,7 +85,34 @@ def library_turns(trace, sid: str) -> list[dict]:
         return trace._conn.execute(  # history table lives in same db
             "SELECT turn_no, ts, task, response, score FROM turns WHERE session=? "
             "ORDER BY turn_no", (sid,)).fetchall()
-    except Exception:
+    except sqlite3.OperationalError:
+        return []
+
+
+def library_message_summaries(trace, sid: str) -> list[dict[str, Any]]:
+    """Return current generated summaries plus their exact source pointers.
+
+    Summary tables are deliberately optional: existing databases and exports
+    remain valid before the summary backfill has ever been run.
+    """
+    try:
+        cursor = trace._conn.execute(
+            """SELECT src.exchange_id, src.json_pointer, src.boundary,
+                      src.ordinal, src.task, src.role, src.tool_call_id,
+                      src.input_sha256, src.prompt_version, src.ts,
+                      summary.headline, summary.summary, summary.generator,
+                      summary.model, summary.source_chars, summary.created_ts
+                 FROM message_summary_sources AS src
+                 JOIN message_summaries AS summary
+                   ON summary.input_sha256=src.input_sha256
+                  AND summary.prompt_version=src.prompt_version
+                WHERE src.session=?
+                ORDER BY src.ts, src.exchange_id, src.ordinal""",
+            (sid,),
+        )
+        columns = [item[0] for item in cursor.description]
+        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+    except sqlite3.OperationalError:
         return []
 
 

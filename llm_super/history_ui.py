@@ -184,6 +184,16 @@ h3 { font-size: 13px; }
   background: transparent;
   text-align: left;
 }
+.e-context {
+  display: -webkit-box;
+  margin-top: 5px;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  line-height: 1.35;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
 .endeavor:hover { background: var(--surface-2); }
 .endeavor.selected {
   background: var(--accent-soft);
@@ -284,6 +294,8 @@ h3 { font-size: 13px; }
 .run { padding: 10px 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px 12px; }
 .run-title { font-weight: 630; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .run-stats { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 5px 12px; }
+.run-context { grid-column: 1 / -1; }
+.summary-coverage { margin-top: 7px; }
 .timeline-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -310,6 +322,22 @@ h3 { font-size: 13px; }
   font-size: 10.5px;
 }
 .tool-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.summary-stack { display: grid; gap: 6px; margin-top: 9px; }
+.message-summary {
+  border-left: 3px solid var(--line-2);
+  padding: 4px 0 4px 9px;
+  color: var(--ink-2);
+}
+.message-summary .summary-head { color: var(--ink); font-weight: 640; }
+.message-summary .summary-role {
+  margin-right: 6px;
+  color: var(--accent);
+  font-size: 9.5px;
+  font-weight: 720;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.message-summary .summary-body { margin-top: 2px; font-size: 12px; }
 .warning-list { margin: 8px 0 0; padding: 0; list-style: none; }
 .warning-list li { color: var(--warn); font-size: 11.5px; margin-top: 3px; }
 .rawlinks { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 5px; }
@@ -550,6 +578,7 @@ function renderEndeavors() {
           ${item.session_count ?? item.run_count} runs · ${item.task_count} steps ·
           ${fmtDuration(item.duration_seconds)} · ${money(item.cost_usd)}
         </span>
+        ${compactContextHTML(item.context_summary)}
       </button>`).join("")
     : '<div class="empty">No endeavors match these filters.</div>';
   $("#endeavorMore").innerHTML = state.endeavorNext
@@ -682,6 +711,13 @@ function overviewHTML() {
       ${metric("Cost", money(d.cost_usd), (d.provider_errors || 0) + " provider errors · " +
         (errors.unrecovered || 0) + " open failures · " + (d.monitor_findings || 0) + " monitor findings")}
     </div>
+    ${d.context_summary ? `<section class="section">
+      <div class="section-head"><h2>What happened</h2></div>
+      <div class="callout">
+        ${summaryCardHTML(d.context_summary, "Objective")}
+        ${summaryCoverageHTML(d.message_summary_coverage)}
+      </div>
+    </section>` : ""}
     ${state.timelineLoading && !primary ? `<section class="section">
       <div class="callout skeleton"><strong>Summarizing timeline…</strong>
         <div class="meta">Folding routine polling and repeated warnings.</div></div>
@@ -712,6 +748,44 @@ function metric(key, value, sub) {
   return `<div class="metric"><div class="k">${esc(key)}</div><div class="v">${esc(value)}</div>
     <div class="s">${esc(sub || "")}</div></div>`;
 }
+function compactContextHTML(summary) {
+  if (!summary || typeof summary !== "object") return "";
+  const headline = String(summary.headline || "").trim();
+  const body = String(summary.summary || "").trim();
+  if (!headline && !body) return "";
+  return `<span class="e-context">${headline ? `<strong>${esc(headline)}</strong>` : ""}${
+    headline && body ? " — " : ""}${body ? esc(body) : ""}</span>`;
+}
+function summaryCardHTML(summary, label="") {
+  if (!summary || typeof summary !== "object") return "";
+  const headline = String(summary.headline || "").trim();
+  const body = String(summary.summary || "").trim();
+  if (!headline && !body) return "";
+  const tags = [label, summary.role].map(value => String(value || "").trim())
+    .filter((value, index, values) => value && values.indexOf(value) === index);
+  return `<div class="message-summary">
+    <div class="summary-head">${tags.length
+      ? `<span class="summary-role">${esc(tags.join(" · "))}</span>` : ""}${esc(headline || "Summary")}</div>
+    ${body && body !== headline ? `<div class="summary-body">${esc(body)}</div>` : ""}
+  </div>`;
+}
+function summaryStackHTML(entries) {
+  const cards = (entries || []).map(entry => {
+    const wrapped = entry && typeof entry.summary === "object";
+    return summaryCardHTML(wrapped ? entry.summary : entry, wrapped ? entry.label : "");
+  }).filter(Boolean);
+  return cards.length ? `<div class="summary-stack">${cards.join("")}</div>` : "";
+}
+function summaryCoverageHTML(coverage) {
+  if (!coverage || !Number(coverage.unique)) return "";
+  const summarized = Number(coverage.summarized || 0).toLocaleString();
+  const unique = Number(coverage.unique || 0).toLocaleString();
+  const occurrences = Number(coverage.occurrences || 0).toLocaleString();
+  const models = Array.isArray(coverage.models) ? coverage.models.filter(Boolean).join(", ") : "";
+  const text = `${summarized} of ${unique} distinct messages summarized` +
+    (models ? ` by ${models}` : "") + ` · ${occurrences} placements indexed`;
+  return `<div class="meta summary-coverage">${esc(text)}</div>`;
+}
 function runHTML(run) {
   return `<div class="run">
     <div class="run-title"><span class="mono">${esc(run.session_id)}</span> · ${esc(run.relationship)}</div>
@@ -722,6 +796,10 @@ function runHTML(run) {
       <span>${run.provider_errors || 0} provider errors</span>
       <span>${run.monitor_findings || 0} monitor findings</span>
     </div>
+    ${run.context_summary ? `<div class="run-context">
+      ${summaryCardHTML(run.context_summary, "Run context")}
+      ${summaryCoverageHTML(run.message_summary_coverage)}
+    </div>` : ""}
   </div>`;
 }
 function timelineHTML() {
@@ -764,6 +842,7 @@ function timelineItemHTML(item) {
         <div class="tool-list">${Object.entries(item.poll_categories || {}).map(
           ([name,count]) => `<span class="pill">${esc(name.replaceAll("_"," "))} ×${count}</span>`
         ).join("")}</div>
+        ${summaryStackHTML(pollSummaryEntries(item))}
         ${warningsHTML(item.warning_groups)}
         ${edgeIds.length ? rawLinks(edgeIds, sourceIds.length > 2
           ? "first/latest raw exchange" : "raw exchange") : ""}
@@ -785,10 +864,38 @@ function timelineItemHTML(item) {
         ${tools.map(tool => `<span class="pill">${esc(tool.name)} · ${tool.arguments_chars} argument chars
           ${tool.matched_result ? "" : " · missing result"}</span>`).join("")}
       </div>
+      ${summaryStackHTML(stepSummaryEntries(item))}
       ${warningsHTML(item.warning_groups)}
       ${rawLinks(item.source_exchange_ids, tools.length ? "exact command / exchange" : "raw exchange")}
     </div>${statusBadge(item.status)}</div>
   </div>`;
+}
+function stepSummaryEntries(item) {
+  const entries = [];
+  const delta = item.message_delta;
+  for (const summary of (Array.isArray(delta?.summaries) ? delta.summaries : [])) {
+    entries.push({summary, label: "Request message"});
+  }
+  if (item.response_summary) {
+    entries.push({summary: item.response_summary, label: "Agent response"});
+  }
+  for (const tool of (Array.isArray(item.tool_calls) ? item.tool_calls : [])) {
+    if (tool?.result_summary) {
+      entries.push({summary: tool.result_summary, label: `${tool.name || "Tool"} result`});
+    }
+  }
+  for (const [index, summary] of (Array.isArray(item.provider_summaries)
+    ? item.provider_summaries : []).entries()) {
+    entries.push({summary, label: `Provider attempt ${index + 1}`});
+  }
+  return entries;
+}
+function pollSummaryEntries(item) {
+  const samples = Array.isArray(item.summary_samples) ? item.summary_samples : [];
+  return samples.map((summary, index) => ({
+    summary,
+    label: samples.length === 1 ? "Poll summary" : (index === 0 ? "Opening poll" : "Closing poll"),
+  }));
 }
 function stepLabel(item) {
   const kinds = Object.keys(item.event_kinds || {});
@@ -814,6 +921,8 @@ function promptsHTML() {
         ${promptRuns.map(run => `<div class="prompt-card">
           <strong>${esc(run.relationship)}</strong> · <span class="mono">${esc(run.session_id)}</span>
           <div class="meta">${fmtTime(run.start_ts)} · exact payload stays folded</div>
+          ${summaryStackHTML(run.context_summary
+            ? [{summary: run.context_summary, label: "Prompt context"}] : [])}
           ${rawLinks(run.source_exchange_ids, "load exact prompt")}
         </div>`).join("") || '<p class="meta">No prompt sources on this page.</p>'}
       </section>
@@ -825,6 +934,7 @@ function promptsHTML() {
           <div class="meta mono">${esc(item.session_id)} / ${esc(item.task_id)}</div>
           <div class="meta">${(item.tool_calls || []).reduce((n,t) => n + t.arguments_chars, 0)}
             argument chars · exact command on demand</div>
+          ${summaryStackHTML(stepSummaryEntries(item))}
           ${rawLinks(item.source_exchange_ids?.slice(-1), "load exact command")}
         </div>`).join("") || `<p class="meta">${state.timelineLoading
           ? "Summarizing command sources…" : "No command sources on this page."}</p>`}

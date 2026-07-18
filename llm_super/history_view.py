@@ -260,6 +260,8 @@ class HistoryView:
                 if needle in r["title"].casefold()
                 or needle in r["id"].casefold()
                 or any(needle in sid.casefold() for sid in r["session_ids"])
+                or needle in str((r.get("context_summary") or {}).get("headline", "")).casefold()
+                or needle in str((r.get("context_summary") or {}).get("summary", "")).casefold()
             ]
         rows.sort(key=lambda r: (r["last_ts"], r["id"]), reverse=True)
         filter_scope = _hash_text(_canonical_json({
@@ -598,6 +600,111 @@ class HistoryView:
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)
         ).fetchone() is not None
 
+    def _summary_stats(self, sessions: Sequence[str]) -> dict[str, Any]:
+        """Return generated-summary coverage without touching raw payloads."""
+        if not (
+            self._table_exists("message_summaries")
+            and self._table_exists("message_summary_sources")
+        ):
+            return {
+                "occurrences": 0,
+                "unique": 0,
+                "summarized": 0,
+                "coverage": 0.0,
+                "models": [],
+            }
+        placeholders = ",".join("?" for _ in sessions)
+        row = self._conn.execute(
+            f"""SELECT COUNT(*) AS occurrences,
+                       COUNT(DISTINCT src.input_sha256) AS unique_messages,
+                       COUNT(DISTINCT CASE WHEN EXISTS (
+                         SELECT 1 FROM message_summaries AS summary
+                          WHERE summary.input_sha256=src.input_sha256
+                            AND summary.prompt_version=src.prompt_version
+                       ) THEN src.input_sha256 END) AS summarized
+                  FROM message_summary_sources AS src
+                 WHERE src.session IN ({placeholders})""",
+            tuple(sessions),
+        ).fetchone()
+        models = [
+            str(model)
+            for model, in self._conn.execute(
+                f"""SELECT DISTINCT summary.model
+                       FROM message_summaries AS summary
+                       JOIN message_summary_sources AS src
+                         ON src.input_sha256=summary.input_sha256
+                        AND src.prompt_version=summary.prompt_version
+                      WHERE src.session IN ({placeholders})
+                      ORDER BY summary.model""",
+                tuple(sessions),
+            )
+            if model
+        ]
+        unique = int(row["unique_messages"] or 0)
+        summarized = int(row["summarized"] or 0)
+        return {
+            "occurrences": int(row["occurrences"] or 0),
+            "unique": unique,
+            "summarized": summarized,
+            "coverage": round(summarized / unique, 6) if unique else 0.0,
+            "models": models,
+        }
+
+    def _representative_summary(
+        self, sessions: Sequence[str]
+    ) -> dict[str, Any] | None:
+        """Pick the earliest client user message as compact endeavor context."""
+        if not (
+            self._table_exists("message_summaries")
+            and self._table_exists("message_summary_sources")
+        ):
+            return None
+        placeholders = ",".join("?" for _ in sessions)
+        row = self._conn.execute(
+            f"""SELECT summary.role, summary.headline, summary.summary, summary.model,
+                       summary.prompt_version
+                  FROM message_summary_sources AS src
+                  JOIN message_summaries AS summary
+                    ON summary.input_sha256=src.input_sha256
+                   AND summary.prompt_version=src.prompt_version
+                 WHERE src.session IN ({placeholders})
+                   AND src.boundary='client_request' AND src.role='user'
+                 ORDER BY src.ts, src.exchange_id, src.ordinal,
+                          summary.created_ts DESC
+                 LIMIT 1""",
+            tuple(sessions),
+        ).fetchone()
+        return _summary_row(row) if row else None
+
+    def _summary_source_map(
+        self, exchange_rows: Sequence[sqlite3.Row]
+    ) -> dict[tuple[int, str], dict[str, Any]]:
+        """Map exact exchange JSON pointers to their latest prose summary."""
+        if not exchange_rows or not (
+            self._table_exists("message_summaries")
+            and self._table_exists("message_summary_sources")
+        ):
+            return {}
+        exchange_ids = sorted({int(row["id"]) for row in exchange_rows})
+        placeholders = ",".join("?" for _ in exchange_ids)
+        rows = self._conn.execute(
+            f"""SELECT src.exchange_id, src.json_pointer, src.boundary,
+                       summary.role, summary.headline, summary.summary,
+                       summary.model, summary.prompt_version, summary.created_ts
+                  FROM message_summary_sources AS src
+                  JOIN message_summaries AS summary
+                    ON summary.input_sha256=src.input_sha256
+                   AND summary.prompt_version=src.prompt_version
+                 WHERE src.exchange_id IN ({placeholders})
+                 ORDER BY src.exchange_id, src.ordinal, summary.created_ts DESC""",
+            tuple(exchange_ids),
+        )
+        result: dict[tuple[int, str], dict[str, Any]] = {}
+        for row in rows:
+            key = (int(row["exchange_id"]), str(row["json_pointer"]))
+            result.setdefault(key, _summary_row(row, boundary=row["boundary"]))
+        return result
+
     def _find_endeavor(self, endeavor_id: str) -> dict[str, Any]:
         for endeavor in self._resolved_endeavors():
             if endeavor["id"] == endeavor_id:
@@ -648,6 +755,8 @@ class HistoryView:
             "tool_steps": stats["tool_steps"],
             "provider_errors": stats["provider_errors"],
             "monitor_findings": stats["monitor_findings"],
+            "context_summary": self._representative_summary(endeavor["sessions"]),
+            "message_summary_coverage": self._summary_stats(endeavor["sessions"]),
             "errors": {
                 "total": error_count,
                 "recovered": recovered,
@@ -773,6 +882,8 @@ class HistoryView:
             "tool_steps": stats["tool_steps"],
             "provider_errors": stats["provider_errors"],
             "monitor_findings": stats["monitor_findings"],
+            "context_summary": self._representative_summary((session,)),
+            "message_summary_coverage": self._summary_stats((session,)),
             "source_exchange_ids": [int(first_request["id"])] if first_request else [],
             "errors": {
                 "total": error_count,
@@ -868,8 +979,12 @@ class HistoryView:
         for row in exchange_rows:
             exchanges_by_task[(row["session"], row["task"])].append(row)
 
-        delta_by_task = self._message_deltas(exchange_rows)
+        summary_sources = self._summary_source_map(exchange_rows)
+        delta_by_task = self._message_deltas(exchange_rows, summary_sources)
         result_by_call = self._tool_results(exchange_rows)
+        result_summary_by_call = self._tool_result_summaries(
+            exchange_rows, summary_sources
+        )
         keys = set(events_by_task) | set(exchanges_by_task)
 
         def first_ts(key: tuple[str, str]) -> tuple[float, str, str]:
@@ -881,7 +996,16 @@ class HistoryView:
             sid, task = key
             events = events_by_task[key]
             exchanges = exchanges_by_task[key]
-            response = _first_exchange_payload(exchanges, "client_response")
+            response_row = next(
+                (row for row in exchanges if row["kind"] == "client_response"),
+                None,
+            )
+            response = _json_object(response_row["payload"]) if response_row else {}
+            response_summary = None
+            if response_row is not None:
+                response_summary = summary_sources.get(
+                    (int(response_row["id"]), "/choices/0/message")
+                ) or summary_sources.get((int(response_row["id"]), "/text"))
             calls = _tool_calls(response)
             call_meta = []
             warning_counts: Counter[WarningKey] = Counter()
@@ -912,6 +1036,7 @@ class HistoryView:
                     "arguments_chars": call["arguments_chars"],
                     "arguments_sha256": call["arguments_sha256"],
                     "result": result_meta,
+                    "result_summary": result_summary_by_call.get((sid, call["id"])),
                     "poll_category": category,
                     "matched_result": result is not None,
                 })
@@ -981,6 +1106,10 @@ class HistoryView:
                 "routine_poll": routine,
                 "poll_categories": sorted(set(routine_categories)),
                 "message_delta": delta_by_task.get(key),
+                "response_summary": response_summary,
+                "provider_summaries": _provider_response_summaries(
+                    exchanges, summary_sources, exclude=response_summary
+                ),
                 "duplicate_boundaries": _duplicate_boundaries(exchanges),
                 "source_event_ids": [int(row["event_id"]) for row in events],
                 "source_exchange_ids": [int(row["id"]) for row in exchanges],
@@ -1060,8 +1189,11 @@ class HistoryView:
         return steps
 
     def _message_deltas(
-        self, exchange_rows: Sequence[sqlite3.Row]
+        self,
+        exchange_rows: Sequence[sqlite3.Row],
+        summary_sources: Mapping[tuple[int, str], Mapping[str, Any]] | None = None,
     ) -> dict[tuple[str, str], dict[str, Any]]:
+        summary_sources = summary_sources or {}
         by_session: dict[str, list[sqlite3.Row]] = defaultdict(list)
         for row in exchange_rows:
             if row["kind"] == "client_request":
@@ -1077,6 +1209,13 @@ class HistoryView:
                 messages = messages if isinstance(messages, list) else []
                 relation, prefix, removed = _prefix_relation(previous_messages, messages)
                 delta = messages[prefix:]
+                delta_summaries = []
+                for index in range(prefix, len(messages)):
+                    summary = summary_sources.get(
+                        (int(row["id"]), f"/messages/{index}")
+                    )
+                    if summary:
+                        delta_summaries.append(dict(summary))
                 system = [m for m in messages if isinstance(m, dict) and m.get("role") == "system"]
                 tools = payload.get("tools") if isinstance(payload.get("tools"), list) else []
                 system_hash = _hash_json(system) if system else None
@@ -1092,6 +1231,8 @@ class HistoryView:
                         if isinstance(message, dict) else "unknown"
                         for message in delta
                     ],
+                    "summaries": delta_summaries,
+                    "summarized_messages": len(delta_summaries),
                     "request_chars": len(row["payload"]),
                     "messages_sha256": _hash_json(messages),
                     "system_prompt_sha256": system_hash,
@@ -1127,6 +1268,32 @@ class HistoryView:
                 key = (row["session"], str(call_id))
                 if call_id and key not in results:
                     results[key] = message.get("content")
+        return results
+
+    @staticmethod
+    def _tool_result_summaries(
+        exchange_rows: Sequence[sqlite3.Row],
+        summary_sources: Mapping[tuple[int, str], Mapping[str, Any]],
+    ) -> dict[tuple[str, str], dict[str, Any]]:
+        """Pair a summarized tool result back to the call that issued it."""
+        results: dict[tuple[str, str], dict[str, Any]] = {}
+        for row in exchange_rows:
+            if row["kind"] != "client_request":
+                continue
+            payload = _json_object(row["payload"])
+            messages = payload.get("messages")
+            if not isinstance(messages, list):
+                continue
+            for index, message in enumerate(messages):
+                if not isinstance(message, dict) or message.get("role") != "tool":
+                    continue
+                call_id = message.get("tool_call_id")
+                summary = summary_sources.get(
+                    (int(row["id"]), f"/messages/{index}")
+                )
+                key = (str(row["session"]), str(call_id))
+                if call_id and summary and key not in results:
+                    results[key] = dict(summary)
         return results
 
     @staticmethod
@@ -1176,6 +1343,7 @@ class HistoryView:
                     for source_id in step["source_exchange_ids"]
                 ],
                 "warning_groups": _warning_list(warnings),
+                "summary_samples": _poll_summary_samples(pending),
             })
             pending.clear()
 
@@ -1272,6 +1440,85 @@ def _terminal_failure(data: Mapping[str, Any]) -> bool:
 
 def _canonical_json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _summary_row(
+    row: Mapping[str, Any], *, boundary: str | None = None
+) -> dict[str, Any]:
+    item = {
+        "role": str(row["role"] or "unknown"),
+        "headline": str(row["headline"] or "Summary"),
+        "summary": str(row["summary"] or ""),
+        "model": str(row["model"] or "unknown"),
+        "prompt_version": str(row["prompt_version"] or "unknown"),
+    }
+    if boundary:
+        item["boundary"] = str(boundary)
+    return item
+
+
+def _provider_response_summaries(
+    exchange_rows: Sequence[sqlite3.Row],
+    summary_sources: Mapping[tuple[int, str], Mapping[str, Any]],
+    *,
+    exclude: Mapping[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Return provider-attempt prose, never provider request transcripts."""
+    result: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    if exclude:
+        seen.add((
+            str(exclude.get("headline", "")), str(exclude.get("summary", ""))
+        ))
+    for row in exchange_rows:
+        if row["kind"] != "upstream":
+            continue
+        exchange_id = int(row["id"])
+        for (source_id, pointer), summary in summary_sources.items():
+            if source_id != exchange_id or not pointer.startswith(
+                "/response/choices/"
+            ) or not pointer.endswith("/message"):
+                continue
+            public = dict(summary)
+            marker = (str(public.get("headline", "")), str(public.get("summary", "")))
+            if marker not in seen:
+                seen.add(marker)
+                result.append(public)
+    return result
+
+
+def _poll_summary_samples(
+    steps: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Keep one opening and one closing narrative for a folded poll run."""
+    def candidates(step: Mapping[str, Any]) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        for call in step.get("tool_calls") or []:
+            if isinstance(call, Mapping) and isinstance(call.get("result_summary"), Mapping):
+                items.append(dict(call["result_summary"]))
+        if isinstance(step.get("response_summary"), Mapping):
+            items.append(dict(step["response_summary"]))
+        delta = step.get("message_delta")
+        if isinstance(delta, Mapping):
+            items.extend(
+                dict(item) for item in (delta.get("summaries") or [])
+                if isinstance(item, Mapping)
+            )
+        return items
+
+    chosen: list[dict[str, Any]] = []
+    for step in (steps[0], steps[-1]) if steps else ():
+        available = candidates(step)
+        if available:
+            chosen.append(available[0])
+    result: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for item in chosen:
+        marker = (str(item.get("headline", "")), str(item.get("summary", "")))
+        if marker not in seen:
+            seen.add(marker)
+            result.append(item)
+    return result
 
 
 def _hash_text(value: str) -> str:

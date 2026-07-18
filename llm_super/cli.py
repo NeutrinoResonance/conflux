@@ -45,6 +45,21 @@ def main() -> None:
     rp.add_argument("--db", default="traces.db")
     rp.add_argument("--days", type=float, default=30.0)
 
+    sm = sub.add_parser(
+        "summarize-history",
+        help="build readable Sonnet summaries for every stored message",
+    )
+    sm.add_argument("--db", default="traces.db")
+    sm.add_argument("--model", default="sonnet")
+    sm.add_argument("--batch-chars", type=int, default=220_000)
+    sm.add_argument("--batch-size", type=int, default=80)
+    sm.add_argument("--max-budget-usd", type=float, default=1.0,
+                    help="per-Claude-process safety ceiling")
+    sm.add_argument("--force", action="store_true",
+                    help="regenerate already summarized message hashes")
+    sm.add_argument("--claude-command", default="claude",
+                    help=argparse.SUPPRESS)
+
     args = p.parse_args()
     if args.cmd == "serve":
         import socket
@@ -117,6 +132,70 @@ def main() -> None:
         from . import report as report_mod
 
         print(report_mod.format_text(report_mod.efficiency(args.db, args.days)))
+    elif args.cmd == "summarize-history":
+        import sys
+
+        from . import message_summaries
+
+        try:
+            result = message_summaries.backfill(
+                args.db,
+                model=args.model,
+                batch_chars=args.batch_chars,
+                batch_size=args.batch_size,
+                max_budget_usd=args.max_budget_usd,
+                force=args.force,
+                command=args.claude_command,
+                progress=lambda event: print(_summary_progress(event), flush=True),
+            )
+        except (message_summaries.SummaryError, ValueError) as exc:
+            sys.exit(f"llm-super: history summary backfill failed: {exc}")
+        print(
+            "history summaries complete: "
+            f"{result['summarized']}/{result['unique']} distinct messages · "
+            f"{result['occurrences']} placements · "
+            f"{result['generated']} generated this run · "
+            f"${result['cost_usd']:.6f} reported usage"
+        )
+
+
+def _summary_progress(event: dict) -> str:
+    """Format progress without ever interpolating message-derived content."""
+    kind = event.get("event")
+    if kind == "indexed":
+        return (
+            f"indexed {event.get('occurrences', 0)} placements from "
+            f"{event.get('exchanges', 0)} exchanges "
+            f"({event.get('unique', 0)} distinct messages)"
+        )
+    if kind == "authenticated":
+        return (
+            "Claude authenticated · "
+            f"{event.get('provider', 'unknown')} / "
+            f"{event.get('subscription', 'unknown')}"
+        )
+    if kind == "batch_start":
+        return (
+            f"batch {event.get('batch')} started · {event.get('items', 0)} messages · "
+            f"{event.get('chars', 0)} sanitized characters"
+        )
+    if kind == "batch_split":
+        return (
+            f"batch {event.get('batch')} did not validate; retrying its "
+            f"{event.get('items', 0)} messages in smaller batches"
+        )
+    if kind == "batch_complete":
+        return (
+            f"batch {event.get('batch')} complete · {event.get('items', 0)} messages · "
+            f"{event.get('duration_ms', 0) / 1000:.1f}s · "
+            f"${event.get('cost_usd', 0.0):.6f}"
+        )
+    if kind == "complete":
+        return (
+            f"verified coverage {event.get('summarized', 0)}/"
+            f"{event.get('unique', 0)}"
+        )
+    return "history summary backfill progressing"
 
 
 async def _probe(config_path: str) -> None:
