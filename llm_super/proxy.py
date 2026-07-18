@@ -26,7 +26,7 @@ from . import report as report_mod
 from . import retention
 from .checkpoint import Checkpoints
 from .config import load
-from .control import ControlState, handle
+from .control import ControlState, gate_warning, handle
 from .history import History
 from .library import DEFAULT_SETTINGS, Library
 from .orchestrator import Orchestrator, _last_user_text
@@ -55,6 +55,7 @@ async def lifespan(app: FastAPI):
         library=library,
         trace_path=trace_path,
         checkpoints=checkpoints,
+        armed_sessions=set(),
         orch=Orchestrator(cfg, client, trace, control,
                           checkpoints=checkpoints,
                           history=history),
@@ -177,6 +178,23 @@ async def chat_completions(request: Request):
         return _sse(reply, model_name) if stream else JSONResponse(_completion_body(reply, model_name))
 
     session = _session_id(messages)
+
+    # New-conversation gate (SPEC §7): in "dumb command mode" an unknown
+    # conversation's first non-command message returns a warning WITHOUT
+    # calling any model; continuing (or resending) confirms. Commands above
+    # always work ungated; explicit passthrough model names are exempt.
+    gate_on = (control.gate_enabled if control.gate_enabled is not None
+               else cfg.supervision.confirm_new_sessions)
+    if (gate_on and model_name not in cfg.models
+            and session not in state["armed_sessions"]
+            and not state["history"].recent_turns(session, 1)):
+        state["armed_sessions"].add(session)
+        state["trace"].record(session, "-", "gate",
+                              preview=_last_user_text(messages)[:150])
+        warn = gate_warning(session, control, cfg)
+        return _sse(warn, model_name) if stream else JSONResponse(
+            _completion_body(warn, model_name))
+
     state["library"].touch_session(session, _last_user_text(messages))
 
     # Pass-through mode for registry model names. Default max_tokens matches
@@ -303,6 +321,8 @@ async def admin_status():
         "ensemble": c.ensemble_n,
         "strategy": c.strategy,
         "cutoff": c.cutoff,
+        "gate": (c.gate_enabled if c.gate_enabled is not None
+                 else state["cfg"].supervision.confirm_new_sessions),
         "breakpoints": list(c.breakpoints),
         "models": list(state["cfg"].models),
         "recent_spend": round(sum(e.get("cost_usd") or 0 for e in recent), 4),

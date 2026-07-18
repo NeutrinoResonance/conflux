@@ -502,6 +502,19 @@ Because many users will live in their OSS client, the proxy also supports
 models, and supervisor notices injected into the response stream as clearly
 delimited status lines (off by default per config).
 
+*New-conversation gate (implemented — `supervision.confirm_new_sessions`,
+runtime `!gate on|off`):* the ingress starts every unknown conversation in
+"dumb command mode" — in-band `!commands` always work without any model
+call, and the first non-command message returns a warning (no model called,
+nothing spent) stating the session id, active strategy, and budget, plus
+the session-identity rule (conversations are keyed by their first user
+message, so clients that rewrite/annotate it fragment into new
+conversations). Continuing or resending confirms and runs normally.
+Motivated by a live Hermes hookup: agent clients silently spawn new
+sessions on every prefix rewrite, and each was getting a full supervised
+turn. Explicit passthrough model names are exempt (naming a raw model is
+already an explicit choice).
+
 ### 7.3 Escalate-to-human as a repair strategy
 `ASK USER` is a first-class referee action (targets FM-2.2 — the system
 itself must not fail to ask for clarification): the stream returns a concrete

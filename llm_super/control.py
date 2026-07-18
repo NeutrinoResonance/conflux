@@ -30,6 +30,7 @@ class ControlState:
     # verifier scores >= cutoff wins immediately; remaining ones are cancelled
     breakpoints: list[str] = field(default_factory=list)
     # rules: "fm:<FM-ID>" | "budget:<usd>" | "escalation" (SPEC §7.1)
+    gate_enabled: bool | None = None   # None = supervision.confirm_new_sessions
     history: list[str] = field(default_factory=list)
 
     def multi_mode(self) -> str:
@@ -67,6 +68,28 @@ class ControlState:
         return None
 
 
+def gate_warning(session: str, state: ControlState, cfg=None) -> str:
+    """The new-conversation gate reply (SPEC §7): returned INSTEAD of calling
+    any model when an unknown conversation sends its first non-command
+    message. Continuing (or resending) confirms and runs normally."""
+    strat = state.strategy + (f" ×{state.ensemble_n}" if state.multi_mode() else "")
+    budget = (state.budget_usd if state.budget_usd is not None
+              else cfg.supervision.budget_usd_per_task if cfg else 0.5)
+    return (
+        "[llm-super] ⚠ new-conversation gate — NO model was called and "
+        "nothing was spent.\n\n"
+        f"This request would start a NEW supervised conversation "
+        f"(session {session[:12]}, strategy {strat}, budget "
+        f"${budget:.2f}/task). Conversations are identified by their FIRST "
+        "user message — a client that rewrites or annotates it silently "
+        "starts a separate conversation each time.\n\n"
+        "To proceed, resend or simply continue: the next message in this "
+        "conversation runs normally. In-band commands never need "
+        "confirmation and never call a model — !help lists them; "
+        "!gate off disables this warning."
+    )
+
+
 HELP = """llm-super in-band commands (never forwarded to models):
   !status              show supervisor state
   !pause / !resume     pause or resume supervised execution
@@ -89,6 +112,8 @@ HELP = """llm-super in-band commands (never forwarded to models):
   !checkpoints         list resumable checkpoints for this conversation
   !rewind <unit#>|all  forget a completed unit (or all) so resending re-runs it
   !edits               show this conversation's edit/rewind history (branches)
+  !gate on|off         confirmation gate for NEW conversations (on: first
+                       message returns a warning, no model call; continuing confirms)
   !help                this message"""
 
 
@@ -119,6 +144,7 @@ def handle(text: str, state: ControlState, model_names: list[str],
             f"strategy={state.strategy}"
             f"{f' n={state.ensemble_n}' if state.multi_mode() else ''} "
             f"cutoff={'off' if state.cutoff is None else f'{state.cutoff:.2f}'} "
+            f"gate={'default' if state.gate_enabled is None else ('on' if state.gate_enabled else 'off')} "
             f"breakpoints={','.join(state.breakpoints) or 'none'}"
         )
     if cmd == "pause":
@@ -194,6 +220,15 @@ def handle(text: str, state: ControlState, model_names: list[str],
                     + ("" if state.cutoff is None else
                        f"; cutoff {state.cutoff:.2f} may end turns early"))
         return "usage: !strategy single | exploit | best <2-4> | union <2-4> | fuse <2-4>"
+    if cmd == "gate":
+        if arg in ("on", "off"):
+            state.gate_enabled = arg == "on"
+            return ("new-conversation gate enabled — the first message of an "
+                    "unknown conversation returns a warning instead of "
+                    "calling a model" if state.gate_enabled else
+                    "new-conversation gate disabled — new conversations run "
+                    "immediately")
+        return "usage: !gate on|off"
     if cmd == "cutoff":
         if arg == "off":
             state.cutoff = None

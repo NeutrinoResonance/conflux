@@ -52,6 +52,8 @@ class Supervision:
     max_repairs: int = 2
     max_output_tokens: int = 16384  # executor completion budget; reasoning
     # models can burn 8k on thought alone and return an EMPTY answer
+    confirm_new_sessions: bool = True  # ingress gate: first message of an
+    # unknown conversation gets a no-model-call warning; continuing confirms
     budget_usd_per_task: float = 0.50
     trailer: bool = True
     turn_timeout_s: float = 1800.0

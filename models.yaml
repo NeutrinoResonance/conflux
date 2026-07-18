@@ -181,6 +181,9 @@ supervision:
   max_repairs: 2                # structural-change rule: after N repairs, escalate
   max_output_tokens: 16384      # executor completion budget (reasoning models
                                 # can burn 8k on thought and return nothing)
+  confirm_new_sessions: true    # ingress gate: an unknown conversation's first
+                                # message returns a warning, NO model call;
+                                # continuing confirms (!gate on|off at runtime)
   budget_usd_per_task: 0.50
   trailer: true                 # append supervisor summary to responses
   turn_timeout_s: 1800          # hard wall-clock cap per supervised turn
