@@ -25,6 +25,7 @@ class GeneratedSummaryPageContractTests(unittest.TestCase):
         self.assertIn("item.provider_summaries", page)
         self.assertIn("item.summary_samples", page)
         self.assertIn("summaryStackHTML(stepSummaryEntries(item))", page)
+        self.assertIn("providerSummariesHTML(item)", page)
         self.assertIn("summaryStackHTML(pollSummaryEntries(item))", page)
 
     def test_default_views_reduce_system_and_provider_review_noise(self) -> None:
@@ -32,7 +33,8 @@ class GeneratedSummaryPageContractTests(unittest.TestCase):
 
         self.assertIn('summary?.role || ""', page)
         self.assertIn('=== "system") continue', page)
-        self.assertIn("stepSummaryEntries(item, false)", page)
+        self.assertIn('<details class="provider-summaries">', page)
+        self.assertIn("providers.length} provider attempt", page)
         self.assertIn('aria-label="${esc(accessibleLabel)}"', page)
 
     def test_summary_fields_are_escaped_and_never_fall_back_to_json(self) -> None:

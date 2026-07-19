@@ -338,6 +338,20 @@ h3 { font-size: 13px; }
   text-transform: uppercase;
 }
 .message-summary .summary-body { margin-top: 2px; font-size: 12px; }
+.provider-summaries {
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.provider-summaries > summary {
+  cursor: pointer;
+  padding: 7px 9px;
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 650;
+}
+.provider-summaries .summary-stack { margin: 0; padding: 0 9px 9px; }
 .warning-list { margin: 8px 0 0; padding: 0; list-style: none; }
 .warning-list li { color: var(--warn); font-size: 11.5px; margin-top: 3px; }
 .rawlinks { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 5px; }
@@ -870,12 +884,13 @@ function timelineItemHTML(item) {
           ${tool.matched_result ? "" : " · missing result"}</span>`).join("")}
       </div>
       ${summaryStackHTML(stepSummaryEntries(item))}
+      ${providerSummariesHTML(item)}
       ${warningsHTML(item.warning_groups)}
       ${rawLinks(item.source_exchange_ids, tools.length ? "exact command / exchange" : "raw exchange")}
     </div>${statusBadge(item.status)}</div>
   </div>`;
 }
-function stepSummaryEntries(item, includeProviders=true) {
+function stepSummaryEntries(item) {
   const entries = [];
   const delta = item.message_delta;
   for (const summary of (Array.isArray(delta?.summaries) ? delta.summaries : [])) {
@@ -890,13 +905,18 @@ function stepSummaryEntries(item, includeProviders=true) {
       entries.push({summary: tool.result_summary, label: `${tool.name || "Tool"} result`});
     }
   }
-  if (includeProviders) {
-    for (const [index, summary] of (Array.isArray(item.provider_summaries)
-      ? item.provider_summaries : []).entries()) {
-      entries.push({summary, label: `Provider attempt ${index + 1}`});
-    }
-  }
   return entries;
+}
+function providerSummariesHTML(item) {
+  const providers = Array.isArray(item.provider_summaries) ? item.provider_summaries : [];
+  if (!providers.length) return "";
+  const entries = providers.map((summary, index) => ({
+    summary, label: `Provider attempt ${index + 1}`,
+  }));
+  return `<details class="provider-summaries">
+    <summary>${providers.length} provider attempt${providers.length === 1 ? "" : "s"} summarized</summary>
+    ${summaryStackHTML(entries)}
+  </details>`;
 }
 function pollSummaryEntries(item) {
   const samples = Array.isArray(item.summary_samples) ? item.summary_samples : [];
@@ -942,7 +962,7 @@ function promptsHTML() {
           <div class="meta mono">${esc(item.session_id)} / ${esc(item.task_id)}</div>
           <div class="meta">${(item.tool_calls || []).reduce((n,t) => n + t.arguments_chars, 0)}
             argument chars · exact command on demand</div>
-          ${summaryStackHTML(stepSummaryEntries(item, false))}
+          ${summaryStackHTML(stepSummaryEntries(item))}
           ${rawLinks(item.source_exchange_ids?.slice(-1), "load exact command")}
         </div>`).join("") || `<p class="meta">${state.timelineLoading
           ? "Summarizing command sources…" : "No command sources on this page."}</p>`}

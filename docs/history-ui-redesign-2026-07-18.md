@@ -141,9 +141,10 @@ QEMU evidence, the full Python test suite, Python/JavaScript syntax checks, and
 Chrome DevTools MCP on desktop and narrow layouts. The reloaded History page
 showed 372/372 unique NetBSD messages summarized across 11,711 placements;
 all five page/API requests returned HTTP 200, and the browser console was
-empty. MCP inspection also drove two noise reductions: routine timeline cards
-hide system-prompt summaries, and Prompts & Commands omits provider-review
-summaries while retaining request/decision/tool-result context.
+empty. MCP inspection also drove three noise reductions: routine timeline cards
+hide system-prompt summaries, provider-review prose is folded behind a count,
+and Prompts & Commands omits provider reviews while retaining
+request/decision/tool-result context.
 
 Remaining summary-layer limitations are explicit:
 
