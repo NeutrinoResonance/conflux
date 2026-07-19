@@ -568,9 +568,13 @@ function renderEndeavors() {
   $("#endeavorCount").textContent =
     `showing ${state.endeavors.length} of ${state.endeavorTotal} endeavors`;
   $("#endeavorList").innerHTML = state.endeavors.length
-    ? state.endeavors.map(item => `
+    ? state.endeavors.map(item => {
+      const contextHeadline = String(item.context_summary?.headline || "").trim();
+      const accessibleLabel = [item.status, item.title, contextHeadline].filter(Boolean).join(". ");
+      return `
       <button class="endeavor ${item.id === state.selected ? "selected" : ""}"
               type="button" role="option" aria-selected="${item.id === state.selected}"
+              aria-label="${esc(accessibleLabel)}"
               data-endeavor="${esc(item.id)}">
         <span class="e-title">${statusBadge(item.status)}
           <span class="text">${esc(item.title)}</span></span>
@@ -579,7 +583,8 @@ function renderEndeavors() {
           ${fmtDuration(item.duration_seconds)} · ${money(item.cost_usd)}
         </span>
         ${compactContextHTML(item.context_summary)}
-      </button>`).join("")
+      </button>`;
+    }).join("")
     : '<div class="empty">No endeavors match these filters.</div>';
   $("#endeavorMore").innerHTML = state.endeavorNext
     ? '<button type="button" data-action="more-endeavors">Load more</button>' : "";
@@ -870,10 +875,11 @@ function timelineItemHTML(item) {
     </div>${statusBadge(item.status)}</div>
   </div>`;
 }
-function stepSummaryEntries(item) {
+function stepSummaryEntries(item, includeProviders=true) {
   const entries = [];
   const delta = item.message_delta;
   for (const summary of (Array.isArray(delta?.summaries) ? delta.summaries : [])) {
+    if (String(summary?.role || "").toLowerCase() === "system") continue;
     entries.push({summary, label: "Request message"});
   }
   if (item.response_summary) {
@@ -884,9 +890,11 @@ function stepSummaryEntries(item) {
       entries.push({summary: tool.result_summary, label: `${tool.name || "Tool"} result`});
     }
   }
-  for (const [index, summary] of (Array.isArray(item.provider_summaries)
-    ? item.provider_summaries : []).entries()) {
-    entries.push({summary, label: `Provider attempt ${index + 1}`});
+  if (includeProviders) {
+    for (const [index, summary] of (Array.isArray(item.provider_summaries)
+      ? item.provider_summaries : []).entries()) {
+      entries.push({summary, label: `Provider attempt ${index + 1}`});
+    }
   }
   return entries;
 }
@@ -934,7 +942,7 @@ function promptsHTML() {
           <div class="meta mono">${esc(item.session_id)} / ${esc(item.task_id)}</div>
           <div class="meta">${(item.tool_calls || []).reduce((n,t) => n + t.arguments_chars, 0)}
             argument chars · exact command on demand</div>
-          ${summaryStackHTML(stepSummaryEntries(item))}
+          ${summaryStackHTML(stepSummaryEntries(item, false))}
           ${rawLinks(item.source_exchange_ids?.slice(-1), "load exact command")}
         </div>`).join("") || `<p class="meta">${state.timelineLoading
           ? "Summarizing command sources…" : "No command sources on this page."}</p>`}

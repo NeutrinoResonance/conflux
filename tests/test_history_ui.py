@@ -27,6 +27,14 @@ class GeneratedSummaryPageContractTests(unittest.TestCase):
         self.assertIn("summaryStackHTML(stepSummaryEntries(item))", page)
         self.assertIn("summaryStackHTML(pollSummaryEntries(item))", page)
 
+    def test_default_views_reduce_system_and_provider_review_noise(self) -> None:
+        page = history_ui.PAGE
+
+        self.assertIn('summary?.role || ""', page)
+        self.assertIn('=== "system") continue', page)
+        self.assertIn("stepSummaryEntries(item, false)", page)
+        self.assertIn('aria-label="${esc(accessibleLabel)}"', page)
+
     def test_summary_fields_are_escaped_and_never_fall_back_to_json(self) -> None:
         page = history_ui.PAGE
 

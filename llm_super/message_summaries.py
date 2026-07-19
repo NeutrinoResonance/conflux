@@ -24,9 +24,9 @@ from typing import Any
 PROMPT_VERSION = "message-summary-v1"
 GENERATOR = "claude-cli"
 DEFAULT_MODEL = "sonnet"
-DEFAULT_BATCH_CHARS = 220_000
-DEFAULT_BATCH_SIZE = 80
-DEFAULT_MAX_BUDGET_USD = 1.0
+DEFAULT_BATCH_CHARS = 40_000
+DEFAULT_BATCH_SIZE = 8
+DEFAULT_MAX_BUDGET_USD = 0.75
 
 _MESSAGE_KEYS = {
     "role", "content", "name", "tool_call_id", "tool_calls", "function_call",
@@ -36,6 +36,13 @@ _PRIVATE_KEYS = {"reasoning", "reasoning_details", "logprobs"}
 
 class SummaryError(RuntimeError):
     """A safe-to-display history-summary error (never contains message text)."""
+
+    def __init__(
+        self, message: str, *, cost_usd: float = 0.0, duration_ms: int = 0,
+    ) -> None:
+        super().__init__(message)
+        self.cost_usd = float(cost_usd)
+        self.duration_ms = int(duration_ms)
 
 
 @dataclass(frozen=True)
@@ -422,37 +429,50 @@ def invoke_claude_batch(
         raise SummaryError(f"Claude summary batch exited with status {proc.returncode}")
     try:
         envelope = json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        raise SummaryError("Claude summary batch returned invalid structured output") from exc
+    if not isinstance(envelope, Mapping):
+        raise SummaryError("Claude summary batch returned invalid structured output")
+    reported_cost = float(envelope.get("total_cost_usd") or 0.0)
+    reported_duration = int(envelope.get("duration_ms") or 0)
+
+    def invalid(message: str) -> SummaryError:
+        return SummaryError(
+            message, cost_usd=reported_cost, duration_ms=reported_duration
+        )
+
+    try:
         structured = envelope.get("structured_output", envelope)
         summaries = structured["summaries"]
-    except (json.JSONDecodeError, KeyError, TypeError) as exc:
-        raise SummaryError("Claude summary batch returned invalid structured output") from exc
+    except (KeyError, TypeError) as exc:
+        raise invalid("Claude summary batch returned invalid structured output") from exc
     if not isinstance(summaries, list):
-        raise SummaryError("Claude summary batch returned a non-list result")
+        raise invalid("Claude summary batch returned a non-list result")
 
     expected = {str(item["id"]) for item in items}
     validated: list[dict[str, str]] = []
     seen: set[str] = set()
     for item in summaries:
         if not isinstance(item, Mapping):
-            raise SummaryError("Claude summary batch returned an invalid item")
+            raise invalid("Claude summary batch returned an invalid item")
         identifier = str(item.get("id") or "")
         headline = str(item.get("headline") or "").strip()
         summary = str(item.get("summary") or "").strip()
         if identifier not in expected or identifier in seen or not headline or not summary:
-            raise SummaryError("Claude summary batch failed identifier validation")
+            raise invalid("Claude summary batch failed identifier validation")
         if len(headline) > 160 or len(summary) > 1600:
-            raise SummaryError("Claude summary batch exceeded output bounds")
+            raise invalid("Claude summary batch exceeded output bounds")
         seen.add(identifier)
         validated.append({"id": identifier, "headline": headline, "summary": summary})
     if seen != expected:
-        raise SummaryError("Claude summary batch omitted one or more identifiers")
+        raise invalid("Claude summary batch omitted one or more identifiers")
 
     usage = envelope.get("modelUsage") if isinstance(envelope, Mapping) else {}
     models = list(usage) if isinstance(usage, Mapping) else []
     exact_model = next((name for name in models if "sonnet" in name.casefold()), model)
     return validated, {
-        "cost_usd": float(envelope.get("total_cost_usd") or 0.0),
-        "duration_ms": int(envelope.get("duration_ms") or 0),
+        "cost_usd": reported_cost,
+        "duration_ms": reported_duration,
         "model": exact_model,
     }
 
@@ -583,12 +603,17 @@ def backfill(
                     if summarizer is None:  # only possible if this invariant regresses
                         raise SummaryError("No Claude batch summarizer is available")
                     summaries, meta = summarizer(public_items, model, max_budget_usd)
-                except SummaryError:
+                except SummaryError as exc:
+                    total_cost += exc.cost_usd
                     if len(batch) == 1:
+                        _emit(progress, event="batch_failed", batch=number,
+                              items=1, cost_usd=exc.cost_usd,
+                              duration_ms=exc.duration_ms)
                         raise
                     midpoint = len(batch) // 2
                     _emit(progress, event="batch_split", batch=number,
-                          items=len(batch))
+                          items=len(batch), cost_usd=exc.cost_usd,
+                          duration_ms=exc.duration_ms)
                     process(batch[:midpoint], number + "a")
                     process(batch[midpoint:], number + "b")
                     return

@@ -1,11 +1,12 @@
 # History UI redesign — evidence-backed specification (2026-07-18)
 
-Status: **first implementation slice completed 2026-07-18**. The running
+Status: **second implementation slice completed 2026-07-18**. The running
 server now provides the separate `/history` view, read-only scoped history
 endpoints, the exact eight-session NetBSD endeavor fixture, server-side
 poll/warning folding, cursor pagination, transcript-delta metadata, and a
-single on-demand raw dialog. Existing trace storage was intentionally left
-unchanged: durable endeavor tables, capture-time identities, full-text search,
+single on-demand raw dialog. Raw trace storage remains unchanged, while an
+additive, prompt-versioned message-summary index now supplies human-readable
+context. Durable endeavor tables, capture-time identities, full-text search,
 and the later analytics/schema phases below remain proposed work.
 
 Implementation validation used the live NetBSD database, the full unit suite,
@@ -26,6 +27,138 @@ Progressive detail rendering reduced the observed unthrottled desktop LCP from
 2,957 ms to 1,319 ms on the same local NetBSD history route; observed CLS was
 0.00. The expensive legacy timeline projection remains asynchronous and does
 not block the first useful endeavor detail paint.
+
+### Sonnet message-summary backfill and recovery test
+
+The follow-up implementation was committed as `3a0d77f` before generated data
+was written. It added `llm-super summarize-history`, the optional
+`message_summaries` and `message_summary_sources` tables, export support, and
+History projections/renderers for objective, run, request, agent-decision,
+tool-result, provider-attempt, and folded-poll prose. Raw JSON remains available
+only through the explicit Raw controls.
+
+The exact live corpus indexed as follows:
+
+| Measure | Result |
+|---|---:|
+| raw exchanges | 547 |
+| message placements | 12,107 |
+| legacy text-only client responses synthesized as messages | 16 |
+| exact unique message objects in the earlier audit | 663 |
+| unique messages after allow-listing/private-field removal | 657 |
+| sanitized input characters | 1,141,974 |
+| largest sanitized message | 50,692 characters |
+| generated summaries | 657 |
+| missing source-to-summary links | 0 |
+| summaries without a source | 0 |
+| generating model recorded in SQLite | `claude-sonnet-5` for all 657 |
+
+The 12,107 total is intentionally 16 higher than the earlier 12,091 message
+audit: the earlier query did not treat legacy `{text: ...}` client responses
+as message objects. The backfill synthesizes those as assistant messages so
+“all messages” includes both modern chat-completion envelopes and the legacy
+response form.
+
+Before indexing, and again after the complete backfill, this command produced
+the same digest:
+
+```bash
+sqlite3 traces.db ".dump exchanges" | shasum -a 256
+# 959d0d5cc42bec0bd62737e628bebc99e4beeeac8c7b45361cec71fa68596014
+```
+
+The worker recursively removes `reasoning`, `reasoning_details`, and
+`logprobs`, allow-lists top-level message fields, hashes the canonical sanitized
+input, and invokes a fresh Claude process outside any SQLite transaction:
+
+```bash
+claude -p --model sonnet --safe-mode --tools "" \
+  --disable-slash-commands --permission-mode dontAsk \
+  --no-session-persistence --no-chrome --max-budget-usd 0.75 \
+  --output-format json --json-schema '<generated schema>'
+```
+
+Claude CLI 2.1.214 reported first-party `claude.ai` authentication on the Max
+subscription. `--safe-mode` excluded repository instructions, skills, plugins,
+hooks, and MCP configuration; the empty tools list prevented tool execution.
+The prompt labeled every message as untrusted data. Output was accepted only
+when its structured schema contained exactly one non-empty headline/summary
+for every requested SHA-256 identifier and no unexpected identifiers.
+
+The backfill was deliberately operated as a supervision/recovery test, not a
+fire-and-forget job. The exact tuning sequence was:
+
+```bash
+# Too large: interrupted after about six minutes, zero rows committed.
+.venv/bin/llm-super summarize-history --db traces.db --model sonnet \
+  --batch-size 120 --batch-chars 220000 --max-budget-usd 0.75
+
+# Established checkpoints: 92 summaries committed, next batch interrupted.
+.venv/bin/llm-super summarize-history --db traces.db --model sonnet \
+  --batch-size 40 --batch-chars 80000 --max-budget-usd 0.75
+
+# Exercised recursive validation recovery: 60 more committed.
+.venv/bin/llm-super summarize-history --db traces.db --model sonnet \
+  --batch-size 60 --batch-chars 120000 --max-budget-usd 1.0
+
+# Generated 330 more; heterogeneous 15-item groups sometimes split to 7+8.
+.venv/bin/llm-super summarize-history --db traces.db --model sonnet \
+  --batch-size 15 --batch-chars 60000 --max-budget-usd 0.75
+
+# Reliable tail: 175 generated in 22 calls with zero validation failures.
+.venv/bin/llm-super summarize-history --db traces.db --model sonnet \
+  --batch-size 8 --batch-chars 40000 --max-budget-usd 0.75
+```
+
+Every interrupt occurred after a completed checkpoint and before the next
+batch wrote anything. Resuming re-indexed the same 12,107 source pointers and
+selected only missing hashes. Seven completed oversized responses failed the
+one-to-one validation and were automatically discarded and split; their
+smaller children all succeeded. Four just-started/slow calls were manually
+interrupted, leaving no Claude child and no partial summary rows.
+
+Validated calls reported at least `$8.941300` of model usage. This is a lower
+bound, not a complete bill: the first implementation discarded the usage
+metadata of schema-rejected calls, and an externally interrupted Claude
+process cannot provide a final envelope. Both observations were treated as
+deficiencies rather than papered over. Rejected-call usage is now carried by
+`SummaryError` and included in progress/final totals; Ctrl-C now exits cleanly
+with status 130 while explaining that validated batches remain committed.
+The empirical defaults are now 8 messages, 40,000 sanitized characters, and a
+`$0.75` per-process ceiling.
+
+An immediate default-command rerun proved idempotent and did not invoke Claude:
+
+```text
+indexed 12107 placements from 547 exchanges (657 distinct messages)
+verified coverage 657/657
+history summaries complete: 657/657 distinct messages · 12107 placements · 0 generated this run · $0.000000 reported usage
+```
+
+Final verification included SQL coverage/orphan checks, summary length/role
+audits, spot checks of NetBSD prompts, commands, polling results, build and
+QEMU evidence, the full Python test suite, Python/JavaScript syntax checks, and
+Chrome DevTools MCP on desktop and narrow layouts. The reloaded History page
+showed 372/372 unique NetBSD messages summarized across 11,711 placements;
+all five page/API requests returned HTTP 200, and the browser console was
+empty. MCP inspection also drove two noise reductions: routine timeline cards
+hide system-prompt summaries, and Prompts & Commands omits provider-review
+summaries while retaining request/decision/tool-result context.
+
+Remaining summary-layer limitations are explicit:
+
+- summary generation is an invoked maintenance command, not yet an automatic
+  incremental job for newly captured messages;
+- summaries are navigation aids derived by a model, not acceptance evidence;
+  exact raw payloads and the evidence ledger remain authoritative;
+- sanitized message content still leaves the machine for Anthropic's
+  first-party Claude service, including non-secret operational names and paths;
+- this first live run's true usage is higher than the `$8.941300` validated-call
+  floor because rejected/interrupted-call accounting was incomplete at run
+  time; and
+- no durable per-backfill job ledger exists yet; model, prompt version, source
+  size, creation time, hashes, and every occurrence pointer are durable, but
+  run-level retry/cost telemetry currently lives only in the operator report.
 
 Known remaining limitations are recorded rather than hidden:
 

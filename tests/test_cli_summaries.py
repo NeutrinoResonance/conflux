@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import redirect_stdout
+from contextlib import redirect_stderr
 import io
 import sys
 import unittest
@@ -30,8 +31,22 @@ class SummaryCliTest(unittest.TestCase):
 
         self.assertEqual(backfill.call_args.args, ("sample.db",))
         self.assertEqual(backfill.call_args.kwargs["model"], "sonnet")
+        self.assertEqual(backfill.call_args.kwargs["batch_size"], 8)
+        self.assertEqual(backfill.call_args.kwargs["batch_chars"], 40_000)
+        self.assertEqual(backfill.call_args.kwargs["max_budget_usd"], 0.75)
         self.assertIn("indexed 12 placements", output.getvalue())
         self.assertIn("4/4 distinct messages", output.getvalue())
+
+    @mock.patch("llm_super.message_summaries.backfill", side_effect=KeyboardInterrupt)
+    def test_interrupt_is_clean_and_keeps_conventional_exit_status(self, _backfill) -> None:
+        stderr = io.StringIO()
+        with mock.patch.object(sys, "argv", [
+            "llm-super", "summarize-history", "--db", "sample.db",
+        ]), redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
+            cli.main()
+        self.assertEqual(raised.exception.code, 130)
+        self.assertIn("validated batches remain committed", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
 
     def test_progress_formatter_never_interpolates_untrusted_extra_fields(self) -> None:
         text = cli._summary_progress({
@@ -40,6 +55,12 @@ class SummaryCliTest(unittest.TestCase):
         })
         self.assertNotIn("RAW_MESSAGE_MUST_NOT_LEAK", text)
         self.assertEqual(text, "batch 2 started · 5 messages · 100 sanitized characters")
+
+        split = cli._summary_progress({
+            "event": "batch_split", "batch": "2a", "items": 8,
+            "duration_ms": 1200, "cost_usd": 0.25,
+        })
+        self.assertIn("1.2s · $0.250000 reported", split)
 
 
 if __name__ == "__main__":  # pragma: no cover
