@@ -110,7 +110,7 @@ HELP = """llm-super in-band commands (never forwarded to models):
   !budget <usd>        set per-task budget cap
   !checklist on|off    enable/disable contract checklist extraction
   !checklist skip      skip the checklist for the NEXT turn only, then re-enable
-  !sandbox local|gcloud|off|auto   where to execute code for verification
+  !sandbox gce|off|auto  verification backend (subject to operator lock)
   !plan auto|on|off    task decomposition for large prompts (auto = size heuristic)
   !strategy single|exploit|best <2-4>|union <2-4>|fuse <2-4>
                        how answers are produced: one routed model / the
@@ -135,7 +135,8 @@ HELP = """llm-super in-band commands (never forwarded to models):
 def handle(text: str, state: ControlState, model_names: list[str],
            checkpoints=None, session: str | None = None,
            history=None, library=None,
-           raw_session: str | None = None) -> str | None:
+           raw_session: str | None = None,
+           execution_backend_lock: str | None = None) -> str | None:
     """If `text` is a control command, apply it and return the reply.
     Returns None for normal (non-control) messages."""
     stripped = text.strip()
@@ -200,13 +201,20 @@ def handle(text: str, state: ControlState, model_names: list[str],
             return f"planning mode set to {arg}"
         return "usage: !plan auto|on|off"
     if cmd == "sandbox":
-        if arg in ("local", "gcloud", "off"):
+        if execution_backend_lock and arg not in {
+            execution_backend_lock, "off", "auto"
+        }:
+            return (
+                f"execution backend is operator-locked to {execution_backend_lock}; "
+                f"refusing {arg or '<empty>'}"
+            )
+        if arg in ("gce", "off"):
             state.sandbox_backend = arg
             return f"code execution backend set to {arg}"
         if arg == "auto":
             state.sandbox_backend = None
             return "code execution backend returned to models.yaml default"
-        return "usage: !sandbox local|gcloud|off|auto"
+        return "usage: !sandbox gce|off|auto"
     if cmd == "strategy":
         mode, _, nstr = arg.partition(" ")
         if mode in ("single", "exploit"):

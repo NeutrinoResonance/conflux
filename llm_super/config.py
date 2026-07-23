@@ -38,9 +38,38 @@ class Model:
 
 @dataclass(frozen=True)
 class Execution:
-    backend: str = "local"
+    backend: str = "gce"
+    # When set, neither an agent nor a runtime/UI override can move generated
+    # workloads to another backend. "off" remains allowed because it spawns
+    # nothing. Changing this value is an operator configuration change.
+    locked_backend: str | None = "gce"
+    gcloud_project: str = ""
+    gcloud_account: str = ""
     gcloud_zone: str = "us-central1-a"
     gcloud_machine_type: str = "e2-micro"
+
+    def resolve_backend(self, requested: str | None = None) -> str:
+        desired = self.backend if requested in (None, "", "auto") else requested
+        if desired == "off":
+            return "off"
+        if self.locked_backend and desired != self.locked_backend:
+            from .execution_backends import ExecutionBoundaryError
+            raise ExecutionBoundaryError(
+                f"generated-code execution is locked to {self.locked_backend!r}; "
+                f"refusing {desired!r}"
+            )
+        return desired
+
+    def boundary_lock(self):
+        from .execution_backends import ExecutionBackendLock
+        if not self.locked_backend:
+            return None
+        return ExecutionBackendLock(
+            self.locked_backend,
+            {"mode": "ephemeral", "project": self.gcloud_project or "active-gcloud-project",
+             "account": self.gcloud_account or "active-gcloud-account",
+             "zone": self.gcloud_zone, "machine_type": self.gcloud_machine_type},
+        )
 
 
 @dataclass(frozen=True)

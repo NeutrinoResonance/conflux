@@ -7,9 +7,9 @@ targeted feedback. Strategy: test in the sandbox first; only after
 verification does anything touch the host (SPEC §5.8).
 
 Backends:
-  local   — subprocess in a temp dir with a timeout. Fast; shares the host
-            Python but never the working tree.
-  gcloud  — ephemeral low-cost Compute Engine VM (default e2-micro, ~$0.008/h,
+  local   — legacy adapter, available only when trusted configuration has no
+            non-local execution lock. Never selected by an agent.
+  gce     — ephemeral low-cost Compute Engine VM (default e2-micro,
             billed per second): create → run → delete. Slow to start (~1-2
             min) but fully isolated from the host; use for untrusted or
             system-touching code.
@@ -29,6 +29,8 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+
+from .execution_backends import ExecutionBackendLock, ExecutionBoundaryError
 
 _CODE_BLOCK = re.compile(r"```(?:python|py)\n(.*?)```", re.DOTALL)
 
@@ -110,6 +112,8 @@ async def run_local(code: str, timeout: float = 30.0) -> ExecutionResult:
 async def run_gcloud(
     code: str,
     *,
+    project: str = "",
+    account: str = "",
     zone: str = "us-central1-a",
     machine_type: str = "e2-micro",
     timeout: float = 120.0,
@@ -126,11 +130,16 @@ async def run_gcloud(
         "gcloud", "compute", "instances", "create", name,
         f"--zone={zone}", f"--machine-type={machine_type}",
         "--image-family=debian-12", "--image-project=debian-cloud",
+        "--provisioning-model=SPOT", "--instance-termination-action=DELETE",
         "--no-scopes", "--no-service-account", "--quiet",
     ]
+    if project:
+        create.append(f"--project={project}")
+    if account:
+        create.append(f"--account={account}")
     rc, out, err = await _run_cmd(create, 180)
     if rc != 0:
-        return ExecutionResult(ran=False, ok=False, backend="gcloud",
+        return ExecutionResult(ran=False, ok=False, backend="gce",
                                note=f"instance create failed: {err[-400:]}")
     try:
         runner = _RUNNER if _wants_doctest(code) else None
@@ -142,8 +151,10 @@ async def run_gcloud(
         # SSH can take a few tries while the VM boots.
         for attempt in range(6):
             rc, out, err = await _run_cmd(
-                ["gcloud", "compute", "ssh", name, f"--zone={zone}", "--quiet",
-                 "--command", remote],
+                (["gcloud", "compute", "ssh", name, f"--zone={zone}", "--quiet"]
+                 + ([f"--project={project}"] if project else [])
+                 + ([f"--account={account}"] if account else [])
+                 + ["--command", remote]),
                 timeout,
             )
             if "Connection refused" not in err and "Connection timed out" not in err \
@@ -151,23 +162,36 @@ async def run_gcloud(
                 break
             await asyncio.sleep(10)
         return ExecutionResult(
-            ran=True, ok=rc == 0, backend="gcloud", exit_code=rc,
+            ran=True, ok=rc == 0, backend="gce", exit_code=rc,
             stdout=out, stderr=err, duration_s=time.monotonic() - start,
         )
     finally:
         if not keep_instance:
             await _run_cmd(
-                ["gcloud", "compute", "instances", "delete", name,
-                 f"--zone={zone}", "--quiet"],
+                (["gcloud", "compute", "instances", "delete", name,
+                  f"--zone={zone}", "--quiet"]
+                 + ([f"--project={project}"] if project else [])
+                 + ([f"--account={account}"] if account else [])),
                 180,
             )
 
 
-async def run(code: str, backend: str, **kw) -> ExecutionResult:
+async def run(code: str, backend: str, *,
+              boundary: ExecutionBackendLock | None = None,
+              **kw) -> ExecutionResult:
+    try:
+        if boundary is not None:
+            backend = boundary.resolve(backend)
+    except ExecutionBoundaryError as exc:
+        return ExecutionResult(
+            ran=False, ok=False, backend=boundary.backend if boundary else "locked",
+            note=str(exc),
+        )
     if backend == "off":
         return ExecutionResult(ran=False, ok=True, backend="off", note="execution disabled")
     if backend == "local":
         return await run_local(code)
-    if backend == "gcloud":
+    if backend in {"gce", "gcloud"}:
         return await run_gcloud(code, **kw)
-    return ExecutionResult(ran=False, ok=True, backend=backend, note=f"unknown backend {backend!r}")
+    return ExecutionResult(ran=False, ok=False, backend=backend,
+                           note=f"unknown backend {backend!r}; execution refused")

@@ -169,9 +169,16 @@ routing:
   min_samples: 5       # turns per model before its stats can win routing
 
 execution:
-  backend: local              # local | gcloud | off  (override per-session with !sandbox)
+  # Generated/model-authored code is fail-closed to GCE. "off" is the only
+  # runtime override that bypasses the lock because it spawns no process.
+  # A future Docker adapter can be selected here by trusted operator config;
+  # it is never an agent-visible tool argument.
+  backend: gce                # gce | off
+  locked_backend: gce
+  gcloud_project: project96-sar
+  gcloud_account: gce-operator@example.com
   gcloud_zone: us-central1-a
-  gcloud_machine_type: e2-micro   # ~$0.008/hour, billed per second
+  gcloud_machine_type: e2-micro   # cheapest broadly available shared-core VM
 
 supervision:
   score_scale: 20               # verifier scores 1..20
