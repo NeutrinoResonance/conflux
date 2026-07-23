@@ -1,0 +1,1321 @@
+test_absolute_executable_after_shell_separator_is_not_a_target (test_action_governor.DeterministicPolicyTests.test_absolute_executable_after_shell_separator_is_not_a_target) ... ok
+test_bounded_pipeline_of_reads_is_safe_to_execute (test_action_governor.DeterministicPolicyTests.test_bounded_pipeline_of_reads_is_safe_to_execute) ... ok
+test_bounded_reads_release_without_model_review (test_action_governor.DeterministicPolicyTests.test_bounded_reads_release_without_model_review) ... ok
+test_durable_launch_declares_launch_evidence_not_workload_success (test_action_governor.DeterministicPolicyTests.test_durable_launch_declares_launch_evidence_not_workload_success) ... ok
+test_exact_pid_file_substitution_is_safe_only_for_read_commands (test_action_governor.DeterministicPolicyTests.test_exact_pid_file_substitution_is_safe_only_for_read_commands) ... ok
+test_heredoc_fails_closed_without_misreading_body_as_redirection (test_action_governor.DeterministicPolicyTests.test_heredoc_fails_closed_without_misreading_body_as_redirection) ... ok
+test_inline_python_literals_are_scoped_but_interpreter_is_not_a_target (test_action_governor.DeterministicPolicyTests.test_inline_python_literals_are_scoped_but_interpreter_is_not_a_target) ... ok
+test_inline_python_resolves_constant_bound_fstring_targets (test_action_governor.DeterministicPolicyTests.test_inline_python_resolves_constant_bound_fstring_targets) ... ok
+test_invalid_inline_python_is_deterministically_rejected (test_action_governor.DeterministicPolicyTests.test_invalid_inline_python_is_deterministically_rejected) ... ok
+test_narration_only_shell_output_is_not_an_action (test_action_governor.DeterministicPolicyTests.test_narration_only_shell_output_is_not_an_action) ... ok
+test_netbsd_failure_shapes_are_elevated_before_execution (test_action_governor.DeterministicPolicyTests.test_netbsd_failure_shapes_are_elevated_before_execution) ... ok
+test_parse_and_scope_failures_fail_closed (test_action_governor.DeterministicPolicyTests.test_parse_and_scope_failures_fail_closed) ... ok
+test_read_fallback_masks_failure_but_dev_null_is_not_a_target (test_action_governor.DeterministicPolicyTests.test_read_fallback_masks_failure_but_dev_null_is_not_a_target) ... ok
+test_read_shaped_inline_sqlite_requires_explicit_read_only_mode (test_action_governor.DeterministicPolicyTests.test_read_shaped_inline_sqlite_requires_explicit_read_only_mode) ... ok
+test_read_shaped_sqlite_cli_requires_readonly_flag (test_action_governor.DeterministicPolicyTests.test_read_shaped_sqlite_cli_requires_readonly_flag) ... ok
+test_request_side_hints_cannot_grant_trust (test_action_governor.DeterministicPolicyTests.test_request_side_hints_cannot_grant_trust) ... ok
+test_shell_loop_keywords_are_not_treated_as_spawned_programs (test_action_governor.DeterministicPolicyTests.test_shell_loop_keywords_are_not_treated_as_spawned_programs) ... ok
+test_sleep_is_bounded_medium_risk_not_an_unknown_shell_escape (test_action_governor.DeterministicPolicyTests.test_sleep_is_bounded_medium_risk_not_an_unknown_shell_escape) ... ok
+test_sqlite_file_uri_is_decoded_before_scope_authorization (test_action_governor.DeterministicPolicyTests.test_sqlite_file_uri_is_decoded_before_scope_authorization) ... ok
+test_sqlite_metadata_read_is_low_but_migration_is_not (test_action_governor.DeterministicPolicyTests.test_sqlite_metadata_read_is_low_but_migration_is_not) ... ok
+test_trailing_echo_cannot_mask_a_meaningful_process_status (test_action_governor.DeterministicPolicyTests.test_trailing_echo_cannot_mask_a_meaningful_process_status) ... ok
+test_verifier_that_collects_discrepancies_requires_failure_exit (test_action_governor.DeterministicPolicyTests.test_verifier_that_collects_discrepancies_requires_failure_exit) ... ok
+test_declared_flow_compiles_and_replay_is_framework_neutral (test_action_governor.FlowRuntimeTests.test_declared_flow_compiles_and_replay_is_framework_neutral) ... ERROR
+test_runtime_rejects_jump_outside_declared_edges (test_action_governor.FlowRuntimeTests.test_runtime_rejects_jump_outside_declared_edges) ... ERROR
+test_destructive_action_remains_human_gated_even_if_critic_approves (test_action_governor.GovernorProtocolTests.test_destructive_action_remains_human_gated_even_if_critic_approves) ... ERROR
+test_duplicate_after_failed_postcheck_requires_human_retry (test_action_governor.GovernorProtocolTests.test_duplicate_after_failed_postcheck_requires_human_retry) ... ERROR
+test_duplicate_non_idempotent_action_is_suppressed (test_action_governor.GovernorProtocolTests.test_duplicate_non_idempotent_action_is_suppressed) ... ERROR
+test_durable_launch_guardrail_requires_cursor_watch_not_completion_claim (test_action_governor.GovernorProtocolTests.test_durable_launch_guardrail_requires_cursor_watch_not_completion_claim) ... ERROR
+test_durable_observation_of_nonzero_workload_is_not_a_tool_failure (test_action_governor.GovernorProtocolTests.test_durable_observation_of_nonzero_workload_is_not_a_tool_failure) ... ERROR
+test_explicit_task_tool_call_limit_is_deterministically_enforced (test_action_governor.GovernorProtocolTests.test_explicit_task_tool_call_limit_is_deterministically_enforced) ... ERROR
+test_failed_postcondition_injects_recovery_directive (test_action_governor.GovernorProtocolTests.test_failed_postcondition_injects_recovery_directive) ... ERROR
+test_local_manifest_can_make_in_scope_critic_block_reviewable (test_action_governor.GovernorProtocolTests.test_local_manifest_can_make_in_scope_critic_block_reviewable) ... ERROR
+test_masked_exit_status_is_deterministically_blocked (test_action_governor.GovernorProtocolTests.test_masked_exit_status_is_deterministically_blocked) ... ERROR
+test_meaningful_action_runs_one_falsification_probe_before_replanning (test_action_governor.GovernorProtocolTests.test_meaningful_action_runs_one_falsification_probe_before_replanning) ... ERROR
+test_medium_action_uses_cross_family_critic (test_action_governor.GovernorProtocolTests.test_medium_action_uses_cross_family_critic) ... ERROR
+test_narration_only_tool_call_is_deterministically_blocked (test_action_governor.GovernorProtocolTests.test_narration_only_tool_call_is_deterministically_blocked) ... ERROR
+test_operator_approval_releases_exact_held_response_without_regeneration (test_action_governor.GovernorProtocolTests.test_operator_approval_releases_exact_held_response_without_regeneration) ... ERROR
+test_operator_denial_note_is_added_to_fresh_retry_context (test_action_governor.GovernorProtocolTests.test_operator_denial_note_is_added_to_fresh_retry_context) ... ERROR
+test_read_only_action_is_released_and_durably_postchecked (test_action_governor.GovernorProtocolTests.test_read_only_action_is_released_and_durably_postchecked) ... ERROR
+test_review_budget_exhaustion_fails_closed_without_critic_call (test_action_governor.GovernorProtocolTests.test_review_budget_exhaustion_fails_closed_without_critic_call) ... ERROR
+test_safe_probe_survives_restart_and_releases_original_without_executor (test_action_governor.GovernorProtocolTests.test_safe_probe_survives_restart_and_releases_original_without_executor) ... ERROR
+test_scope_failure_is_not_human_reviewable (test_action_governor.GovernorProtocolTests.test_scope_failure_is_not_human_reviewable) ... ERROR
+test_soundness_budget_exhaustion_fails_closed_without_model_call (test_action_governor.GovernorProtocolTests.test_soundness_budget_exhaustion_fails_closed_without_model_call) ... ERROR
+test_success_envelope_does_not_confuse_negative_field_names_with_failure (test_action_governor.GovernorProtocolTests.test_success_envelope_does_not_confuse_negative_field_names_with_failure) ... ERROR
+test_unsound_checker_probe_is_rejected_without_tool_execution (test_action_governor.GovernorProtocolTests.test_unsound_checker_probe_is_rejected_without_tool_execution) ... ERROR
+test_turn_report_matches_executor_and_verifier_events (test_agent_reliability.PlainTurnUsageTests.test_turn_report_matches_executor_and_verifier_events) ... ERROR
+test_control_command_reports_zero_usage (test_agent_reliability.ProxyGateAndPauseTests.test_control_command_reports_zero_usage) ... ok
+test_fresh_session_still_hits_confirmation_gate (test_agent_reliability.ProxyGateAndPauseTests.test_fresh_session_still_hits_confirmation_gate) ... ok
+test_paused_streaming_agent_request_is_blocked_before_orchestrator (test_agent_reliability.ProxyGateAndPauseTests.test_paused_streaming_agent_request_is_blocked_before_orchestrator) ... ok
+test_paused_virtual_agent_request_spends_nothing_then_resumes (test_agent_reliability.ProxyGateAndPauseTests.test_paused_virtual_agent_request_spends_nothing_then_resumes) ... ok
+test_persisted_agent_session_is_known_after_restart (test_agent_reliability.ProxyGateAndPauseTests.test_persisted_agent_session_is_known_after_restart) ... ok
+test_already_paused_direct_call_makes_no_upstream_request (test_agent_reliability.ToolTurnFinalizationTests.test_already_paused_direct_call_makes_no_upstream_request) ... ERROR
+test_budget_exit_records_final_exchange_and_history (test_agent_reliability.ToolTurnFinalizationTests.test_budget_exit_records_final_exchange_and_history) ... ERROR
+test_exhausted_repair_loop_records_only_best_final (test_agent_reliability.ToolTurnFinalizationTests.test_exhausted_repair_loop_records_only_best_final) ... ERROR
+test_passed_final_records_history_but_tool_step_does_not (test_agent_reliability.ToolTurnFinalizationTests.test_passed_final_records_history_but_tool_step_does_not) ... ERROR
+test_pause_during_upstream_suppresses_new_tool_call (test_agent_reliability.ToolTurnFinalizationTests.test_pause_during_upstream_suppresses_new_tool_call) ... ERROR
+test_verifier_error_records_final_exchange_and_history (test_agent_reliability.ToolTurnFinalizationTests.test_verifier_error_records_final_exchange_and_history) ... ERROR
+test_interrupt_is_clean_and_keeps_conventional_exit_status (test_cli_summaries.SummaryCliTest.test_interrupt_is_clean_and_keeps_conventional_exit_status) ... ok
+test_progress_formatter_never_interpolates_untrusted_extra_fields (test_cli_summaries.SummaryCliTest.test_progress_formatter_never_interpolates_untrusted_extra_fields) ... ok
+test_step_progress_formatter_never_interpolates_untrusted_fields (test_cli_summaries.SummaryCliTest.test_step_progress_formatter_never_interpolates_untrusted_fields) ... ok
+test_summarize_history_defaults_to_sonnet_and_reports_counts (test_cli_summaries.SummaryCliTest.test_summarize_history_defaults_to_sonnet_and_reports_counts) ... ok
+test_summarize_steps_defaults_to_haiku_and_reports_counts (test_cli_summaries.SummaryCliTest.test_summarize_steps_defaults_to_haiku_and_reports_counts) ... ok
+test_exact_gcloud_argv_keeps_remote_command_one_argument (test_direct_vm_tool_loop.AuthorizedBoundaryTests.test_exact_gcloud_argv_keeps_remote_command_one_argument) ... ok
+test_only_command_is_exposed_to_model (test_direct_vm_tool_loop.AuthorizedBoundaryTests.test_only_command_is_exposed_to_model) ... ok
+test_target_selectors_cannot_be_cli_options (test_direct_vm_tool_loop.AuthorizedBoundaryTests.test_target_selectors_cannot_be_cli_options) ... ok
+test_tool_result_json_has_hard_utf8_boundary (test_direct_vm_tool_loop.AuthorizedBoundaryTests.test_tool_result_json_has_hard_utf8_boundary) ... ok
+test_nonstreaming_post_targets_exact_chat_completions_path (test_direct_vm_tool_loop.HTTPClientTests.test_nonstreaming_post_targets_exact_chat_completions_path) ... ok
+test_durable_only_capability_set_rejects_raw_shell_fallback (test_direct_vm_tool_loop.ToolLoopTests.test_durable_only_capability_set_rejects_raw_shell_fallback) ... ok
+test_durable_start_dispatches_through_locked_job_executor (test_direct_vm_tool_loop.ToolLoopTests.test_durable_start_dispatches_through_locked_job_executor) ... ok
+test_malformed_tool_arguments_are_returned_without_execution (test_direct_vm_tool_loop.ToolLoopTests.test_malformed_tool_arguments_are_returned_without_execution) ... ok
+test_max_steps_stops_before_an_extra_remote_command (test_direct_vm_tool_loop.ToolLoopTests.test_max_steps_stops_before_an_extra_remote_command) ... ok
+test_progress_covers_each_boundary_without_prompt_output_or_secrets (test_direct_vm_tool_loop.ToolLoopTests.test_progress_covers_each_boundary_without_prompt_output_or_secrets) ... ok
+test_raw_assistant_message_and_tool_id_progress_unchanged (test_direct_vm_tool_loop.ToolLoopTests.test_raw_assistant_message_and_tool_id_progress_unchanged) ... ok
+test_job_operations_project_into_the_declared_graph (test_durable_jobs.DurableGCEJobTests.test_job_operations_project_into_the_declared_graph) ... ERROR
+test_restart_recovers_job_and_wrong_boundary_cannot_adopt_it (test_durable_jobs.DurableGCEJobTests.test_restart_recovers_job_and_wrong_boundary_cannot_adopt_it) ... ok
+test_start_uses_only_fixed_gcloud_transport_and_persists_identity (test_durable_jobs.DurableGCEJobTests.test_start_uses_only_fixed_gcloud_transport_and_persists_identity) ... ok
+test_watch_advances_byte_cursors_without_duplicate_output (test_durable_jobs.DurableGCEJobTests.test_watch_advances_byte_cursors_without_duplicate_output) ... ok
+test_agent_tool_schemas_are_backend_neutral (test_durable_jobs.ExecutionBoundaryTests.test_agent_tool_schemas_are_backend_neutral) ... ok
+test_generic_executor_never_accepts_agent_backend_selector (test_durable_jobs.ExecutionBoundaryTests.test_generic_executor_never_accepts_agent_backend_selector) ... ok
+test_lock_rejects_local_or_retargeted_execution (test_durable_jobs.ExecutionBoundaryTests.test_lock_rejects_local_or_retargeted_execution) ... ok
+test_locked_sandbox_refuses_before_local_spawn (test_durable_jobs.ExecutionBoundaryTests.test_locked_sandbox_refuses_before_local_spawn) ... ok
+test_database_without_summary_tables_exports_an_empty_list (test_export_summaries.ExportedMessageSummariesTest.test_database_without_summary_tables_exports_an_empty_list) ... ok
+test_optional_step_summaries_are_exported_at_all_three_levels (test_export_summaries.ExportedMessageSummariesTest.test_optional_step_summaries_are_exported_at_all_three_levels) ... ok
+test_optional_summary_tables_are_exported_with_source_pointer (test_export_summaries.ExportedMessageSummariesTest.test_optional_summary_tables_are_exported_with_source_pointer) ... ok
+test_graph_and_run_routes_return_declared_and_observed_state (test_graph_ui.GraphAdminRouteTests.test_graph_and_run_routes_return_declared_and_observed_state) ... ERROR
+test_job_routes_expose_lock_state_and_durable_events (test_graph_ui.GraphAdminRouteTests.test_job_routes_expose_lock_state_and_durable_events) ... ERROR
+test_operator_decision_is_durable_and_updates_the_graph (test_graph_ui.GraphAdminRouteTests.test_operator_decision_is_durable_and_updates_the_graph) ... ERROR
+test_definition_payload_is_serializable_for_the_browser (test_graph_ui.GraphUIContractTests.test_definition_payload_is_serializable_for_the_browser) ... ERROR
+test_every_primary_surface_links_to_agent_graphs (test_graph_ui.GraphUIContractTests.test_every_primary_surface_links_to_agent_graphs) ... ok
+test_graph_edges_explain_routes_and_open_a_detailed_inspector (test_graph_ui.GraphUIContractTests.test_graph_edges_explain_routes_and_open_a_detailed_inspector) ... ok
+test_graph_nodes_are_draggable_and_canvas_is_pointer_pannable (test_graph_ui.GraphUIContractTests.test_graph_nodes_are_draggable_and_canvas_is_pointer_pannable) ... ok
+test_graph_studio_exposes_definition_run_overlay_and_human_queue (test_graph_ui.GraphUIContractTests.test_graph_studio_exposes_definition_run_overlay_and_human_queue) ... ok
+test_graph_workspace_contains_intrinsic_size_and_reveals_runtime_focus (test_graph_ui.GraphUIContractTests.test_graph_workspace_contains_intrinsic_size_and_reveals_runtime_focus) ... ok
+test_live_page_links_to_history_without_removing_existing_dashboard (test_history_routes.HistoryPageContractTests.test_live_page_links_to_history_without_removing_existing_dashboard) ... ok
+test_page_is_separate_accessible_and_does_not_poll (test_history_routes.HistoryPageContractTests.test_page_is_separate_accessible_and_does_not_poll) ... ok
+test_bad_filter_cursor_and_missing_rows_are_http_errors (test_history_routes.HistoryRouteTests.test_bad_filter_cursor_and_missing_rows_are_http_errors) ... ok
+test_scoped_routes_paginate_and_raw_is_explicit (test_history_routes.HistoryRouteTests.test_scoped_routes_paginate_and_raw_is_explicit) ... ok
+test_default_views_reduce_system_and_provider_review_noise (test_history_ui.GeneratedSummaryPageContractTests.test_default_views_reduce_system_and_provider_review_noise) ... ok
+test_every_timeline_summary_shape_has_a_prose_renderer (test_history_ui.GeneratedSummaryPageContractTests.test_every_timeline_summary_shape_has_a_prose_renderer) ... ok
+test_exchange_inspectors_are_visual_first_with_json_fallback (test_history_ui.GeneratedSummaryPageContractTests.test_exchange_inspectors_are_visual_first_with_json_fallback) ... ok
+test_summary_context_is_rendered_across_history_views (test_history_ui.GeneratedSummaryPageContractTests.test_summary_context_is_rendered_across_history_views) ... ok
+test_summary_fields_are_escaped_and_never_fall_back_to_json (test_history_ui.GeneratedSummaryPageContractTests.test_summary_fields_are_escaped_and_never_fall_back_to_json) ... ok
+test_three_summary_layers_drive_live_and_history_widgets (test_history_ui.GeneratedSummaryPageContractTests.test_three_summary_layers_drive_live_and_history_widgets) ... ok
+test_consecutive_polling_and_repeated_warnings_are_folded (test_history_view.HistoryViewTest.test_consecutive_polling_and_repeated_warnings_are_folded) ... ok
+test_delta_and_duplicate_boundary_metadata_omit_raw_payloads (test_history_view.HistoryViewTest.test_delta_and_duplicate_boundary_metadata_omit_raw_payloads) ... ok
+test_documented_fixture_is_unknown_when_incomplete (test_history_view.HistoryViewTest.test_documented_fixture_is_unknown_when_incomplete) ... ok
+test_documented_netbsd_fixture_is_exact_and_controls_are_curated (test_history_view.HistoryViewTest.test_documented_netbsd_fixture_is_exact_and_controls_are_curated) ... ok
+test_explicit_grouping_safe_fallback_alias_and_cursor_pagination (test_history_view.HistoryViewTest.test_explicit_grouping_safe_fallback_alias_and_cursor_pagination) ... ok
+test_fallback_summaries_never_use_prompt_preview_as_title (test_history_view.HistoryViewTest.test_fallback_summaries_never_use_prompt_preview_as_title) ... ok
+test_generated_summaries_supply_context_decisions_and_tool_results (test_history_view.HistoryViewTest.test_generated_summaries_supply_context_decisions_and_tool_results) ... ok
+test_invalid_limits_and_grouping_conflicts_are_rejected (test_history_view.HistoryViewTest.test_invalid_limits_and_grouping_conflicts_are_rejected) ... ok
+test_observed_terminal_failure_wins_over_legacy_status (test_history_view.HistoryViewTest.test_observed_terminal_failure_wins_over_legacy_status) ... ok
+test_provider_errors_and_monitor_findings_are_separate (test_history_view.HistoryViewTest.test_provider_errors_and_monitor_findings_are_separate) ... ok
+test_terminal_states_never_leave_dead_legacy_runs_running (test_history_view.HistoryViewTest.test_terminal_states_never_leave_dead_legacy_runs_running) ... ok
+test_tool_results_are_scoped_to_their_recovery_session (test_history_view.HistoryViewTest.test_tool_results_are_scoped_to_their_recovery_session) ... ok
+test_non_hermes_source_is_not_refreshed (test_keys.TryRefreshTests.test_non_hermes_source_is_not_refreshed) ... ok
+test_nous_requires_shared_oauth_state (test_keys.TryRefreshTests.test_nous_requires_shared_oauth_state) ... ok
+test_nous_uses_forced_hermes_refresh (test_keys.TryRefreshTests.test_nous_uses_forced_hermes_refresh) ... ok
+test_status_only_output_does_not_claim_refresh (test_keys.TryRefreshTests.test_status_only_output_does_not_claim_refresh) ... ok
+test_backfill_deduplicates_resumes_and_preserves_raw_rows (test_message_summaries.MessageSummaryTest.test_backfill_deduplicates_resumes_and_preserves_raw_rows) ... ok
+test_claude_invocation_is_sonnet_structured_tool_free_and_safe (test_message_summaries.MessageSummaryTest.test_claude_invocation_is_sonnet_structured_tool_free_and_safe) ... ok
+test_extracts_every_supported_boundary_and_legacy_text (test_message_summaries.MessageSummaryTest.test_extracts_every_supported_boundary_and_legacy_text) ... ok
+test_sanitizer_allowlists_top_level_and_recursively_removes_private_data (test_message_summaries.MessageSummaryTest.test_sanitizer_allowlists_top_level_and_recursively_removes_private_data) ... ok
+test_split_retry_counts_rejected_call_usage (test_message_summaries.MessageSummaryTest.test_split_retry_counts_rejected_call_usage) ... ok
+test_validation_error_retains_completed_call_usage (test_message_summaries.MessageSummaryTest.test_validation_error_retains_completed_call_usage) ... ok
+test_fixture_starts_with_a_deceptive_health_claim (test_phoenix_ledger_fixture.PhoenixLedgerFixtureTests.test_fixture_starts_with_a_deceptive_health_claim) ... ok
+test_validator_requires_schema_backup_restore_traffic_and_hash_evidence (test_phoenix_ledger_fixture.PhoenixLedgerFixtureTests.test_validator_requires_schema_backup_restore_traffic_and_hash_evidence) ... ok
+test_key_resolution_error_is_provider_error_and_agent_falls_back (test_providers.ProviderCompatibilityTests.test_key_resolution_error_is_provider_error_and_agent_falls_back) ... ERROR
+test_raw_chat_refreshes_after_transient_then_auth_failure (test_providers.ProviderCompatibilityTests.test_raw_chat_refreshes_after_transient_then_auth_failure) ... ok
+test_text_chat_chain_also_routes_around_key_resolution_error (test_providers.ProviderCompatibilityTests.test_text_chat_chain_also_routes_around_key_resolution_error) ... ok
+test_unrefreshable_raw_auth_error_remains_provider_error (test_providers.ProviderCompatibilityTests.test_unrefreshable_raw_auth_error_remains_provider_error) ... ok
+test_preserves_reasoning_extensions_and_requested_usage (test_proxy_compat.RawSSECompatibilityTests.test_preserves_reasoning_extensions_and_requested_usage) ... ok
+test_usage_chunk_is_omitted_unless_client_requested_it (test_proxy_compat.RawSSECompatibilityTests.test_usage_chunk_is_omitted_unless_client_requested_it) ... ok
+test_nonstream_registry_tool_request_uses_raw_passthrough (test_proxy_compat.RegistryToolRoutingTests.test_nonstream_registry_tool_request_uses_raw_passthrough) ... ok
+test_stream_registry_tool_request_preserves_raw_fields (test_proxy_compat.RegistryToolRoutingTests.test_stream_registry_tool_request_preserves_raw_fields) ... ok
+test_nonstream_response_reports_supervision_usage (test_proxy_compat.SupervisedUsageRenderingTests.test_nonstream_response_reports_supervision_usage) ... ok
+test_stream_response_emits_requested_supervision_usage (test_proxy_compat.SupervisedUsageRenderingTests.test_stream_response_emits_requested_supervision_usage) ... ok
+test_stream_usage_is_omitted_when_not_requested (test_proxy_compat.SupervisedUsageRenderingTests.test_stream_usage_is_omitted_when_not_requested) ... ok
+test_text_response_produces_all_three_bounded_levels (test_step_summaries_runtime.StepSummaryDerivationTests.test_text_response_produces_all_three_bounded_levels) ... ok
+test_tool_response_names_actions_without_copying_argument_values (test_step_summaries_runtime.StepSummaryDerivationTests.test_tool_response_names_actions_without_copying_argument_values) ... ok
+test_history_exposes_levels_on_endeavor_run_timeline_and_raw (test_step_summaries_runtime.StepSummaryPersistenceTests.test_history_exposes_levels_on_endeavor_run_timeline_and_raw) ... ok
+test_request_creates_pending_summary_and_response_updates_it (test_step_summaries_runtime.StepSummaryPersistenceTests.test_request_creates_pending_summary_and_response_updates_it) ... ok
+test_backfill_resumes_and_preserves_raw_exchanges (test_step_summary_backfill.StepSummaryBackfillTest.test_backfill_resumes_and_preserves_raw_exchanges) ... ok
+test_claude_invocation_is_haiku_structured_tool_free_and_safe (test_step_summary_backfill.StepSummaryBackfillTest.test_claude_invocation_is_haiku_structured_tool_free_and_safe) ... ok
+test_collects_prompt_and_elicited_result_without_private_fields (test_step_summary_backfill.StepSummaryBackfillTest.test_collects_prompt_and_elicited_result_without_private_fields) ... ok
+test_event_only_failure_steps_are_included_with_safe_aggregate_facts (test_step_summary_backfill.StepSummaryBackfillTest.test_event_only_failure_steps_are_included_with_safe_aggregate_facts) ... ok
+test_interrupted_run_commits_batches_and_only_retries_pending_steps (test_step_summary_backfill.StepSummaryBackfillTest.test_interrupted_run_commits_batches_and_only_retries_pending_steps) ... ok
+test_new_prompt_version_regenerates_without_force (test_step_summary_backfill.StepSummaryBackfillTest.test_new_prompt_version_regenerates_without_force) ... ok
+test_source_is_bounded_locally_before_a_summarizer_sees_it (test_step_summary_backfill.StepSummaryBackfillTest.test_source_is_bounded_locally_before_a_summarizer_sees_it) ... ok
+
+======================================================================
+ERROR: test_declared_flow_compiles_and_replay_is_framework_neutral (test_action_governor.FlowRuntimeTests.test_declared_flow_compiles_and_replay_is_framework_neutral)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 1105, in test_declared_flow_compiles_and_replay_is_framework_neutral
+    registry = FlowRegistry.load(Path(__file__).parents[1] / "agent_flows.yaml")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/agent_flows.yaml'
+
+======================================================================
+ERROR: test_runtime_rejects_jump_outside_declared_edges (test_action_governor.FlowRuntimeTests.test_runtime_rejects_jump_outside_declared_edges)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 1124, in test_runtime_rejects_jump_outside_declared_edges
+    registry = FlowRegistry.load(Path(__file__).parents[1] / "agent_flows.yaml")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/agent_flows.yaml'
+
+======================================================================
+ERROR: test_destructive_action_remains_human_gated_even_if_critic_approves (test_action_governor.GovernorProtocolTests.test_destructive_action_remains_human_gated_even_if_critic_approves)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 668, in test_destructive_action_remains_human_gated_even_if_critic_approves
+    orch = self.orch(client)
+           ^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 532, in orch
+    return Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_duplicate_after_failed_postcheck_requires_human_retry (test_action_governor.GovernorProtocolTests.test_duplicate_after_failed_postcheck_requires_human_retry)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 776, in test_duplicate_after_failed_postcheck_requires_human_retry
+    orch = self.orch(client)
+           ^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 532, in orch
+    return Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_duplicate_non_idempotent_action_is_suppressed (test_action_governor.GovernorProtocolTests.test_duplicate_non_idempotent_action_is_suppressed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 760, in test_duplicate_non_idempotent_action_is_suppressed
+    orch = self.orch(client)
+           ^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 532, in orch
+    return Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_durable_launch_guardrail_requires_cursor_watch_not_completion_claim (test_action_governor.GovernorProtocolTests.test_durable_launch_guardrail_requires_cursor_watch_not_completion_claim)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 921, in test_durable_launch_guardrail_requires_cursor_watch_not_completion_claim
+    orch = self.orch(client)
+           ^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 532, in orch
+    return Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_durable_observation_of_nonzero_workload_is_not_a_tool_failure (test_action_governor.GovernorProtocolTests.test_durable_observation_of_nonzero_workload_is_not_a_tool_failure)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 963, in test_durable_observation_of_nonzero_workload_is_not_a_tool_failure
+    orch = self.orch(_Client(raw=[response]))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 532, in orch
+    return Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_explicit_task_tool_call_limit_is_deterministically_enforced (test_action_governor.GovernorProtocolTests.test_explicit_task_tool_call_limit_is_deterministically_enforced)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 607, in test_explicit_task_tool_call_limit_is_deterministically_enforced
+    orch = self.orch(client)
+           ^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 532, in orch
+    return Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_failed_postcondition_injects_recovery_directive (test_action_governor.GovernorProtocolTests.test_failed_postcondition_injects_recovery_directive)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 851, in test_failed_postcondition_injects_recovery_directive
+    orch = self.orch(client)
+           ^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 532, in orch
+    return Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_local_manifest_can_make_in_scope_critic_block_reviewable (test_action_governor.GovernorProtocolTests.test_local_manifest_can_make_in_scope_critic_block_reviewable)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 684, in test_local_manifest_can_make_in_scope_critic_block_reviewable
+    orch = self.orch(client)
+           ^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 532, in orch
+    return Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_masked_exit_status_is_deterministically_blocked (test_action_governor.GovernorProtocolTests.test_masked_exit_status_is_deterministically_blocked)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 563, in test_masked_exit_status_is_deterministically_blocked
+    orch = self.orch(client)
+           ^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 532, in orch
+    return Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_meaningful_action_runs_one_falsification_probe_before_replanning (test_action_governor.GovernorProtocolTests.test_meaningful_action_runs_one_falsification_probe_before_replanning)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 996, in test_meaningful_action_runs_one_falsification_probe_before_replanning
+    orch = self.orch(client)
+           ^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 532, in orch
+    return Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_medium_action_uses_cross_family_critic (test_action_governor.GovernorProtocolTests.test_medium_action_uses_cross_family_critic)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 649, in test_medium_action_uses_cross_family_critic
+    orch = self.orch(client)
+           ^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 532, in orch
+    return Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_narration_only_tool_call_is_deterministically_blocked (test_action_governor.GovernorProtocolTests.test_narration_only_tool_call_is_deterministically_blocked)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 588, in test_narration_only_tool_call_is_deterministically_blocked
+    orch = self.orch(client)
+           ^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 532, in orch
+    return Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_operator_approval_releases_exact_held_response_without_regeneration (test_action_governor.GovernorProtocolTests.test_operator_approval_releases_exact_held_response_without_regeneration)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 705, in test_operator_approval_releases_exact_held_response_without_regeneration
+    orch = self.orch(client)
+           ^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 532, in orch
+    return Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_operator_denial_note_is_added_to_fresh_retry_context (test_action_governor.GovernorProtocolTests.test_operator_denial_note_is_added_to_fresh_retry_context)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 735, in test_operator_denial_note_is_added_to_fresh_retry_context
+    orch = self.orch(client)
+           ^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 532, in orch
+    return Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_read_only_action_is_released_and_durably_postchecked (test_action_governor.GovernorProtocolTests.test_read_only_action_is_released_and_durably_postchecked)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 538, in test_read_only_action_is_released_and_durably_postchecked
+    orch = self.orch(client)
+           ^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 532, in orch
+    return Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_review_budget_exhaustion_fails_closed_without_critic_call (test_action_governor.GovernorProtocolTests.test_review_budget_exhaustion_fails_closed_without_critic_call)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 794, in test_review_budget_exhaustion_fails_closed_without_critic_call
+    orch = Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_safe_probe_survives_restart_and_releases_original_without_executor (test_action_governor.GovernorProtocolTests.test_safe_probe_survives_restart_and_releases_original_without_executor)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 817, in test_safe_probe_survives_restart_and_releases_original_without_executor
+    orch = self.orch(client)
+           ^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 532, in orch
+    return Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_scope_failure_is_not_human_reviewable (test_action_governor.GovernorProtocolTests.test_scope_failure_is_not_human_reviewable)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 624, in test_scope_failure_is_not_human_reviewable
+    orch = self.orch(client)
+           ^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 532, in orch
+    return Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_soundness_budget_exhaustion_fails_closed_without_model_call (test_action_governor.GovernorProtocolTests.test_soundness_budget_exhaustion_fails_closed_without_model_call)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 1084, in test_soundness_budget_exhaustion_fails_closed_without_model_call
+    orch = self.orch(client)
+           ^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 532, in orch
+    return Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_success_envelope_does_not_confuse_negative_field_names_with_failure (test_action_governor.GovernorProtocolTests.test_success_envelope_does_not_confuse_negative_field_names_with_failure)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 871, in test_success_envelope_does_not_confuse_negative_field_names_with_failure
+    orch = self.orch(client)
+           ^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 532, in orch
+    return Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_unsound_checker_probe_is_rejected_without_tool_execution (test_action_governor.GovernorProtocolTests.test_unsound_checker_probe_is_rejected_without_tool_execution)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 1058, in test_unsound_checker_probe_is_rejected_without_tool_execution
+    orch = self.orch(client)
+           ^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_action_governor.py", line 532, in orch
+    return Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_turn_report_matches_executor_and_verifier_events (test_agent_reliability.PlainTurnUsageTests.test_turn_report_matches_executor_and_verifier_events)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_agent_reliability.py", line 239, in test_turn_report_matches_executor_and_verifier_events
+    orch = Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_already_paused_direct_call_makes_no_upstream_request (test_agent_reliability.ToolTurnFinalizationTests.test_already_paused_direct_call_makes_no_upstream_request)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_agent_reliability.py", line 308, in test_already_paused_direct_call_makes_no_upstream_request
+    result = await self._orch(client, control=control).run_tool_turn(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_agent_reliability.py", line 288, in _orch
+    orch = Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_budget_exit_records_final_exchange_and_history (test_agent_reliability.ToolTurnFinalizationTests.test_budget_exit_records_final_exchange_and_history)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_agent_reliability.py", line 338, in test_budget_exit_records_final_exchange_and_history
+    result = await self._orch(
+                   ^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_agent_reliability.py", line 288, in _orch
+    orch = Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_exhausted_repair_loop_records_only_best_final (test_agent_reliability.ToolTurnFinalizationTests.test_exhausted_repair_loop_records_only_best_final)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_agent_reliability.py", line 369, in test_exhausted_repair_loop_records_only_best_final
+    result = await self._orch(
+                   ^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_agent_reliability.py", line 288, in _orch
+    orch = Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_passed_final_records_history_but_tool_step_does_not (test_agent_reliability.ToolTurnFinalizationTests.test_passed_final_records_history_but_tool_step_does_not)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_agent_reliability.py", line 381, in test_passed_final_records_history_but_tool_step_does_not
+    await self._orch(
+          ^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_agent_reliability.py", line 288, in _orch
+    orch = Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_pause_during_upstream_suppresses_new_tool_call (test_agent_reliability.ToolTurnFinalizationTests.test_pause_during_upstream_suppresses_new_tool_call)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_agent_reliability.py", line 325, in test_pause_during_upstream_suppresses_new_tool_call
+    result = await self._orch(client, control=control).run_tool_turn(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_agent_reliability.py", line 288, in _orch
+    orch = Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_verifier_error_records_final_exchange_and_history (test_agent_reliability.ToolTurnFinalizationTests.test_verifier_error_records_final_exchange_and_history)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_agent_reliability.py", line 349, in test_verifier_error_records_final_exchange_and_history
+    result = await self._orch(client, verifier=verifier).run_tool_turn(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_agent_reliability.py", line 288, in _orch
+    orch = Orchestrator(
+           ^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+======================================================================
+ERROR: test_job_operations_project_into_the_declared_graph (test_durable_jobs.DurableGCEJobTests.test_job_operations_project_into_the_declared_graph)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/llm-super-agent/repo/tests/test_durable_jobs.py", line 231, in test_job_operations_project_into_the_declared_graph
+    registry = FlowRegistry.load(Path(__file__).parents[1] / "agent_flows.yaml")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/agent_flows.yaml'
+
+======================================================================
+ERROR: test_graph_and_run_routes_return_declared_and_observed_state (test_graph_ui.GraphAdminRouteTests.test_graph_and_run_routes_return_declared_and_observed_state)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 86, in _callSetUp
+    self._asyncioTestContext.run(self.setUp)
+  File "/tmp/llm-super-agent/repo/tests/test_graph_ui.py", line 122, in setUp
+    registry = FlowRegistry.load(Path(__file__).parents[1] / "agent_flows.yaml")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/agent_flows.yaml'
+
+======================================================================
+ERROR: test_job_routes_expose_lock_state_and_durable_events (test_graph_ui.GraphAdminRouteTests.test_job_routes_expose_lock_state_and_durable_events)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 86, in _callSetUp
+    self._asyncioTestContext.run(self.setUp)
+  File "/tmp/llm-super-agent/repo/tests/test_graph_ui.py", line 122, in setUp
+    registry = FlowRegistry.load(Path(__file__).parents[1] / "agent_flows.yaml")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/agent_flows.yaml'
+
+======================================================================
+ERROR: test_operator_decision_is_durable_and_updates_the_graph (test_graph_ui.GraphAdminRouteTests.test_operator_decision_is_durable_and_updates_the_graph)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 86, in _callSetUp
+    self._asyncioTestContext.run(self.setUp)
+  File "/tmp/llm-super-agent/repo/tests/test_graph_ui.py", line 122, in setUp
+    registry = FlowRegistry.load(Path(__file__).parents[1] / "agent_flows.yaml")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/agent_flows.yaml'
+
+======================================================================
+ERROR: test_definition_payload_is_serializable_for_the_browser (test_graph_ui.GraphUIContractTests.test_definition_payload_is_serializable_for_the_browser)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/llm-super-agent/repo/tests/test_graph_ui.py", line 108, in test_definition_payload_is_serializable_for_the_browser
+    registry = FlowRegistry.load(Path(__file__).parents[1] / "agent_flows.yaml")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/agent_flows.yaml'
+
+======================================================================
+ERROR: test_key_resolution_error_is_provider_error_and_agent_falls_back (test_providers.ProviderCompatibilityTests.test_key_resolution_error_is_provider_error_and_agent_falls_back)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/asyncio/base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/tests/test_providers.py", line 154, in test_key_resolution_error_is_provider_error_and_agent_falls_back
+    orchestrator = Orchestrator(client.cfg, client, _Trace(), ControlState())
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/orchestrator.py", line 148, in __init__
+    registry = FlowRegistry.load(flow_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/llm-super-agent/repo/llm_super/flows.py", line 175, in load
+    raw = yaml.safe_load(source.read_text()) or {}
+                         ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1059, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/pathlib.py", line 1045, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/llm-super-agent/repo/llm_super/agent_flows.yaml'
+
+----------------------------------------------------------------------
+Ran 149 tests in 3.266s
+
+FAILED (errors=36)

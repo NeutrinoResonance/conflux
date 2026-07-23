@@ -1,21 +1,36 @@
 from __future__ import annotations
 
 import copy
+import base64
 import json
 import subprocess
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import Mock
 
 from scripts.direct_vm_tool_loop import (
+    CONTAINER_TOOL_DEFINITION,
+    CONTAINER_TOOL_NAME,
+    CONTAINER_WRITE_TOOL_DEFINITION,
+    CONTAINER_WRITE_TOOL_NAME,
     TOOL_DEFINITION,
+    TOOL_DEFINITIONS,
     TOOL_NAME,
+    START_JOB_TOOL,
+    AuthorizedContainer,
+    AuthorizedContainerExecutor,
     AuthorizedVM,
     AuthorizedVMExecutor,
     BoundaryError,
     ChatCompletionsClient,
+    DirectClientError,
     LimitReached,
     bounded_tool_json,
+    load_transcript,
+    require_supervised_virtual_model,
     run_tool_loop,
+    save_transcript,
 )
 
 
@@ -34,7 +49,7 @@ def _completion(message: dict) -> dict:
     }
 
 
-def _tool_message(call_id: str, arguments: str) -> dict:
+def _tool_message(call_id: str, arguments: str, name: str = TOOL_NAME) -> dict:
     return {
         "role": "assistant",
         "content": None,
@@ -42,7 +57,7 @@ def _tool_message(call_id: str, arguments: str) -> dict:
             {
                 "id": call_id,
                 "type": "function",
-                "function": {"name": TOOL_NAME, "arguments": arguments},
+                "function": {"name": name, "arguments": arguments},
             }
         ],
     }
@@ -68,7 +83,25 @@ class _FakeExecutor:
         return self.result
 
 
+class _FakeJobExecutor:
+    def __init__(self):
+        self.calls = []
+
+    def execute(self, operation, arguments, *, context=None):
+        self.calls.append((operation, copy.deepcopy(arguments), dict(context or {})))
+        return {
+            "ok": True, "state": "running",
+            "job_id": "job_0123456789abcdef01234567",
+            "stdout_cursor": 0, "stderr_cursor": 0,
+        }
+
+
 class AuthorizedBoundaryTests(unittest.TestCase):
+    def test_explicit_provider_model_is_rejected_before_tool_exposure(self) -> None:
+        require_supervised_virtual_model("super")
+        with self.assertRaisesRegex(BoundaryError, "unsupervised passthrough"):
+            require_supervised_virtual_model("deepseek-v4-pro-go")
+
     def test_exact_gcloud_argv_keeps_remote_command_one_argument(self) -> None:
         runner = Mock(
             return_value=subprocess.CompletedProcess(
@@ -120,6 +153,101 @@ class AuthorizedBoundaryTests(unittest.TestCase):
         self.assertEqual(set(parameters["properties"]), {"command"})
         self.assertEqual(parameters["required"], ["command"])
         self.assertFalse(parameters["additionalProperties"])
+        for tool in TOOL_DEFINITIONS:
+            props = tool["function"]["parameters"]["properties"]
+            self.assertNotIn("backend", props)
+            self.assertNotIn("target", props)
+
+    def test_locked_container_wraps_only_the_fixed_remote_namespace(self) -> None:
+        runner = Mock(
+            return_value=subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=b"clean\n", stderr=b""
+            )
+        )
+        transport = AuthorizedVMExecutor(TARGET, timeout_s=90, runner=runner)
+        executor = AuthorizedContainerExecutor(
+            transport,
+            AuthorizedContainer("tb-fix-git", "/app/personal-site"),
+        )
+
+        result = executor.run("git status --short", timeout_s=30)
+
+        remote_command = runner.call_args.args[0][-1]
+        self.assertEqual(
+            remote_command,
+            "sudo docker exec --workdir /app/personal-site tb-fix-git "
+            "bash -lc 'git status --short'",
+        )
+        self.assertEqual(result["execution"]["backend"], "gce_container")
+        self.assertEqual(result["execution"]["container"], "tb-fix-git")
+        self.assertEqual(result["execution"]["working_dir"], "/app/personal-site")
+        self.assertTrue(result["execution"]["remote_only"])
+
+    def test_locked_container_tool_exposes_no_selectors(self) -> None:
+        self.assertEqual(
+            CONTAINER_TOOL_DEFINITION["function"]["name"], CONTAINER_TOOL_NAME
+        )
+        parameters = CONTAINER_TOOL_DEFINITION["function"]["parameters"]
+        self.assertEqual(set(parameters["properties"]), {"command"})
+        self.assertEqual(parameters["required"], ["command"])
+        self.assertFalse(parameters["additionalProperties"])
+
+    def test_locked_container_writer_exposes_only_path_and_content(self) -> None:
+        self.assertEqual(
+            CONTAINER_WRITE_TOOL_DEFINITION["function"]["name"],
+            CONTAINER_WRITE_TOOL_NAME,
+        )
+        parameters = CONTAINER_WRITE_TOOL_DEFINITION["function"]["parameters"]
+        self.assertEqual(set(parameters["properties"]), {"path", "content"})
+        self.assertEqual(set(parameters["required"]), {"path", "content"})
+        self.assertFalse(parameters["additionalProperties"])
+        for selector in ("backend", "vm", "project", "account", "zone", "container"):
+            self.assertNotIn(selector, parameters["properties"])
+
+    def test_locked_container_writer_constructs_atomic_remote_operation(self) -> None:
+        runner = Mock(
+            return_value=subprocess.CompletedProcess(
+                args=[], returncode=0,
+                stdout=b"/app/gpt2.c 22\n0123456789abcdef  /app/gpt2.c\n",
+                stderr=b"",
+            )
+        )
+        executor = AuthorizedContainerExecutor(
+            AuthorizedVMExecutor(TARGET, timeout_s=90, runner=runner),
+            AuthorizedContainer("tb-gpt2-codegolf", "/app"),
+        )
+        content = "int main(void){return 0;}\n"
+
+        result = executor.write_file("/app/gpt2.c", content, timeout_s=30)
+
+        remote_command = runner.call_args.args[0][-1]
+        self.assertIn("sudo docker exec --workdir /app tb-gpt2-codegolf", remote_command)
+        self.assertIn("base64 -d", remote_command)
+        self.assertIn(base64.b64encode(content.encode()).decode(), remote_command)
+        self.assertNotIn(content, remote_command)
+        self.assertIn("/app/gpt2.c.llm-super-write-tmp", remote_command)
+        self.assertEqual(result["write"]["path"], "/app/gpt2.c")
+        self.assertEqual(result["write"]["bytes"], len(content.encode()))
+        self.assertTrue(result["write"]["atomic_replace"])
+        self.assertEqual(result["execution"]["backend"], "gce_container")
+
+    def test_locked_container_writer_rejects_escaped_or_ambiguous_paths(self) -> None:
+        runner = Mock()
+        executor = AuthorizedContainerExecutor(
+            AuthorizedVMExecutor(TARGET, runner=runner),
+            AuthorizedContainer("tb-gpt2-codegolf", "/app"),
+        )
+        for path in ("relative.c", "/tmp/gpt2.c", "/app/../tmp/gpt2.c", "/app"):
+            with self.subTest(path=path):
+                with self.assertRaises(BoundaryError):
+                    executor.write_file(path, "content")
+        runner.assert_not_called()
+
+    def test_container_selector_and_workdir_fail_closed(self) -> None:
+        with self.assertRaises(BoundaryError):
+            AuthorizedContainer("--privileged", "/app")
+        with self.assertRaises(BoundaryError):
+            AuthorizedContainer("task", "relative/path")
 
     def test_tool_result_json_has_hard_utf8_boundary(self) -> None:
         content = bounded_tool_json(
@@ -138,6 +266,271 @@ class AuthorizedBoundaryTests(unittest.TestCase):
 
 
 class ToolLoopTests(unittest.TestCase):
+    def test_human_hold_is_removed_from_resumable_protocol_checkpoint(self) -> None:
+        notice = (
+            "[llm-super] Human approval is required before this action can run. "
+            "Review pending action act_test in the operator interface."
+        )
+        client = _FakeClient([
+            _completion({"role": "assistant", "content": notice}),
+        ])
+        snapshots: list[list[dict]] = []
+
+        result = run_tool_loop(
+            "approve exactly", model="super", client=client,
+            executor=_FakeExecutor(), checkpoint=snapshots.append,
+        )
+
+        self.assertEqual(result.text, notice)
+        self.assertEqual(snapshots[-1], [
+            {"role": "user", "content": "approve exactly"}
+        ])
+        self.assertEqual(result.transcript, snapshots[-1])
+
+    def test_transcript_checkpoint_is_atomic_and_task_bound(self) -> None:
+        messages = [{"role": "user", "content": "task"}]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run.json"
+            save_transcript(path, "task", messages)
+
+            self.assertEqual(load_transcript(path, "task"), messages)
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            with self.assertRaisesRegex(
+                DirectClientError, "does not match this task or is malformed"
+            ):
+                load_transcript(path, "different task")
+
+    def test_deterministic_governor_block_is_bounded_correction_context(self) -> None:
+        blocked = (
+            "[llm-super] Action blocked: a trailing command masks the meaningful "
+            "process exit status"
+        )
+        client = _FakeClient([
+            _completion({"role": "assistant", "content": blocked}),
+            _completion(_tool_message(
+                "call-corrected", '{"command":"git status --short"}',
+                CONTAINER_TOOL_NAME,
+            )),
+            _completion({"role": "assistant", "content": "verified"}),
+        ])
+        executor = _FakeExecutor()
+        executor.tool_name = CONTAINER_TOOL_NAME
+        events: list[str] = []
+
+        result = run_tool_loop(
+            "recover the repository", model="super", client=client,
+            executor=executor, tool_definitions=[CONTAINER_TOOL_DEFINITION],
+            progress=events.append,
+        )
+
+        retry_messages = client.requests[1][0]["messages"]
+        self.assertEqual(
+            retry_messages[0],
+            {"role": "user", "content": "recover the repository"},
+        )
+        self.assertEqual(retry_messages[-1]["role"], "user")
+        self.assertEqual(retry_messages[-1]["name"], "llm_super_governor")
+        self.assertIn("rejection is not task completion", retry_messages[-1]["content"])
+        self.assertNotIn(blocked, [
+            message.get("content") for message in retry_messages
+            if message.get("role") == "assistant"
+        ])
+        messages_after_correction = client.requests[2][0]["messages"]
+        self.assertEqual(
+            [m["content"] for m in messages_after_correction if m["role"] == "user"],
+            ["recover the repository"],
+        )
+        self.assertFalse(any(
+            str(m.get("content") or "").startswith("llm-super governor correction:")
+            for m in messages_after_correction
+        ))
+        self.assertEqual(executor.calls[0][0], "git status --short")
+        self.assertTrue(any(
+            "decision=governor_retry attempt=1" in event for event in events
+        ))
+        self.assertEqual(result.text, "verified")
+
+    def test_governor_correction_attempts_are_bounded(self) -> None:
+        blocked = "[llm-super] Action blocked: rejected"
+        client = _FakeClient([
+            _completion({"role": "assistant", "content": blocked}),
+            _completion({"role": "assistant", "content": blocked}),
+        ])
+        snapshots: list[list[dict]] = []
+
+        with self.assertRaisesRegex(
+            LimitReached, "maximum governor correction attempts reached"
+        ):
+            run_tool_loop(
+                "bounded correction", model="super", client=client,
+                executor=_FakeExecutor(), max_governor_retries=1,
+                checkpoint=snapshots.append,
+            )
+        self.assertEqual(snapshots[-1][-1]["role"], "user")
+        self.assertEqual(snapshots[-1][-1]["name"], "llm_super_governor")
+        self.assertTrue(snapshots[-1][-1]["content"].startswith(
+            "llm-super governor correction:"
+        ))
+        self.assertFalse(any(
+            str(message.get("content") or "").startswith("[llm-super] Action blocked")
+            for message in snapshots[-1]
+        ))
+
+    def test_empty_assistant_response_is_corrected_not_accepted_as_final(self) -> None:
+        client = _FakeClient([
+            _completion({"role": "assistant", "content": None}),
+            _completion({
+                "role": "assistant", "content": "Evidence-based final answer",
+            }),
+        ])
+        events: list[str] = []
+
+        result = run_tool_loop(
+            "diagnose safely", model="super", client=client,
+            executor=_FakeExecutor(), max_governor_retries=2,
+            progress=events.append,
+        )
+
+        self.assertEqual(result.text, "Evidence-based final answer")
+        self.assertEqual(result.tool_steps, 0)
+        self.assertIn("completion=1 decision=protocol_retry attempt=1", events)
+        self.assertFalse(any(
+            message.get("role") == "assistant"
+            and message.get("content") is None
+            and not message.get("tool_calls")
+            for message in result.transcript
+        ))
+        self.assertEqual(result.transcript[-2].get("name"), "llm_super_governor")
+
+    def test_resume_discards_empty_reply_after_active_correction(self) -> None:
+        task = "resume corrected answer"
+        initial = [
+            {"role": "user", "content": task},
+            {
+                "role": "user", "name": "llm_super_governor",
+                "content": (
+                    "llm-super governor correction: Answer without another "
+                    "tool call."
+                ),
+            },
+            {"role": "assistant", "content": None},
+        ]
+        client = _FakeClient([
+            _completion({"role": "assistant", "content": "Recovered final answer"}),
+        ])
+
+        result = run_tool_loop(
+            task, model="super", client=client, executor=_FakeExecutor(),
+            initial_messages=initial,
+        )
+
+        self.assertEqual(result.text, "Recovered final answer")
+        request_messages = client.requests[0][0]["messages"]
+        self.assertEqual(request_messages[-1].get("name"), "llm_super_governor")
+        self.assertFalse(any(
+            message.get("role") == "assistant"
+            and message.get("content") is None
+            for message in request_messages
+        ))
+
+    def test_container_tool_dispatches_only_through_container_executor(self) -> None:
+        client = _FakeClient([
+            _completion(_tool_message(
+                "call-container", '{"command":"git status --short"}',
+                CONTAINER_TOOL_NAME,
+            )),
+            _completion({"role": "assistant", "content": "container checked"}),
+        ])
+        executor = _FakeExecutor()
+        executor.tool_name = CONTAINER_TOOL_NAME
+
+        result = run_tool_loop(
+            "inspect the task container", model="super", client=client,
+            executor=executor, tool_definitions=[CONTAINER_TOOL_DEFINITION],
+        )
+
+        self.assertEqual(executor.calls[0][0], "git status --short")
+        self.assertEqual(result.text, "container checked")
+
+    def test_container_writer_dispatches_without_logging_file_content(self) -> None:
+        secret_content = "int main(void){return 731;}\n"
+        client = _FakeClient([
+            _completion(_tool_message(
+                "call-write",
+                json.dumps({"path": "/app/gpt2.c", "content": secret_content}),
+                CONTAINER_WRITE_TOOL_NAME,
+            )),
+            _completion({"role": "assistant", "content": "source written"}),
+        ])
+        runner = Mock(
+            return_value=subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=b"written\n", stderr=b""
+            )
+        )
+        executor = AuthorizedContainerExecutor(
+            AuthorizedVMExecutor(TARGET, runner=runner),
+            AuthorizedContainer("tb-gpt2-codegolf", "/app"),
+        )
+        events: list[str] = []
+
+        result = run_tool_loop(
+            "write the source", model="super", client=client, executor=executor,
+            tool_definitions=[
+                CONTAINER_TOOL_DEFINITION, CONTAINER_WRITE_TOOL_DEFINITION,
+            ],
+            progress=events.append,
+        )
+
+        self.assertEqual(result.text, "source written")
+        self.assertTrue(any(
+            "tool=write_file_in_locked_container path=/app/gpt2.c" in event
+            and f"bytes={len(secret_content.encode())}" in event
+            for event in events
+        ))
+        self.assertNotIn(secret_content, "\n".join(events))
+        self.assertEqual(runner.call_count, 1)
+
+    def test_durable_start_dispatches_through_locked_job_executor(self) -> None:
+        client = _FakeClient([
+            _completion(_tool_message(
+                "call-job",
+                json.dumps({"command": "sleep 10", "label": "build",
+                            "timeout_s": 30}),
+                START_JOB_TOOL,
+            )),
+            _completion({"role": "assistant", "content": "job started"}),
+        ])
+        executor = _FakeExecutor()
+        jobs = _FakeJobExecutor()
+
+        result = run_tool_loop(
+            "start the background build", model="super", client=client,
+            executor=executor, job_executor=jobs,
+        )
+
+        self.assertEqual(executor.calls, [])
+        self.assertEqual(jobs.calls[0][0], "start")
+        self.assertEqual(jobs.calls[0][1]["command"], "sleep 10")
+        self.assertTrue(jobs.calls[0][2]["session"].startswith("direct_"))
+        self.assertEqual(result.text, "job started")
+
+    def test_durable_only_capability_set_rejects_raw_shell_fallback(self) -> None:
+        from llm_super.durable_jobs import JOB_TOOL_DEFINITIONS
+
+        client = _FakeClient([
+            _completion(_tool_message("call-shell", '{"command":"ps aux"}')),
+            _completion({"role": "assistant", "content": "fallback refused"}),
+        ])
+        executor = _FakeExecutor()
+        result = run_tool_loop(
+            "typed jobs only", model="super", client=client, executor=executor,
+            tool_definitions=JOB_TOOL_DEFINITIONS,
+        )
+        self.assertEqual(executor.calls, [])
+        error = json.loads(client.requests[1][0]["messages"][-1]["content"])
+        self.assertEqual(error["error"]["kind"], "unauthorized_tool")
+        self.assertEqual(result.text, "fallback refused")
+
     def test_malformed_tool_arguments_are_returned_without_execution(self) -> None:
         client = _FakeClient(
             [
@@ -197,7 +590,7 @@ class ToolLoopTests(unittest.TestCase):
             {"role": "user", "content": "watch every step"}
         ])
         self.assertNotIn("system", [m["role"] for m in first_body["messages"]])
-        self.assertEqual(first_body["tools"], [TOOL_DEFINITION])
+        self.assertEqual(first_body["tools"], TOOL_DEFINITIONS)
         self.assertFalse(first_body["stream"])
         self.assertEqual(first_body["max_tokens"], 2500)
 
@@ -261,7 +654,7 @@ class ToolLoopTests(unittest.TestCase):
 
         self.assertEqual(len(events), 4)
         self.assertEqual(events[0], "completion=1 decision=tool_calls count=1")
-        self.assertIn("tool_step=1 tool=run_on_authorized_vm command=", events[1])
+        self.assertIn("tool_step=1 tool=run_on_authorized_gce_vm command=", events[1])
         self.assertIn("API_TOKEN=<redacted>", events[1])
         self.assertIn("--token=<redacted>", events[1])
         self.assertNotIn(secret, "\n".join(events))

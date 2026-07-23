@@ -1,0 +1,1 @@
+/tmp/llm-super-agent/venv/bin/python -m unittest discover -s tests -v
