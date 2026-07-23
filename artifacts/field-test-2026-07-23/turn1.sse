@@ -1,0 +1,38 @@
+data: {"id": "chatcmpl-d719464069b645c68ed0d8c6", "object": "chat.completion.chunk", "created": 1784790886, "model": "super", "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": null}]}
+
+: keepalive
+
+: [llm-super] contract extracted
+
+: keepalive
+
+: keepalive
+
+: [llm-super] executing on deepseek-v4-pro
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: [llm-super] running generated code in the sandbox
+
+: keepalive
+
+: [llm-super] verified 1.00 by qwen-3.7-plus
+
+data: {"id": "chatcmpl-d719464069b645c68ed0d8c6", "object": "chat.completion.chunk", "created": 1784791045, "model": "super", "choices": [{"index": 0, "delta": {"content": "```python\nimport re\n\ndef parse_duration(text: str) -> int:\n    \"\"\"\n    Parse a duration string like \"2h30m\", \"45s\", \"1h5s\", \"90m\" into total seconds.\n\n    The format must contain at least one component among h, m, s.\n    Components must appear in the order h, m, s without repetitions.\n    Raises ValueError(\"malformed duration\") for any invalid input.\n\n    >>> parse_duration(\"2h30m\")\n    9000\n    >>> parse_duration(\"45s\")\n    45\n    >>> parse_duration(\"1h30m10s\")\n    5410\n    >>> parse_duration(\"90m\")\n    54"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-d719464069b645c68ed0d8c6", "object": "chat.completion.chunk", "created": 1784791045, "model": "super", "choices": [{"index": 0, "delta": {"content": "00\n    >>> parse_duration(\"malformed\")\n    Traceback (most recent call last):\n        ...\n    ValueError: malformed duration\n    \"\"\"\n    pattern = r'^(?:(\\d+)h)?(?:(\\d+)m)?(?:(\\d+)s)?$'\n    match = re.match(pattern, text)\n    if not match:\n        raise ValueError(\"malformed duration\")\n\n    hours_str, minutes_str, seconds_str = match.groups()\n\n    # at least one component must be present\n    if hours_str is None and minutes_str is None and seconds_str is None:\n        raise ValueError(\"malformed duration\")\n"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-d719464069b645c68ed0d8c6", "object": "chat.completion.chunk", "created": 1784791045, "model": "super", "choices": [{"index": 0, "delta": {"content": "\n    hours = int(hours_str) if hours_str else 0\n    minutes = int(minutes_str) if minutes_str else 0\n    seconds = int(seconds_str) if seconds_str else 0\n\n    return hours * 3600 + minutes * 60 + seconds\n```\n---\n[llm-super] executor=deepseek-v4-pro attempts=1 verifier=qwen-3.7-plus score=1.00 cost=$0.0065"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-d719464069b645c68ed0d8c6", "object": "chat.completion.chunk", "created": 1784791045, "model": "super", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
+
+data: [DONE]
+

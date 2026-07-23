@@ -1,0 +1,120 @@
+data: {"id": "chatcmpl-11df85093a7542c886e60cc3", "object": "chat.completion.chunk", "created": 1784791108, "model": "super", "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": null}]}
+
+: keepalive
+
+: [llm-super] contract extracted
+
+: [llm-super] launching candidates
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: [llm-super] executing on glm-5.2
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: [llm-super] candidate from glm-5.2
+
+: [llm-super] executing on deepseek-v4-pro
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: [llm-super] candidate from deepseek-v4-pro
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: [llm-super] synthesizing unit results
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+: keepalive
+
+data: {"id": "chatcmpl-11df85093a7542c886e60cc3", "object": "chat.completion.chunk", "created": 1784791731, "model": "super", "choices": [{"index": 0, "delta": {"content": "- Empty or null input: The input is an empty string, null, or consists solely of whitespace characters.\n- Extra trailing characters: A valid timestamp is followed by additional non-whitespace characters after the expected end.\n- Internal or leading/trailing whitespace: The timestamp contains spaces, tabs, or newlines at the beginning, end, or within the string.\n- Invalid characters not allowed by grammar: The string contains characters forbidden by RFC 3339, such as slashes, semicolons, underscores, or lett"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-11df85093a7542c886e60cc3", "object": "chat.completion.chunk", "created": 1784791731, "model": "super", "choices": [{"index": 0, "delta": {"content": "ers other than uppercase 'T' and 'Z'.\n- ASCII control characters: The input includes invisible control characters like NUL (0x00), carriage return, or other non-printable ASCII codes.\n- Non-ASCII characters: The string contains non-ASCII bytes or characters, including zero-width spaces.\n- Non-ASCII digit characters: Digits from scripts other than ASCII (e.g., fullwidth digits, Arabic-Indic digits) are used instead of standard 0\u20139.\n- Misordered components: The fixed sequence of date and time components is al"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-11df85093a7542c886e60cc3", "object": "chat.completion.chunk", "created": 1784791731, "model": "super", "choices": [{"index": 0, "delta": {"content": "tered, such as placing time before date or month after day.\n- Incomplete or truncated timestamp: The input ends before all mandatory components are present, such as a date without time, a partial time (e.g., T12 or T12:30), or an unfinished date.\n- Invalid date separator: The year, month, and day are separated by characters other than hyphens (e.g., slashes, spaces).\n- Basic date format (no hyphens): The date portion is provided as a compact string without any separators (e.g., 20230101).\n- Leading zeros mi"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-11df85093a7542c886e60cc3", "object": "chat.completion.chunk", "created": 1784791731, "model": "super", "choices": [{"index": 0, "delta": {"content": "ssing in date: Month or day fields lack required leading zeros (e.g., 2023-1-5 rather than 2023-01-05).\n- Year with wrong number of digits: The year has fewer than four digits, more than four digits, or includes a leading sign (e.g., 23, 10000, +2023).\n- Non-numeric year characters: The year field contains alphabetic or special characters instead of digits.\n- Non-numeric characters in other numeric fields: Alphabetic or special characters appear in the month, day, hour, minute, or second fields where only d"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-11df85093a7542c886e60cc3", "object": "chat.completion.chunk", "created": 1784791731, "model": "super", "choices": [{"index": 0, "delta": {"content": "igits are allowed.\n- Month out of two-digit range: The month is 00, 13, or a single digit without a leading zero.\n- Day zero or negative: The day is 00 or a negative value, which are nonexistent calendar days.\n- Day out of valid range for given month: The day number exceeds the month's maximum days (e.g., 2023-02-30, 2023-04-31), including February 29 in non-leap years.\n- February 29 in non-leap years: The date February 29 is supplied in a year that is not a leap year (e.g., 2023-02-29, 2100-02-29).\n- Year "}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-11df85093a7542c886e60cc3", "object": "chat.completion.chunk", "created": 1784791731, "model": "super", "choices": [{"index": 0, "delta": {"content": "0000 handling: The proleptic Gregorian year 0000 is a leap year (0000-02-29 is valid), but other days must be validated correctly; parsers must not reject it outright.\n- Invalid date-time separator: The date and time are separated by something other than the mandatory uppercase 'T' (e.g., a space, lowercase 't', or missing separator).\n- Date without time component: A date string (YYYY-MM-DD) is supplied without the required time and time-zone designator.\n- Invalid time separator: The hour, minute, and secon"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-11df85093a7542c886e60cc3", "object": "chat.completion.chunk", "created": 1784791731, "model": "super", "choices": [{"index": 0, "delta": {"content": "d are separated by characters other than colons (e.g., dots).\n- Basic time format (no colons): The time portion is provided without mandatory colon separators (e.g., T123000).\n- Hour out of valid range: The hour is outside 00\u201323; the special value 24 is forbidden by RFC 3339.\n- Minute out of valid range: The minute is 60 or more, or negative.\n- Second out of valid range: The second is greater than 60 or negative; note that 60 (leap second) is syntactically valid.\n- Invalid leap seconds: The seconds value is"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-11df85093a7542c886e60cc3", "object": "chat.completion.chunk", "created": 1784791731, "model": "super", "choices": [{"index": 0, "delta": {"content": " 60 but not at exactly 23:59:60 on the last day of a month, making it semantically invalid.\n- Leap second with fractional part: A valid syntactic edge case where seconds equal 60 and a fractional part follows (e.g., 23:59:60.999), which must be accepted.\n- Fractional seconds with missing integer part: The whole-second component is omitted before the decimal point (e.g., T10:.5).\n- Fractional seconds with comma separator: A comma is used instead of a dot as the decimal separator (e.g., 23:59:59,123).\n- Fract"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-11df85093a7542c886e60cc3", "object": "chat.completion.chunk", "created": 1784791731, "model": "super", "choices": [{"index": 0, "delta": {"content": "ional seconds with missing digits after dot: The decimal point is present but not followed by any digits (e.g., 12:00:00.).\n- Multiple decimal points in one time: More than one decimal point appears within the seconds fraction (e.g., 12:34:56.78.90).\n- Excessive fractional precision: The fractional seconds contain more digits than the parser's allowed maximum (e.g., exceeding nanosecond limits), risking overflow or performance issues.\n- Fractional seconds placed after time zone: The fractional part appears "}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-11df85093a7542c886e60cc3", "object": "chat.completion.chunk", "created": 1784791731, "model": "super", "choices": [{"index": 0, "delta": {"content": "after the zone designator instead of before it (e.g., T00:00:00Z.123).\n- Time zone designator missing: The timestamp lacks a required time zone indicator ('Z' or \u00b1HH:MM offset).\n- Lowercase UTC indicator: The letter 'z' is used instead of uppercase 'Z' to denote UTC.\n- Case sensitivity violations: The 'T' separator or 'Z' timezone indicator is provided in lowercase or an unexpected case, which a strict parser may reject.\n- Time-zone abbreviation instead of offset: A named time zone abbreviation (e.g., EST, "}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-11df85093a7542c886e60cc3", "object": "chat.completion.chunk", "created": 1784791731, "model": "super", "choices": [{"index": 0, "delta": {"content": "UTC, PST) is used instead of the required 'Z' or numeric offset.\n- Both 'Z' and explicit offset present: The string contains both the 'Z' UTC designator and a numeric offset (e.g., T00:00:00Z+00:00).\n- Offset sign missing: The numeric offset lacks the mandatory plus or minus sign (e.g., 00:30).\n- Time zone offset missing colon: The offset lacks the required colon between hours and minutes (e.g., +0530).\n- Time zone offset hour without minutes: The offset supplies only an hour with no minute component (e.g.,"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-11df85093a7542c886e60cc3", "object": "chat.completion.chunk", "created": 1784791731, "model": "super", "choices": [{"index": 0, "delta": {"content": " +05 or -12).\n- Offset hour out of range: The offset hour is outside the allowed range of -23 to +23 (e.g., +24:00).\n- Offset minute out of range: The offset minutes are 60 or more, or negative (e.g., +05:60).\n- Numeric zero offset instead of canonical 'Z': +00:00 or -00:00 is used instead of 'Z'; parsers enforcing canonical form may reject this; note that '-00:00' is a distinct edge case with special semantics that must be parsed without rejection by non-canonical parsers.\n---\n[llm-super] executor=union(de"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-11df85093a7542c886e60cc3", "object": "chat.completion.chunk", "created": 1784791731, "model": "super", "choices": [{"index": 0, "delta": {"content": "epseek-v4-pro) attempts=3 verifier=qwen-3.7-plus score=1.00 cost=$0.0488"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-11df85093a7542c886e60cc3", "object": "chat.completion.chunk", "created": 1784791731, "model": "super", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
+
+data: [DONE]
+

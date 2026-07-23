@@ -1,0 +1,37 @@
+{
+  "artifacts": [
+    "daily_revenue.csv",
+    "daily_revenue.sha256",
+    "orders.csv"
+  ],
+  "backend": "gce",
+  "cancelled_exit_code": 143,
+  "cancelled_final_state": "failed",
+  "collected": true,
+  "cursors_final": [
+    118,
+    0
+  ],
+  "exit_code": 0,
+  "final_state": "completed",
+  "job_id_shape_ok": true,
+  "job_ledger_db": "/var/folders/f7/308xx8_n2gq1vpcpzkpvkx380000gn/T/tmpn8a502it/parity.db",
+  "signal_ok": true,
+  "signal_repeats_cursors": true,
+  "signal_state": "signaled",
+  "start_ok": true,
+  "start_state": "running",
+  "stdout_phases": [
+    "phase=parse",
+    "phase=aggregate rows=3",
+    "phase=done"
+  ],
+  "target": {
+    "account": "gce-operator@example.com",
+    "project": "project96-sar",
+    "vm": "llmsuper-session-20260723",
+    "zone": "us-central1-a"
+  },
+  "watches": 1,
+  "workload_sha256": "4a1138df89341240c125ae378f09e6416f641278bd1e11a9b200a438f92a1655"
+}
