@@ -12,6 +12,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import re
 import sys
 import time
 import uuid
@@ -192,6 +193,50 @@ def _session_id(messages: list[dict]) -> str:
     return "anon"
 
 
+_EXPLICIT_ID_RE = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
+
+
+def _explicit_id(request: Request | None, body: dict, header: str,
+                 body_key: str) -> str | None:
+    """Read and validate one explicit identity from header or request body.
+
+    Returns None when absent; raises HTTPException(400) when present but
+    invalid — an explicit identity must never silently degrade to the hash
+    fallback, because the caller would then write under the wrong identity.
+    """
+    headers = getattr(request, "headers", None) or {}
+    value = headers.get(header) or body.get(body_key)
+    if value is None:
+        return None
+    value = str(value).strip()
+    if not value:
+        return None
+    if not _EXPLICIT_ID_RE.match(value):
+        raise HTTPException(
+            status_code=400,
+            detail=f"invalid {body_key}: must match "
+                   f"{_EXPLICIT_ID_RE.pattern}",
+        )
+    return value
+
+
+def _resolve_conversation(request: Request | None, body: dict,
+                          messages: list[dict]) -> tuple[str, bool]:
+    """Conversation identity: explicit and validated, hash as fallback.
+
+    Precedence: ``X-LLM-Super-Conversation`` header, then a
+    ``conversation_id`` request-body field, then the legacy
+    first-user-message hash. Explicit IDs survive client prefix rewrites
+    and first-message edits, which fork hash-derived conversations
+    silently (forensic report §8 items 2–3).
+    """
+    explicit = _explicit_id(
+        request, body, "x-llm-super-conversation", "conversation_id")
+    if explicit is not None:
+        return explicit, True
+    return _session_id(messages), False
+
+
 def _usage(prompt_tokens: int = 0, completion_tokens: int = 0) -> dict[str, int]:
     prompt = int(prompt_tokens or 0)
     completion = int(completion_tokens or 0)
@@ -329,9 +374,16 @@ async def chat_completions(request: Request):
 
     # A client thread may be !attach-ed onto another conversation: resolve
     # the content-derived id through the alias table before anything
-    # session-scoped runs.
-    raw_session = _session_id(messages)
+    # session-scoped runs. Explicit conversation IDs (validated header/body
+    # field) take precedence over the first-user-message hash.
+    raw_session, explicit_session = _resolve_conversation(
+        request, body, messages)
     session = state["library"].resolve_alias(raw_session)
+    explicit_endeavor = _explicit_id(
+        request, body, "x-llm-super-endeavor", "endeavor_id")
+    if explicit_endeavor is not None and state.get("endeavor_ledger"):
+        state["endeavor_ledger"].set_explicit_endeavor(
+            session, explicit_endeavor)
 
     # In-band control commands short-circuit everything.
     reply = handle(_last_user_text(messages), control, list(cfg.models),
@@ -364,7 +416,11 @@ async def chat_completions(request: Request):
     # always work ungated; explicit passthrough model names are exempt.
     gate_on = (control.gate_enabled if control.gate_enabled is not None
                else cfg.supervision.confirm_new_sessions)
+    # An explicit conversation ID is already a deliberate identity choice —
+    # the gate exists to catch accidental hash-forked sessions, so explicit
+    # sessions are exempt (like explicit registry-model passthrough).
     if (gate_on and model_name not in cfg.models
+            and not explicit_session
             and session not in state["armed_sessions"]
             and not state["library"].has_session(session)
             and not state["history"].recent_turns(session, 1)):
