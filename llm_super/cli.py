@@ -60,6 +60,17 @@ def main() -> None:
     sm.add_argument("--claude-command", default="claude",
                     help=argparse.SUPPRESS)
 
+    cal = sub.add_parser(
+        "calibrate",
+        help="score seeded good/flawed answers with each verifier family; "
+             "report false-pass and discrimination rates",
+    )
+    cal.add_argument("--config", default="models.yaml")
+    cal.add_argument("--db", default="traces.db")
+    cal.add_argument("--tier", default="standard",
+                     choices=("lite", "standard", "adversarial"))
+    cal.add_argument("--repeats", type=int, default=1)
+
     ss = sub.add_parser(
         "summarize-steps",
         help="backfill three-level UI summaries for stored conversation steps",
@@ -147,6 +158,14 @@ def main() -> None:
         from . import report as report_mod
 
         print(report_mod.format_text(report_mod.efficiency(args.db, args.days)))
+    elif args.cmd == "calibrate":
+        from . import verifier_calibration
+
+        result = verifier_calibration.main_sync(
+            args.config, args.db, tier=args.tier, repeats=args.repeats)
+        print(verifier_calibration.format_report(result))
+        print(f"reported usage ${result['cost_usd']:.6f} · rows persisted to "
+              f"verifier_calibration in {args.db}")
     elif args.cmd == "summarize-history":
         import sys
 

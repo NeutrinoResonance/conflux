@@ -25,7 +25,7 @@ from . import graph_ui, history_ui, ui, workspace_ui
 
 from . import balance as balance_mod
 from . import export as export_mod
-from . import summary_jobs
+from . import summary_jobs, verifier_calibration
 from . import report as report_mod
 from . import retention
 from .checkpoint import Checkpoints
@@ -1918,6 +1918,17 @@ async def admin_events_stream(request: Request, after_id: int = -1):
     return StreamingResponse(gen(), media_type="text/event-stream", headers={
         "Cache-Control": "no-cache", "X-Accel-Buffering": "no",
     })
+
+
+@app.get("/admin/calibration")
+async def admin_calibration():
+    """Latest verifier-calibration run: false-pass / discrimination per family."""
+    report = verifier_calibration.latest_report(state["trace_path"])
+    if report is None:
+        return {"run": None,
+                "hint": "run `llm-super calibrate` to measure verifier "
+                        "false-pass and discrimination rates"}
+    return {"run": report}
 
 
 @app.get("/admin/summary-jobs")
