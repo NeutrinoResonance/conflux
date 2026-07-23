@@ -274,6 +274,14 @@ $("#definitionMode").onclick=()=>chooseRun("");$("#runMode").onclick=()=>{const 
 $("#decisionCancel").onclick=()=>{$("#decisionDialog").close();state.pendingDecision=null};$("#decisionConfirm").onclick=submitDecision;
 const graphCanvas=$("#canvas");graphCanvas.onpointerdown=beginCanvasPan;graphCanvas.onpointermove=moveGesture;graphCanvas.onpointerup=e=>finishGesture(e);graphCanvas.onpointercancel=e=>finishGesture(e,true);
 let resizeTimer;new ResizeObserver(()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(state.flow)renderGraph()},60)}).observe($("#canvas"));
-refresh();setInterval(refresh,2000);
+refresh();
+// Trace-write-path SSE channel: refresh only when something actually
+// happened (debounced); 30s interval is a safety net, not the update path.
+let refreshQueued=false;
+function queueRefresh(delay=250){if(refreshQueued)return;refreshQueued=true;setTimeout(()=>{refreshQueued=false;refresh()},delay)}
+const live=new EventSource("/admin/events/stream");
+live.onmessage=()=>queueRefresh();
+live.onerror=()=>queueRefresh(2000);
+setInterval(refresh,30000);
 </script>
 </body></html>"""

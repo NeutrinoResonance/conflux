@@ -1738,6 +1738,70 @@ async def admin_events(n: int = 50):
     return state["trace"].recent(n)
 
 
+@app.get("/admin/events/stream")
+async def admin_events_stream(request: Request, after_id: int = -1):
+    """Server-sent live event channel fed by the trace write path.
+
+    Replaces the dashboards' 2-second full-refetch polling: connect with the
+    last seen event id (``after_id``; -1 means "current tail — new events
+    only"), missed events replay from the cursor, then each committed trace
+    event is pushed as one SSE message whose ``id:`` is the durable event
+    rowid, so a dropped connection resumes losslessly via the browser's
+    automatic Last-Event-ID reconnect. 15-second keepalive comments hold
+    idle proxies/tabs open.
+    """
+    trace = state["trace"]
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
+
+    def on_event(event: dict) -> None:
+        def push() -> None:
+            try:
+                queue.put_nowait(event)
+            except asyncio.QueueFull:
+                pass  # client is stalled; it will resume from Last-Event-ID
+        loop.call_soon_threadsafe(push)
+
+    # Honor the browser's automatic reconnect cursor when present.
+    last_event_header = request.headers.get("last-event-id")
+    if last_event_header is not None:
+        try:
+            after_id = int(last_event_header)
+        except ValueError:
+            pass
+
+    trace.add_listener(on_event)
+
+    def fmt(event: dict) -> str:
+        return (f"id: {event['id']}\n"
+                f"data: {json.dumps(event, default=str)}\n\n")
+
+    async def gen():
+        try:
+            cursor = after_id
+            if cursor < 0:
+                cursor = await asyncio.to_thread(trace.last_event_id)
+            for event in await asyncio.to_thread(trace.events_after, cursor):
+                cursor = event["id"]
+                yield fmt(event)
+            yield f": connected after_id={cursor}\n\n"
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+                    continue
+                if event["id"] > cursor:
+                    cursor = event["id"]
+                    yield fmt(event)
+        finally:
+            trace.remove_listener(on_event)
+
+    return StreamingResponse(gen(), media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache", "X-Accel-Buffering": "no",
+    })
+
+
 @app.get("/admin/stats")
 async def admin_stats():
     """Per-model outcome stats (feeds learned routing)."""

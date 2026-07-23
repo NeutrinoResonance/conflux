@@ -18,6 +18,7 @@ from .step_summaries import (
 class Trace:
     def __init__(self, path: str | Path = "traces.db"):
         self.path = str(path)
+        self._listeners: list = []
         self._conn = sqlite3.connect(str(path), check_same_thread=False)
         # Trace opens traces.db first (before History/Library/Checkpoints),
         # so this is the one moment the auto_vacuum migration can VACUUM.
@@ -65,6 +66,19 @@ class Trace:
         """
         return self._conn
 
+    def add_listener(self, listener) -> None:
+        """Register a callable invoked (from the writing thread) with each
+        committed event dict. This is the live-update feed: the SSE channel
+        subscribes here instead of re-polling the events table. Listener
+        errors are swallowed — observers must never break the write path."""
+        self._listeners.append(listener)
+
+    def remove_listener(self, listener) -> None:
+        try:
+            self._listeners.remove(listener)
+        except ValueError:
+            pass
+
     def record(
         self,
         session: str,
@@ -78,10 +92,11 @@ class Trace:
         cost_usd: float = 0.0,
         **data: Any,
     ) -> None:
-        self._conn.execute(
+        ts = time.time()
+        cur = self._conn.execute(
             "INSERT INTO events VALUES (?,?,?,?,?,?,?,?,?,?)",
             (
-                time.time(),
+                ts,
                 session,
                 task,
                 kind,
@@ -93,7 +108,44 @@ class Trace:
                 json.dumps(data, default=str) if data else None,
             ),
         )
+        event_id = cur.lastrowid
         self._conn.commit()
+        if self._listeners:
+            event = {
+                "id": event_id, "ts": ts, "session": session, "task": task,
+                "kind": kind, "model": model, "fm_id": fm_id,
+                "tokens_in": tokens_in, "tokens_out": tokens_out,
+                "cost_usd": cost_usd, "data": data or {},
+            }
+            for listener in list(self._listeners):
+                try:
+                    listener(event)
+                except Exception:
+                    pass
+
+    def events_after(self, after_id: int, n: int = 500) -> list[dict[str, Any]]:
+        """Cursor read for the live channel: events with rowid > after_id."""
+        cur = self._conn.execute(
+            """SELECT rowid AS id, ts, session, task, kind, model, fm_id,
+                      tokens_in, tokens_out, cost_usd, data
+                 FROM events WHERE rowid > ?
+                ORDER BY rowid LIMIT ?""",
+            (int(after_id), max(1, min(int(n), 2000))),
+        )
+        cols = [c[0] for c in cur.description]
+        rows = []
+        for raw in cur.fetchall():
+            item = dict(zip(cols, raw))
+            try:
+                item["data"] = json.loads(item["data"]) if item.get("data") else {}
+            except (json.JSONDecodeError, TypeError):
+                item["data"] = {}
+            rows.append(item)
+        return rows
+
+    def last_event_id(self) -> int:
+        row = self._conn.execute("SELECT COALESCE(MAX(rowid), 0) FROM events").fetchone()
+        return int(row[0] or 0)
 
     def recent(self, n: int = 50) -> list[dict[str, Any]]:
         cur = self._conn.execute(

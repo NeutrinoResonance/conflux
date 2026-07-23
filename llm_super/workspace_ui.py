@@ -291,6 +291,14 @@ document.addEventListener("pointerdown",e=>{if(e.target.closest("[data-workflow-
 document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if(!$("#endeavorRename").hidden){cancelEndeavorRename();return}if(!$("#conversationRename").hidden){cancelConversationRename();return}if(state.activeWorkflowOverlay)closeWorkflowOverlay(state.activeWorkflowOverlay)});
 let resize=null;$("#consoleHandle").onpointerdown=e=>{resize={id:e.pointerId,y:e.clientY,h:$(".console").getBoundingClientRect().height};e.target.setPointerCapture(e.pointerId)};$("#consoleHandle").onpointermove=e=>{if(!resize||resize.id!==e.pointerId)return;const h=Math.max(150,Math.min(innerHeight*.65,resize.h+resize.y-e.clientY));document.documentElement.style.setProperty("--console-h",h+"px")};$("#consoleHandle").onpointerup=$("#consoleHandle").onpointercancel=()=>resize=null;
 new ResizeObserver(()=>{applyTransform();renderWorkflowOverlays()}).observe(viewport);load({});
+// Trace-write-path SSE channel: reload the open conversation when one of its
+// events commits, instead of blind interval polling. schedulePoll() remains
+// only as the fallback for in-flight jobs if the stream drops.
+let reloadQueued=false;
+function queueReload(delay=300){if(reloadQueued||!state.graph?.conversation)return;reloadQueued=true;setTimeout(()=>{reloadQueued=false;reloadGraph().catch(()=>{})},delay)}
+const live=new EventSource("/admin/events/stream");
+live.onmessage=e=>{try{const ev=JSON.parse(e.data);if(!state.graph?.conversation||ev.session===state.graph.conversation.session||ev.session==="-")queueReload()}catch{queueReload()}};
+live.onerror=()=>{};
 </script>
 </body>
 </html>'''

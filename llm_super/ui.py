@@ -68,6 +68,9 @@ body {
 main { max-width: 1560px; margin: 0 auto; padding: 20px 20px 60px; }
 h1 { font-size: 18px; margin: 0 0 2px; }
 .sub { color: var(--muted); font-size: 12px; margin-bottom: 16px; }
+.livedot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--muted); vertical-align: baseline; }
+.livedot.on { background: var(--ok, #2e9e44); }
 .topnav { display: flex; gap: 4px; margin: 8px 0 14px; }
 .topnav a { color: var(--ink-2); text-decoration: none; font-size: 12px;
   padding: 4px 9px; border-radius: 6px; }
@@ -368,7 +371,7 @@ tr:last-child td { border-bottom: none; }
 <body>
 <main>
   <h1>llm-super</h1>
-  <div class="sub">live control plane — <span id="clock">…</span> · auto-refresh 2s</div>
+  <div class="sub">live control plane — <span id="clock">…</span> · <span id="livedot" class="livedot" title="live event stream"></span> event-stream</div>
   <nav class="topnav" aria-label="Primary">
     <a href="/workspace">Workspace</a>
     <a href="/" aria-current="page">Live</a>
@@ -1986,7 +1989,21 @@ refresh().then(() => {
   const t = q.get("msg");
   if (t) toggleMessages(new Event("click"), t);
 });
-setInterval(refresh, 2000);
+// Live updates ride the trace write path over SSE: each committed event
+// triggers one debounced refresh, so an idle tab transfers nothing and an
+// active turn paints sub-second. The 30s interval is only a safety net for
+// state with no trace event (e.g. another client editing the library).
+let refreshQueued = false;
+function queueRefresh(delay = 250) {
+  if (refreshQueued) return;
+  refreshQueued = true;
+  setTimeout(() => { refreshQueued = false; refresh(); }, delay);
+}
+const live = new EventSource("/admin/events/stream");
+live.onmessage = () => queueRefresh();
+live.onopen = () => { $("#livedot").className = "livedot on"; };
+live.onerror = () => { $("#livedot").className = "livedot"; queueRefresh(2000); };
+setInterval(refresh, 30000);
 </script>
 </body>
 </html>
