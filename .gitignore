@@ -2,3 +2,9 @@ traces.db*
 __pycache__/
 .venv/
 uv.lock
+dist/
+benchmarks/
+artifacts/**/*.db
+artifacts/**/*.db-wal
+artifacts/**/*.db-shm
+artifacts/**/*.sqlite
