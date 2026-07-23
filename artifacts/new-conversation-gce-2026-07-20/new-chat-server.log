@@ -1,0 +1,15 @@
+INFO:     Started server process [1891]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8056 (Press CTRL+C to quit)
+INFO:     127.0.0.1:53658 - "GET /workspace HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33680 - "GET /workspace HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33680 - "GET /admin/workspace/bootstrap HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33696 - "POST /admin/workspace/endeavors/end_517afaf6b7a342e3/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33696 - "GET /admin/workspace/bootstrap?endeavor_id=end_517afaf6b7a342e3&conversation_id=conv_fd4f5db9918b4b79 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44300 - "POST /admin/workspace/conversations/conv_fd4f5db9918b4b79/messages HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:44300 - "GET /admin/workspace/conversations/conv_fd4f5db9918b4b79 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35408 - "POST /admin/workspace/endeavors/end_517afaf6b7a342e3/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35408 - "GET /admin/workspace/bootstrap?endeavor_id=end_517afaf6b7a342e3&conversation_id=conv_612a5672a8984b5f HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36072 - "PATCH /admin/workspace/conversations/conv_612a5672a8984b5f HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36072 - "GET /admin/workspace/conversations/conv_612a5672a8984b5f HTTP/1.1" 200 OK

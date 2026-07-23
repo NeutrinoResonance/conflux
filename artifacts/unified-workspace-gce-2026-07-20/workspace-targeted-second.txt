@@ -1,0 +1,21 @@
+test_context_edges_and_vector_store_are_real_prompt_inputs (tests.test_conversation_graph.ConversationGraphStoreTests.test_context_edges_and_vector_store_are_real_prompt_inputs) ... ok
+test_edit_revisions_and_invalidates_every_dependent_node (tests.test_conversation_graph.ConversationGraphStoreTests.test_edit_revisions_and_invalidates_every_dependent_node) ... ok
+test_messages_grow_downward_as_dependencies_and_contain_workflows (tests.test_conversation_graph.ConversationGraphStoreTests.test_messages_grow_downward_as_dependencies_and_contain_workflows) ... ok
+test_workflow_nodes_can_be_added_deleted_and_applied_globally (tests.test_conversation_graph.ConversationGraphStoreTests.test_workflow_nodes_can_be_added_deleted_and_applied_globally) ... ok
+test_edit_automatically_recalculates_dependent_assistant_nodes (tests.test_workspace_service.WorkspaceServiceTests.test_edit_automatically_recalculates_dependent_assistant_nodes) ... ok
+test_human_input_node_pauses_before_any_model_call (tests.test_workspace_service.WorkspaceServiceTests.test_human_input_node_pauses_before_any_model_call) ... ok
+test_pause_cancels_in_flight_message_without_releasing_output (tests.test_workspace_service.WorkspaceServiceTests.test_pause_cancels_in_flight_message_without_releasing_output) ... ok
+test_per_message_ensemble_runs_same_model_with_varied_temperatures (tests.test_workspace_service.WorkspaceServiceTests.test_per_message_ensemble_runs_same_model_with_varied_temperatures) ... ok
+test_all_existing_primary_surfaces_link_to_workspace (tests.test_workspace_ui.WorkspaceUIContractTests.test_all_existing_primary_surfaces_link_to_workspace) ... ok
+test_terminal_makes_both_message_fields_editable_and_recalculates (tests.test_workspace_ui.WorkspaceUIContractTests.test_terminal_makes_both_message_fields_editable_and_recalculates) ... ok
+test_workflow_palette_covers_ensemble_context_human_and_stores (tests.test_workspace_ui.WorkspaceUIContractTests.test_workflow_palette_covers_ensemble_context_human_and_stores) ... ok
+test_workspace_is_a_downward_nested_conversation_graph (tests.test_workspace_ui.WorkspaceUIContractTests.test_workspace_is_a_downward_nested_conversation_graph) ... ok
+test_workspace_never_exposes_an_execution_backend_selector (tests.test_workspace_ui.WorkspaceUIContractTests.test_workspace_never_exposes_an_execution_backend_selector) ... ok
+test_bootstrap_creation_graph_and_store_routes (tests.test_workspace_routes.WorkspaceRouteTests.test_bootstrap_creation_graph_and_store_routes) ... ok
+test_workspace_page_is_served_as_the_primary_product_surface (tests.test_workspace_routes.WorkspaceRouteTests.test_workspace_page_is_served_as_the_primary_product_surface) ... ok
+test_same_model_samples_keep_identity_temperature_and_union (tests.test_ensemble_workflow.EnsembleWorkflowTests.test_same_model_samples_keep_identity_temperature_and_union) ... ok
+
+----------------------------------------------------------------------
+Ran 16 tests in 0.575s
+
+OK

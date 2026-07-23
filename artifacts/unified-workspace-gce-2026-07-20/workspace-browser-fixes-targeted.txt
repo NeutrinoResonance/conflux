@@ -1,0 +1,20 @@
+test_drag_position_does_not_invalidate_or_reexecute_the_graph (tests.test_workspace_service.WorkspaceServiceTests.test_drag_position_does_not_invalidate_or_reexecute_the_graph) ... ok
+test_edit_automatically_recalculates_dependent_assistant_nodes (tests.test_workspace_service.WorkspaceServiceTests.test_edit_automatically_recalculates_dependent_assistant_nodes) ... ok
+test_human_input_node_pauses_before_any_model_call (tests.test_workspace_service.WorkspaceServiceTests.test_human_input_node_pauses_before_any_model_call) ... ok
+test_pause_cancels_in_flight_message_without_releasing_output (tests.test_workspace_service.WorkspaceServiceTests.test_pause_cancels_in_flight_message_without_releasing_output) ... ok
+test_per_message_ensemble_runs_same_model_with_varied_temperatures (tests.test_workspace_service.WorkspaceServiceTests.test_per_message_ensemble_runs_same_model_with_varied_temperatures) ... ok
+test_provider_outage_is_failed_not_verified_completion (tests.test_workspace_service.WorkspaceServiceTests.test_provider_outage_is_failed_not_verified_completion) ... ok
+test_bootstrap_creation_graph_and_store_routes (tests.test_workspace_routes.WorkspaceRouteTests.test_bootstrap_creation_graph_and_store_routes) ... ok
+test_workspace_conversation_is_not_duplicated_as_history_endeavor (tests.test_workspace_routes.WorkspaceRouteTests.test_workspace_conversation_is_not_duplicated_as_history_endeavor) ... ok
+test_workspace_page_is_served_as_the_primary_product_surface (tests.test_workspace_routes.WorkspaceRouteTests.test_workspace_page_is_served_as_the_primary_product_surface) ... ok
+test_all_existing_primary_surfaces_link_to_workspace (tests.test_workspace_ui.WorkspaceUIContractTests.test_all_existing_primary_surfaces_link_to_workspace) ... ok
+test_nodes_are_draggable_without_recalculating_conversation_content (tests.test_workspace_ui.WorkspaceUIContractTests.test_nodes_are_draggable_without_recalculating_conversation_content) ... ok
+test_terminal_makes_both_message_fields_editable_and_recalculates (tests.test_workspace_ui.WorkspaceUIContractTests.test_terminal_makes_both_message_fields_editable_and_recalculates) ... ok
+test_workflow_palette_covers_ensemble_context_human_and_stores (tests.test_workspace_ui.WorkspaceUIContractTests.test_workflow_palette_covers_ensemble_context_human_and_stores) ... ok
+test_workspace_is_a_downward_nested_conversation_graph (tests.test_workspace_ui.WorkspaceUIContractTests.test_workspace_is_a_downward_nested_conversation_graph) ... ok
+test_workspace_never_exposes_an_execution_backend_selector (tests.test_workspace_ui.WorkspaceUIContractTests.test_workspace_never_exposes_an_execution_backend_selector) ... ok
+
+----------------------------------------------------------------------
+Ran 15 tests in 0.575s
+
+OK

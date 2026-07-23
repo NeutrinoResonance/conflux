@@ -1,0 +1,11 @@
+test_all_existing_primary_surfaces_link_to_workspace (tests.test_workspace_ui.WorkspaceUIContractTests.test_all_existing_primary_surfaces_link_to_workspace) ... ok
+test_nodes_are_draggable_without_recalculating_conversation_content (tests.test_workspace_ui.WorkspaceUIContractTests.test_nodes_are_draggable_without_recalculating_conversation_content) ... ok
+test_terminal_makes_both_message_fields_editable_and_recalculates (tests.test_workspace_ui.WorkspaceUIContractTests.test_terminal_makes_both_message_fields_editable_and_recalculates) ... ok
+test_workflow_palette_covers_ensemble_context_human_and_stores (tests.test_workspace_ui.WorkspaceUIContractTests.test_workflow_palette_covers_ensemble_context_human_and_stores) ... ok
+test_workspace_is_a_downward_nested_conversation_graph (tests.test_workspace_ui.WorkspaceUIContractTests.test_workspace_is_a_downward_nested_conversation_graph) ... ok
+test_workspace_never_exposes_an_execution_backend_selector (tests.test_workspace_ui.WorkspaceUIContractTests.test_workspace_never_exposes_an_execution_backend_selector) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.001s
+
+OK

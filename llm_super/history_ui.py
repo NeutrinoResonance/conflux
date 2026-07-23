@@ -109,6 +109,25 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   font-weight: 650;
 }
 .top-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.organizing-model {
+  width: min(1564px, calc(100% - 28px));
+  margin: 14px auto 0;
+  display: grid;
+  grid-template-columns: max-content repeat(7, max-content);
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.organizing-model > strong { margin-right: 8px; font-size: 11px; }
+.organizing-step { display: grid; gap: 1px; }
+.organizing-step b { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; }
+.organizing-step span { color: var(--muted); font-size: 9.5px; }
+.organizing-arrow { color: var(--accent); font-size: 8px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 button {
   border: 1px solid var(--line-2);
   border-radius: 7px;
@@ -324,10 +343,14 @@ h3 { font-size: 13px; }
 .tool-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
 .summary-stack { display: grid; gap: 6px; margin-top: 9px; }
 .message-summary {
+  position: relative;
   border-left: 3px solid var(--line-2);
-  padding: 4px 0 4px 9px;
+  padding: 4px 0 4px 13px;
   color: var(--ink-2);
 }
+.message-summary::before { content: ""; position: absolute; left: -6px; top: 9px;
+  width: 9px; height: 9px; border-radius: 50%; background: var(--accent);
+  box-shadow: 0 0 0 3px var(--surface); }
 .message-summary .summary-head { color: var(--ink); font-weight: 640; }
 .message-summary .summary-role {
   margin-right: 6px;
@@ -338,6 +361,23 @@ h3 { font-size: 13px; }
   text-transform: uppercase;
 }
 .message-summary .summary-body { margin-top: 2px; font-size: 12px; }
+.message-summary .summary-short { margin-top: 3px; color: var(--ink); font-size: 12px; }
+.message-summary .summary-node { display: block; margin-bottom: 2px; font-size: 12.5px;
+  color: var(--ink); }
+.message-summary details { margin-top: 4px; font-size: 11.5px; }
+.message-summary details summary { cursor: pointer; color: var(--accent); }
+.conversation-flow { display: grid;
+  grid-template-columns: minmax(0,1fr) 26px minmax(0,1fr) 26px minmax(0,1fr);
+  align-items: stretch; margin-top: 9px; }
+.flow-arrow { display: grid; place-items: center; color: var(--accent); font-size: 17px; }
+.flow-stage { min-width: 0; border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 9px; background: var(--surface); }
+.flow-stage.active { border-top: 2px solid var(--accent); }
+.flow-stage .fk { color: var(--muted); font-size: 9px; font-weight: 720;
+  letter-spacing: .08em; text-transform: uppercase; }
+.flow-stage .fv { display: -webkit-box; margin-top: 3px; overflow: hidden;
+  -webkit-box-orient: vertical; -webkit-line-clamp: 3; color: var(--ink-2); font-size: 11.5px; }
+.flow-caption { margin-top: 7px; color: var(--ink-2); font-size: 11.5px; }
 .provider-summaries {
   margin-top: 8px;
   border: 1px solid var(--line);
@@ -394,7 +434,11 @@ dialog::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(2px); }
 }
 .dialog-head h2 { margin: 0; flex: 1; }
 .rawmeta { padding: 9px 14px; color: var(--muted); font-size: 11px; border-bottom: 1px solid var(--line); }
-#rawBody {
+.view-toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.view-toggle button { border: 0; border-radius: 0; padding: 4px 8px; }
+.view-toggle button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+#rawBody { padding: 14px; min-height: 180px; overflow: auto; }
+#rawJSON {
   margin: 0;
   padding: 14px;
   min-height: 180px;
@@ -403,6 +447,32 @@ dialog::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(2px); }
   overflow-wrap: anywhere;
   font: 11.5px/1.45 ui-monospace, "SFMono-Regular", Consolas, monospace;
 }
+.raw-section + .raw-section { margin-top: 14px; }
+.raw-section h3 { display: flex; align-items: baseline; gap: 7px; margin-bottom: 7px; }
+.chat-thread { display: grid; gap: 8px; }
+.chat-message { display: grid; grid-template-columns: 28px minmax(0,1fr); gap: 8px;
+  align-items: start; max-width: min(88%, 880px); }
+.chat-message.assistant { margin-left: auto; grid-template-columns: minmax(0,1fr) 28px; }
+.chat-avatar { width: 28px; height: 28px; display: grid; place-items: center;
+  border: 1px solid var(--line); border-radius: 50%; background: var(--surface-2);
+  color: var(--ink-2); font-size: 10px; font-weight: 750; }
+.chat-message.assistant .chat-avatar { grid-column: 2; background: var(--accent-soft); color: var(--accent); }
+.chat-bubble { min-width: 0; padding: 8px 10px; border: 1px solid var(--line);
+  border-radius: 4px 11px 11px 11px; background: var(--surface-2); }
+.chat-message.assistant .chat-bubble { grid-column: 1; grid-row: 1;
+  border-radius: 11px 4px 11px 11px; background: var(--accent-soft); }
+.chat-role { margin-bottom: 4px; color: var(--muted); font-size: 9.5px; font-weight: 720;
+  letter-spacing: .07em; text-transform: uppercase; }
+.chat-content { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.tool-block { margin-top: 7px; padding: 7px 8px; border: 1px solid var(--line);
+  border-radius: 7px; background: var(--surface); font-size: 11px; }
+.payload-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(170px,1fr)); gap: 7px; }
+.payload-field { min-width: 0; padding: 8px 9px; border: 1px solid var(--line);
+  border-radius: 7px; background: var(--surface-2); }
+.payload-field .pk { color: var(--muted); font-size: 9.5px; text-transform: uppercase;
+  letter-spacing: .06em; }
+.payload-field .pv { margin-top: 3px; max-height: 140px; overflow: auto;
+  white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11.5px; }
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
@@ -427,6 +497,12 @@ dialog::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(2px); }
   .tabs { padding-inline: 10px; }
   .filters, .two-col { grid-template-columns: 1fr; }
   .grid { grid-template-columns: 1fr 1fr; }
+  .conversation-flow { grid-template-columns: 1fr; gap: 5px; }
+  .flow-arrow { transform: rotate(90deg); min-height: 18px; }
+  .chat-message { max-width: 96%; }
+  .organizing-model { grid-template-columns: 1fr; justify-content: stretch; }
+  .organizing-model > strong { grid-column: 1 / -1; }
+  .organizing-arrow { padding-left: 5px; }
 }
 </style>
 </head>
@@ -434,8 +510,10 @@ dialog::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(2px); }
 <header class="topbar">
   <a class="brand" href="/">llm-super</a>
   <nav class="nav" aria-label="Primary">
+    <a href="/workspace">Workspace</a>
     <a href="/">Live</a>
     <a href="/history" aria-current="page">History</a>
+    <a href="/graphs">Agent Graphs</a>
     <a href="/#analytics-section">Analytics</a>
     <a href="/#settings-section">Settings</a>
   </nav>
@@ -444,11 +522,20 @@ dialog::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(2px); }
   </div>
 </header>
 
+<section class="organizing-model" aria-label="History containment model">
+  <strong>How the records fit together</strong>
+  <span class="organizing-step"><b>Endeavor</b><span>broader objective</span></span><span class="organizing-arrow">contains →</span>
+  <span class="organizing-step"><b>Conversation</b><span>one chat thread</span></span><span class="organizing-arrow">triggers →</span>
+  <span class="organizing-step"><b>Task run</b><span>one workflow execution</span></span><span class="organizing-arrow">records →</span>
+  <span class="organizing-step"><b>Decision event</b><span>one recorded step</span></span>
+</section>
+
 <main class="shell">
   <aside class="sidebar" aria-label="Endeavors">
     <div class="sidebar-head">
       <p class="eyebrow">History</p>
       <h2 style="margin-bottom:0">Endeavors</h2>
+      <p class="meta" style="margin:4px 0 0">An endeavor contains one or more conversations.</p>
       <form id="filterForm" class="filters" role="search">
         <label class="sr-only" for="search">Search history</label>
         <input id="search" name="q" type="search" placeholder="Search title or ID">
@@ -478,11 +565,16 @@ dialog::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(2px); }
 <dialog id="rawDialog" aria-labelledby="rawTitle">
   <div class="dialog-head">
     <h2 id="rawTitle">Raw exchange</h2>
+    <span class="view-toggle" aria-label="Exchange display mode">
+      <button id="visualRaw" type="button" aria-pressed="true">Conversation</button>
+      <button id="jsonRaw" type="button" aria-pressed="false">JSON</button>
+    </span>
     <button id="copyRaw" type="button">Copy JSON</button>
     <button id="closeRaw" type="button" aria-label="Close raw exchange">Close</button>
   </div>
   <div id="rawMeta" class="rawmeta"></div>
-  <pre id="rawBody">Loading…</pre>
+  <div id="rawBody">Loading…</div>
+  <pre id="rawJSON" hidden></pre>
 </dialog>
 
 <div id="announcer" class="sr-only" aria-live="polite"></div>
@@ -492,7 +584,7 @@ const state = {
   selected: null, detail: null, runs: [], timeline: [],
   timelineTotal: 0, timelineNext: null, timelineSummary: {},
   timelineLoading: false, timelineError: "",
-  collapse: true, tab: "overview", rawText: "", requestSerial: 0,
+  collapse: true, tab: "overview", rawText: "", rawItem: null, rawView: "visual", requestSerial: 0,
   detailSerial: 0, timelineSerial: 0, rawSerial: 0,
 };
 const $ = s => document.querySelector(s);
@@ -583,7 +675,9 @@ function renderEndeavors() {
     `showing ${state.endeavors.length} of ${state.endeavorTotal} endeavors`;
   $("#endeavorList").innerHTML = state.endeavors.length
     ? state.endeavors.map(item => {
-      const contextHeadline = String(item.context_summary?.headline || "").trim();
+      const itemSummary = summaryParts(item);
+      const contextHeadline = itemSummary.node || String(item.context_summary?.headline || "").trim();
+      const legacyContext = compactContextHTML(item.context_summary);
       const accessibleLabel = [item.status, item.title, contextHeadline].filter(Boolean).join(". ");
       return `
       <button class="endeavor ${item.id === state.selected ? "selected" : ""}"
@@ -593,10 +687,10 @@ function renderEndeavors() {
         <span class="e-title">${statusBadge(item.status)}
           <span class="text">${esc(item.title)}</span></span>
         <span class="e-meta meta">
-          ${item.session_count ?? item.run_count} runs · ${item.task_count} steps ·
+          ${item.session_count ?? item.run_count} conversation${(item.session_count ?? item.run_count) === 1 ? "" : "s"} · ${item.task_count} steps ·
           ${fmtDuration(item.duration_seconds)} · ${money(item.cost_usd)}
         </span>
-        ${compactContextHTML(item.context_summary)}
+        ${compactContextHTML(item) || legacyContext}
       </button>`;
     }).join("")
     : '<div class="empty">No endeavors match these filters.</div>';
@@ -680,17 +774,19 @@ function renderDetail() {
   const d = state.detail;
   if (!d) return;
   const target = d.target || {};
+  const conversationCount = d.session_count ?? d.run_count;
+  const targetParts = [target.host_arch, target.guest_arch].filter(Boolean);
   $("#detail").innerHTML = `
     <header class="detail-head">
       <p class="eyebrow">Endeavor</p>
       <div class="detail-title">
         ${statusBadge(d.status)}
-        <div><h1>${esc(d.title)}</h1>
-          <div class="targetline">
-            ${esc(target.host_arch || "host ?")} → ${esc(target.guest_arch || "target ?")}
-            ${target.emulator ? " · " + esc(target.emulator) : ""}
-            ${target.vm ? " · " + esc(target.vm) : ""}
-          </div>
+          <div><h1>${esc(d.title)}</h1>
+            <div class="targetline">
+            ${conversationCount} conversation${conversationCount === 1 ? "" : "s"} · endeavor <span class="mono">${esc(d.id)}</span>
+            ${targetParts.length ? " · " + esc(target.host_arch || "host ?") + " → " + esc(target.guest_arch || "target ?") : ""}
+            ${target.emulator ? " · " + esc(target.emulator) : ""}${target.vm ? " · " + esc(target.vm) : ""}
+            </div>
         </div>
       </div>
     </header>
@@ -721,19 +817,31 @@ function overviewHTML() {
   const errors = d.errors || {};
   const primary = state.timelineSummary.primary_poll_run;
   const warning = (state.timelineSummary.warning_groups || [])[0];
+  const directSummary = summaryParts(d);
+  const contextSummary = directSummary.short || directSummary.node
+    ? directSummary : summaryParts(d.context_summary);
+  const lastStep = [...state.timeline].reverse().find(item => item.type === "step");
+  const lastResponse = summaryParts(lastStep?.response_summary || lastStep);
+  const legacyObjective = summaryCardHTML(d.context_summary, "Objective");
   return `
     <div class="grid">
       ${metric("Duration", fmtDuration(d.duration_seconds), fmtTime(d.start_ts) + " → " + fmtTime(d.last_ts))}
-      ${metric("Runs", d.session_count ?? d.run_count, d.task_count + " logical steps")}
+      ${metric("Conversations", d.session_count ?? d.run_count, d.task_count + " logical steps across their task runs")}
       ${metric("Tokens", fmtTokens(d.tokens_total ?? (d.tokens_in + d.tokens_out)),
         fmtTokens(d.tokens_in) + " input · " + fmtTokens(d.tokens_out) + " output")}
       ${metric("Cost", money(d.cost_usd), (d.provider_errors || 0) + " provider errors · " +
         (errors.unrecovered || 0) + " open failures · " + (d.monitor_findings || 0) + " monitor findings")}
     </div>
-    ${d.context_summary ? `<section class="section">
+    ${(contextSummary.short || contextSummary.node) ? `<section class="section">
       <div class="section-head"><h2>What happened</h2></div>
       <div class="callout">
-        ${summaryCardHTML(d.context_summary, "Objective")}
+        ${summaryCardHTML(d, "Objective") || legacyObjective}
+        ${conversationFlowHTML({
+          prompt: contextSummary.short || contextSummary.node,
+          process: `${d.session_count ?? d.run_count} conversation${(d.session_count ?? d.run_count) === 1 ? "" : "s"} · ${d.task_count} logical steps`,
+          outcome: lastResponse.short || lastResponse.node || statusText(d.status),
+          caption: directSummary.long,
+        })}
         ${summaryCoverageHTML(d.message_summary_coverage)}
       </div>
     </section>` : ""}
@@ -758,8 +866,8 @@ function overviewHTML() {
         <div class="meta">across ${warning.results || warning.steps} results</div></div>
     </section>` : ""}
     <section class="section">
-      <div class="section-head"><h2>Recovery epochs</h2>
-        <span class="meta">showing ${state.runs.length} of ${d.session_count ?? d.run_count}</span></div>
+      <div class="section-head"><h2>Conversations in this endeavor</h2>
+        <span class="meta">showing ${state.runs.length} of ${d.session_count ?? d.run_count} conversation${(d.session_count ?? d.run_count) === 1 ? "" : "s"}</span></div>
       <div class="run-list">${state.runs.map(runHTML).join("")}</div>
     </section>`;
 }
@@ -767,26 +875,70 @@ function metric(key, value, sub) {
   return `<div class="metric"><div class="k">${esc(key)}</div><div class="v">${esc(value)}</div>
     <div class="s">${esc(sub || "")}</div></div>`;
 }
+function summaryParts(summary) {
+  if (!summary || typeof summary !== "object")
+    return {node:"", short:"", long:"", headline:"", body:"", role:""};
+  const headline = String(summary.headline || "").trim();
+  const body = String(summary.summary || "").trim();
+  const node = String(summary.node_label || summary.node_descriptor || headline).trim();
+  const short = String(summary.short_summary || body || headline).trim();
+  const long = String(summary.long_summary || (body !== short ? body : "")).trim();
+  return {node, short, long, headline, body, role:String(summary.role || "").trim()};
+}
 function compactContextHTML(summary) {
   if (!summary || typeof summary !== "object") return "";
   const headline = String(summary.headline || "").trim();
   const body = String(summary.summary || "").trim();
-  if (!headline && !body) return "";
-  return `<span class="e-context">${headline ? `<strong>${esc(headline)}</strong>` : ""}${
-    headline && body ? " — " : ""}${body ? esc(body) : ""}</span>`;
+  const parts = summaryParts(summary);
+  if (!parts.node && !parts.short && !parts.long) return "";
+  return `<span class="e-context">${parts.node
+    ? `<strong>${esc(parts.node)}</strong>` : headline ? `<strong>${esc(headline)}</strong>` : ""}${
+    parts.node && parts.short && parts.short !== parts.node ? " — " : ""}${
+    parts.short ? esc(parts.short) : (body ? esc(body) : "")}</span>`;
 }
 function summaryCardHTML(summary, label="") {
   if (!summary || typeof summary !== "object") return "";
   const headline = String(summary.headline || "").trim();
   const body = String(summary.summary || "").trim();
-  if (!headline && !body) return "";
+  const parts = summaryParts(summary);
+  if (!parts.node && !parts.short && !parts.long) return "";
   const tags = [label, summary.role].map(value => String(value || "").trim())
     .filter((value, index, values) => value && values.indexOf(value) === index);
+  const fallbackTitle = `${esc(headline || "Summary")}`;
   return `<div class="message-summary">
     <div class="summary-head">${tags.length
-      ? `<span class="summary-role">${esc(tags.join(" · "))}</span>` : ""}${esc(headline || "Summary")}</div>
-    ${body && body !== headline ? `<div class="summary-body">${esc(body)}</div>` : ""}
+      ? `<span class="summary-role">${esc(tags.join(" · "))}</span>` : ""}
+      ${parts.node ? `<span class="summary-node">${esc(parts.node)}</span>` : fallbackTitle}</div>
+    ${parts.short && parts.short !== parts.node
+      ? `<div class="summary-short">${esc(parts.short)}</div>` : ""}
+    ${parts.long && parts.long !== parts.short
+      ? `<details><summary>Detailed summary</summary><div class="summary-body">${esc(parts.long)}</div></details>`
+      : body && body !== headline && body !== parts.short ? `<div class="summary-body">${body ? esc(body) : ""}</div>` : ""}
   </div>`;
+}
+function conversationFlowHTML({prompt="", process="", outcome="", caption=""} = {}) {
+  return `<div class="conversation-flow" role="img" aria-label="Prompt, LLM activity, and outcome">
+    <div class="flow-stage"><div class="fk">① Prompt</div><div class="fv">${esc(prompt || "Prompt summary unavailable")}</div></div>
+    <div class="flow-arrow" aria-hidden="true">→</div>
+    <div class="flow-stage active"><div class="fk">② LLM activity</div><div class="fv">${esc(process || "Supervised model exchange")}</div></div>
+    <div class="flow-arrow" aria-hidden="true">→</div>
+    <div class="flow-stage"><div class="fk">③ Outcome</div><div class="fv">${esc(outcome || "Outcome summary unavailable")}</div></div>
+  </div>${caption ? `<div class="flow-caption">${esc(caption)}</div>` : ""}`;
+}
+function itemFlowHTML(item) {
+  const parts = summaryParts(item);
+  const requestSummaries = (item.message_delta?.summaries || [])
+    .filter(summary => String(summary?.role || "").toLowerCase() !== "system");
+  const prompt = summaryParts(requestSummaries[0]);
+  const response = summaryParts(item.response_summary);
+  const tools = (item.tool_calls || []).map(tool => tool.name).filter(Boolean);
+  const process = parts.node || (tools.length ? tools.join(" + ") : stepLabel(item));
+  return conversationFlowHTML({
+    prompt: prompt.short || prompt.node || parts.short,
+    process,
+    outcome: response.short || response.node || parts.short,
+    caption: parts.long,
+  });
 }
 function summaryStackHTML(entries) {
   const cards = (entries || []).map(entry => {
@@ -806,8 +958,11 @@ function summaryCoverageHTML(coverage) {
   return `<div class="meta summary-coverage">${esc(text)}</div>`;
 }
 function runHTML(run) {
+  const direct = summaryParts(run);
+  const context = direct.short || direct.node ? direct : summaryParts(run.context_summary);
+  const legacyRunContext = summaryCardHTML(run.context_summary, "Conversation context");
   return `<div class="run">
-    <div class="run-title"><span class="mono">${esc(run.session_id)}</span> · ${esc(run.relationship)}</div>
+    <div class="run-title">Conversation <span class="mono">${esc(run.session_id)}</span> · ${esc(run.relationship)}</div>
     ${statusBadge(run.status)}
     <div class="run-stats meta">
       <span>${run.task_count} steps</span><span>${run.event_count} events</span>
@@ -815,8 +970,11 @@ function runHTML(run) {
       <span>${run.provider_errors || 0} provider errors</span>
       <span>${run.monitor_findings || 0} monitor findings</span>
     </div>
-    ${run.context_summary ? `<div class="run-context">
-      ${summaryCardHTML(run.context_summary, "Run context")}
+    ${(context.short || context.node) ? `<div class="run-context">
+      ${summaryCardHTML(run, "Conversation context") || legacyRunContext}
+      ${conversationFlowHTML({prompt:context.short || context.node,
+        process:`${run.task_count} steps · ${run.event_count} events`,
+        outcome:statusText(run.status), caption:direct.long})}
       ${summaryCoverageHTML(run.message_summary_coverage)}
     </div>` : ""}
   </div>`;
@@ -861,6 +1019,7 @@ function timelineItemHTML(item) {
         <div class="tool-list">${Object.entries(item.poll_categories || {}).map(
           ([name,count]) => `<span class="pill">${esc(name.replaceAll("_"," "))} ×${count}</span>`
         ).join("")}</div>
+        ${itemFlowHTML(item)}
         ${summaryStackHTML(pollSummaryEntries(item))}
         ${warningsHTML(item.warning_groups)}
         ${edgeIds.length ? rawLinks(edgeIds, sourceIds.length > 2
@@ -869,9 +1028,12 @@ function timelineItemHTML(item) {
   }
   const delta = item.message_delta;
   const tools = item.tool_calls || [];
+  const itemSummary = summaryParts(item);
+  const legacyStepLabel = esc(stepLabel(item));
   return `<div class="timeline-item ${esc(item.status)}">
     <div class="t-head"><div class="t-main">
-      <div class="t-title">${tools.length ? tools.map(t => esc(t.name)).join(" + ") : esc(stepLabel(item))}</div>
+      <div class="t-title">${itemSummary.node ? esc(itemSummary.node) : tools.length
+        ? tools.map(t => esc(t.name)).join(" + ") : legacyStepLabel}</div>
       <div class="t-line meta">
         <span>${fmtTime(item.start_ts)}</span>
         <span class="mono">${esc(item.session_id)} / ${esc(item.task_id)}</span>
@@ -883,6 +1045,7 @@ function timelineItemHTML(item) {
         ${tools.map(tool => `<span class="pill">${esc(tool.name)} · ${tool.arguments_chars} argument chars
           ${tool.matched_result ? "" : " · missing result"}</span>`).join("")}
       </div>
+      ${itemFlowHTML(item)}
       ${summaryStackHTML(stepSummaryEntries(item))}
       ${providerSummariesHTML(item)}
       ${warningsHTML(item.warning_groups)}
@@ -892,6 +1055,9 @@ function timelineItemHTML(item) {
 }
 function stepSummaryEntries(item) {
   const entries = [];
+  const itemSummary = summaryParts(item);
+  if (itemSummary.node || itemSummary.short || itemSummary.long)
+    entries.push({summary:item, label:"Conversation step"});
   const delta = item.message_delta;
   for (const summary of (Array.isArray(delta?.summaries) ? delta.summaries : [])) {
     if (String(summary?.role || "").toLowerCase() === "system") continue;
@@ -945,12 +1111,16 @@ function promptsHTML() {
     <div class="two-col">
       <section>
         <div class="section-head"><h2>Initial and recovery prompts</h2>
-          <span class="meta">${promptRuns.length} loaded runs</span></div>
+          <span class="meta">${promptRuns.length} loaded conversations</span></div>
         ${promptRuns.map(run => `<div class="prompt-card">
           <strong>${esc(run.relationship)}</strong> · <span class="mono">${esc(run.session_id)}</span>
           <div class="meta">${fmtTime(run.start_ts)} · exact payload stays folded</div>
-          ${summaryStackHTML(run.context_summary
-            ? [{summary: run.context_summary, label: "Prompt context"}] : [])}
+          ${conversationFlowHTML({prompt:summaryParts(run).short || summaryParts(run.context_summary).short,
+            process:`${run.task_count} supervised steps`, outcome:statusText(run.status),
+            caption:summaryParts(run).long})}
+          ${summaryStackHTML((summaryParts(run).short || summaryParts(run).node)
+            ? [{summary: run, label: "Prompt context"}]
+            : run.context_summary ? [{summary: run.context_summary, label: "Prompt context"}] : [])}
           ${rawLinks(run.source_exchange_ids, "load exact prompt")}
         </div>`).join("") || '<p class="meta">No prompt sources on this page.</p>'}
       </section>
@@ -962,6 +1132,7 @@ function promptsHTML() {
           <div class="meta mono">${esc(item.session_id)} / ${esc(item.task_id)}</div>
           <div class="meta">${(item.tool_calls || []).reduce((n,t) => n + t.arguments_chars, 0)}
             argument chars · exact command on demand</div>
+          ${itemFlowHTML(item)}
           ${summaryStackHTML(stepSummaryEntries(item))}
           ${rawLinks(item.source_exchange_ids?.slice(-1), "load exact command")}
         </div>`).join("") || `<p class="meta">${state.timelineLoading
@@ -982,7 +1153,7 @@ function evidenceHTML() {
     <div class="grid">
       ${metric("Host", target.host_arch || "unknown", target.vm || "")}
       ${metric("Guest", target.guest_arch || "unknown", target.emulator || "")}
-      ${metric("Successful runs", successful.length, state.runs.length + " recovery epochs")}
+      ${metric("Successful conversations", successful.length, state.runs.length + " conversation / recovery epochs")}
       ${metric("Provider recovery", (d.errors?.recovered || 0) + " / " + (d.errors?.total || 0),
         (d.errors?.unrecovered || 0) + " unrecovered")}
     </div>
@@ -1033,19 +1204,107 @@ function rawIndexHTML() {
       <div class="timeline">
         ${withRaw.map(item => {
           const ids = item.source_exchange_ids || [];
+          const parts = summaryParts(item);
           const shownIds = item.type === "poll_group" && ids.length > 2
             ? [ids[0], ids[ids.length - 1]] : ids;
           return `<div class="timeline-item">
-          <div class="t-title">${esc(item.type === "step" ? stepLabel(item) : item.type)}</div>
+          <div class="t-title">${esc(parts.node || (item.type === "step" ? stepLabel(item) : item.type))}</div>
           <div class="meta mono">${esc(item.session_id || item.run_id || "")}
             ${item.task_id ? " / " + esc(item.task_id) : ""}
             ${shownIds.length < ids.length ? ` · ${ids.length} sources; first/latest shown` : ""}</div>
+          ${itemFlowHTML(item)}
+          ${summaryStackHTML(parts.short || parts.node ? [{summary:item, label:"Conversation element"}] : [])}
           ${rawLinks(shownIds, "open raw exchange")}
         </div>`; }).join("") || `<p class="meta">${state.timelineLoading
           ? "Summarizing source exchanges…" : "No source exchanges on this page."}</p>`}
       </div>
       ${state.timelineNext ? '<div class="loadbar"><button type="button" data-action="more-timeline">Load more source IDs</button></div>' : ""}
     </section>`;
+}
+function rawValueText(value, depth=0) {
+  if (value == null) return value === null ? "null" : "";
+  if (typeof value === "string") return value;
+  if (typeof value !== "object") return String(value);
+  if (depth > 3) return Array.isArray(value) ? `[${value.length} items]` : "{…}";
+  if (Array.isArray(value)) return value.map((part, index) =>
+    `${typeof part === "object" ? `${index + 1}. ` : ""}${rawValueText(part, depth + 1)}`).join("\n");
+  return Object.entries(value).map(([key, part]) =>
+    `${key}: ${rawValueText(part, depth + 1)}`).join("\n");
+}
+function rawContentText(content) {
+  if (Array.isArray(content)) return content.map(part =>
+    typeof part?.text === "string" ? part.text : rawValueText(part)).join("\n");
+  return rawValueText(content);
+}
+function toolCallsHTML(calls) {
+  return (calls || []).map(call => {
+    const fn = call.function || call;
+    return `<div class="tool-block"><strong>Tool · ${esc(fn.name || call.type || "call")}</strong>
+      <div class="mono break">${esc(rawValueText(fn.arguments || fn.input || fn))}</div></div>`;
+  }).join("");
+}
+function chatMessageHTML(message, label="") {
+  if (!message || typeof message !== "object") return "";
+  const role = String(message.role || "message");
+  const assistant = role === "assistant" || role === "model";
+  const content = rawContentText(message.content ?? message.text);
+  return `<div class="chat-message ${assistant ? "assistant" : ""}">
+    <span class="chat-avatar" aria-hidden="true">${assistant ? "AI" : role === "user" ? "U" : "•"}</span>
+    <div class="chat-bubble"><div class="chat-role">${esc(label || role)}</div>
+      ${content ? `<div class="chat-content">${esc(content)}</div>` : ""}
+      ${toolCallsHTML(message.tool_calls)}</div>
+  </div>`;
+}
+function payloadFieldsHTML(payload, excluded=[]) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return "";
+  const skip = new Set(excluded);
+  const fields = Object.entries(payload).filter(([key, value]) =>
+    !skip.has(key) && value !== undefined && value !== null);
+  return fields.length ? `<div class="payload-grid">${fields.map(([key, value]) =>
+    `<div class="payload-field"><div class="pk">${esc(key.replaceAll("_", " "))}</div>
+      <div class="pv">${esc(rawValueText(value))}</div></div>`).join("")}</div>` : "";
+}
+function visualRawHTML(item) {
+  const payload = item?.payload;
+  if (!payload || typeof payload !== "object")
+    return `<div class="payload-field"><div class="pk">Payload</div><div class="pv">${esc(rawValueText(payload))}</div></div>`;
+  const sections = [];
+  const addThread = (title, messages, responseMessage=null, responseLabel="Model response") => {
+    const rows = (Array.isArray(messages) ? messages : []).map(message => chatMessageHTML(message)).join("")
+      + (responseMessage ? chatMessageHTML(responseMessage, responseLabel) : "");
+    if (rows) sections.push(`<section class="raw-section"><h3>${esc(title)}</h3>
+      <div class="chat-thread">${rows}</div></section>`);
+  };
+  if (Array.isArray(payload.messages)) {
+    const response = (payload.choices || [])[0]?.message;
+    addThread(item.kind === "client_request" ? "Client conversation" : "Conversation",
+      payload.messages, response, "Response");
+  }
+  if (payload.request && typeof payload.request === "object") {
+    const response = payload.response?.choices?.[0]?.message;
+    addThread(`Request to ${item.model || payload.request.model || "provider"}`,
+      payload.request.messages, response, `${item.model || "Model"} response`);
+  } else if (!Array.isArray(payload.messages) && Array.isArray(payload.choices)) {
+    addThread("Response returned to client", [], payload.choices[0]?.message, "Assistant response");
+  }
+  if (typeof payload.text === "string" && !sections.length)
+    addThread("Response returned to client", [], {role:"assistant", content:payload.text}, "Assistant response");
+  const excluded = ["messages", "choices", "request", "response", "text"];
+  const fields = payloadFieldsHTML(payload, excluded);
+  if (fields) sections.push(`<section class="raw-section"><h3>Exchange metadata</h3>${fields}</section>`);
+  if (!sections.length) sections.push(`<section class="raw-section"><h3>Structured payload</h3>
+    ${payloadFieldsHTML(payload)}</section>`);
+  const summary = summaryCardHTML(item, "Conversation summary");
+  return (summary ? `<section class="raw-section">${summary}</section>` : "") + sections.join("");
+}
+function renderRawDialog() {
+  const visual = state.rawView === "visual";
+  $("#visualRaw").setAttribute("aria-pressed", visual);
+  $("#jsonRaw").setAttribute("aria-pressed", !visual);
+  $("#rawBody").hidden = !visual;
+  $("#rawJSON").hidden = visual;
+  if (visual && state.rawItem) $("#rawBody").innerHTML = visualRawHTML(state.rawItem);
+  if (!visual) $("#rawJSON").textContent = state.rawText;
 }
 async function openRaw(id) {
   const serial = ++state.rawSerial;
@@ -1054,14 +1313,17 @@ async function openRaw(id) {
   $("#rawMeta").textContent = "Loading one payload on demand…";
   $("#rawBody").textContent = "Loading…";
   state.rawText = "";
+  state.rawItem = null;
+  state.rawView = "visual";
   dialog.showModal();
   try {
     const item = await api("/admin/history/exchanges/" + encodeURIComponent(id) + "/raw");
     if (serial !== state.rawSerial || !dialog.open) return;
     state.rawText = JSON.stringify(item.payload, null, 2);
+    state.rawItem = item;
     $("#rawMeta").textContent =
       `${item.kind} · ${item.session} / ${item.task} · ${item.payload_chars.toLocaleString()} chars · ${fmtTime(item.ts)}`;
-    $("#rawBody").textContent = state.rawText;
+    renderRawDialog();
   } catch (error) {
     if (serial !== state.rawSerial || !dialog.open) return;
     $("#rawBody").textContent = "Failed to load raw exchange: " + error.message;
@@ -1085,11 +1347,15 @@ $("#refreshBtn").addEventListener("click", async () => {
   if (selected) await selectEndeavor(selected);
 });
 $("#closeRaw").addEventListener("click", () => $("#rawDialog").close());
+$("#visualRaw").addEventListener("click", () => { state.rawView = "visual"; renderRawDialog(); });
+$("#jsonRaw").addEventListener("click", () => { state.rawView = "json"; renderRawDialog(); });
 $("#rawDialog").addEventListener("close", () => {
   state.rawSerial++;
   state.rawText = "";
+  state.rawItem = null;
   $("#rawMeta").textContent = "";
   $("#rawBody").textContent = "";
+  $("#rawJSON").textContent = "";
 });
 $("#copyRaw").addEventListener("click", async () => {
   if (!state.rawText) return;
@@ -1162,7 +1428,9 @@ $("#rawDialog").addEventListener("click", event => {
 {
   const q = new URLSearchParams(location.search);
   const tab = q.get("tab");
+  const search = q.get("q");
   if (["overview","timeline","prompts","evidence","raw"].includes(tab)) state.tab = tab;
+  if (search) $("#search").value = search;
 }
 loadEndeavors();
 </script>

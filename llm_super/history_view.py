@@ -284,6 +284,62 @@ class HistoryView:
         result["metadata"] = dict(resolved.get("metadata") or {})
         return result
 
+    def list_contexts(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        """Return only containment identity, without aggregate summaries.
+
+        The conversational workspace needs a fast endeavor switcher, not the
+        token/cost/error rollups of :meth:`list_endeavors`.  Resolving the
+        grouping once keeps this projection cheap even for a large trace DB.
+        """
+        limit = max(1, min(int(limit), self.MAX_PAGE_SIZE))
+        records = self._session_records()
+        rows = []
+        for endeavor in self._resolved_endeavors():
+            sessions = [str(value) for value in endeavor["sessions"]]
+            last_ts = max(
+                (float(records.get(session, {}).get("last_ts") or 0)
+                 for session in sessions), default=0.0
+            )
+            rows.append({
+                "id": str(endeavor["id"]),
+                "title": str(endeavor["title"]),
+                "status": str(endeavor.get("status") or "historical"),
+                "conversation_ids": sessions,
+                "conversation_count": len(sessions),
+                "explicit_grouping": bool(endeavor.get("explicit")),
+                "last_ts": last_ts,
+            })
+        rows.sort(key=lambda row: (row["last_ts"], row["id"]), reverse=True)
+        return rows[:limit]
+
+    def session_context(self, session: str) -> dict[str, Any]:
+        """Return the containment context for one conversation session.
+
+        Unlike ``list_endeavors(query=...)``, this does not compute summaries
+        and aggregate metrics for every endeavor before finding the requested
+        session.  It is the narrow projection used by cross-linked UIs.
+        """
+        session = str(session or "").strip()
+        if not session or len(session) > 512:
+            raise ValueError("invalid session id")
+        for endeavor in self._resolved_endeavors():
+            sessions = tuple(str(value) for value in endeavor["sessions"])
+            if session not in sessions:
+                continue
+            return {
+                "endeavor_id": str(endeavor["id"]),
+                "endeavor_title": str(endeavor["title"]),
+                "conversation_ids": list(sessions),
+                "conversation_count": len(sessions),
+                "relationship": str(
+                    endeavor.get("relationship_by_session", {}).get(
+                        session, "session"
+                    )
+                ),
+                "explicit_grouping": bool(endeavor.get("explicit")),
+            }
+        raise KeyError(session)
+
     def list_runs(
         self,
         endeavor_id: str,
@@ -382,6 +438,8 @@ class HistoryView:
             payload: Any = json.loads(row["payload"])
         except json.JSONDecodeError:
             payload = row["payload"]
+        summaries = self._step_summary_map((str(row["session"]),))
+        step_summary = summaries.get((str(row["session"]), str(row["task"])))
         return {
             "id": int(row["id"]),
             "ts": float(row["ts"]),
@@ -391,6 +449,11 @@ class HistoryView:
             "model": row["model"],
             "payload_chars": len(row["payload"]),
             "payload": payload,
+            "short_summary": (
+                step_summary["short_summary"] if step_summary else None
+            ),
+            "node_label": step_summary["node_label"] if step_summary else None,
+            "long_summary": step_summary["long_summary"] if step_summary else None,
         }
 
     # ------------------------------------------------------------------
@@ -705,6 +768,50 @@ class HistoryView:
             result.setdefault(key, _summary_row(row, boundary=row["boundary"]))
         return result
 
+    def _step_summary_map(
+        self, sessions: Sequence[str]
+    ) -> dict[tuple[str, str], dict[str, str]]:
+        """Load the additive per-task display summaries when available."""
+        if not sessions or not self._table_exists("step_summaries"):
+            return {}
+        placeholders = ",".join("?" for _ in sessions)
+        rows = self._conn.execute(
+            f"""SELECT session, task, short_summary, node_label, long_summary
+                   FROM step_summaries
+                  WHERE session IN ({placeholders})""",
+            tuple(sessions),
+        )
+        return {
+            (str(row["session"]), str(row["task"])): {
+                "short_summary": str(row["short_summary"] or ""),
+                "node_label": str(row["node_label"] or "Conversation step"),
+                "long_summary": str(row["long_summary"] or ""),
+            }
+            for row in rows
+        }
+
+    def _representative_step_summary(
+        self, sessions: Sequence[str]
+    ) -> dict[str, str] | None:
+        """Use the earliest summarized task as run/endeavor-level context."""
+        if not sessions or not self._table_exists("step_summaries"):
+            return None
+        placeholders = ",".join("?" for _ in sessions)
+        row = self._conn.execute(
+            f"""SELECT short_summary, node_label, long_summary
+                   FROM step_summaries
+                  WHERE session IN ({placeholders})
+                  ORDER BY created_ts, session, task LIMIT 1""",
+            tuple(sessions),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "short_summary": str(row["short_summary"] or ""),
+            "node_label": str(row["node_label"] or "Conversation step"),
+            "long_summary": str(row["long_summary"] or ""),
+        }
+
     def _find_endeavor(self, endeavor_id: str) -> dict[str, Any]:
         for endeavor in self._resolved_endeavors():
             if endeavor["id"] == endeavor_id:
@@ -714,6 +821,7 @@ class HistoryView:
     def _endeavor_summary(self, endeavor: Mapping[str, Any]) -> dict[str, Any]:
         stats = self._stats(endeavor["sessions"])
         runs = [self._run_summary(endeavor, sid) for sid in endeavor["sessions"]]
+        step_summary = self._representative_step_summary(endeavor["sessions"])
         status = endeavor.get("status") or self._rollup_status(runs)
         error_count = stats["error_count"]
         recovered = error_count if (
@@ -756,6 +864,9 @@ class HistoryView:
             "provider_errors": stats["provider_errors"],
             "monitor_findings": stats["monitor_findings"],
             "context_summary": self._representative_summary(endeavor["sessions"]),
+            "short_summary": step_summary["short_summary"] if step_summary else None,
+            "node_label": step_summary["node_label"] if step_summary else None,
+            "long_summary": step_summary["long_summary"] if step_summary else None,
             "message_summary_coverage": self._summary_stats(endeavor["sessions"]),
             "errors": {
                 "total": error_count,
@@ -843,6 +954,7 @@ class HistoryView:
         self, endeavor: Mapping[str, Any], session: str
     ) -> dict[str, Any]:
         stats = self._stats((session,))
+        step_summary = self._representative_step_summary((session,))
         explicit_status = endeavor.get("run_statuses", {}).get(session)
         status, reason, observed_terminal = self._derive_run_status(session)
         if explicit_status and not observed_terminal:
@@ -883,6 +995,9 @@ class HistoryView:
             "provider_errors": stats["provider_errors"],
             "monitor_findings": stats["monitor_findings"],
             "context_summary": self._representative_summary((session,)),
+            "short_summary": step_summary["short_summary"] if step_summary else None,
+            "node_label": step_summary["node_label"] if step_summary else None,
+            "long_summary": step_summary["long_summary"] if step_summary else None,
             "message_summary_coverage": self._summary_stats((session,)),
             "source_exchange_ids": [int(first_request["id"])] if first_request else [],
             "errors": {
@@ -985,6 +1100,7 @@ class HistoryView:
         result_summary_by_call = self._tool_result_summaries(
             exchange_rows, summary_sources
         )
+        step_summaries = self._step_summary_map(sessions)
         keys = set(events_by_task) | set(exchanges_by_task)
 
         def first_ts(key: tuple[str, str]) -> tuple[float, str, str]:
@@ -994,6 +1110,7 @@ class HistoryView:
         steps: list[dict[str, Any]] = []
         for key in sorted(keys, key=first_ts):
             sid, task = key
+            step_summary = step_summaries.get(key)
             events = events_by_task[key]
             exchanges = exchanges_by_task[key]
             response_row = next(
@@ -1086,6 +1203,13 @@ class HistoryView:
                 "run_id": f"run:{sid}",
                 "session_id": sid,
                 "task_id": task,
+                "short_summary": (
+                    step_summary["short_summary"] if step_summary else None
+                ),
+                "node_label": step_summary["node_label"] if step_summary else None,
+                "long_summary": (
+                    step_summary["long_summary"] if step_summary else None
+                ),
                 "status": step_status,
                 "severity": severity,
                 "start_ts": started,
@@ -1159,6 +1283,12 @@ class HistoryView:
                 "run_id": None,
                 "session_id": milestone.session,
                 "task_id": "-",
+                "short_summary": f"Applied control command {milestone.command}.",
+                "node_label": f"Control: {milestone.command}"[:72],
+                "long_summary": (
+                    f"The operator applied the control command "
+                    f"{milestone.command} at this point in the endeavor."
+                ),
                 "status": "succeeded",
                 "severity": "info",
                 "start_ts": milestone.ts,
@@ -1313,10 +1443,46 @@ class HistoryView:
             for step in pending:
                 warnings.update(step["_warning_counts"])
                 categories.update(step["poll_categories"])
+            first_short = next(
+                (str(step["short_summary"]) for step in pending
+                 if step.get("short_summary")),
+                "",
+            )
+            last_short = next(
+                (str(step["short_summary"]) for step in reversed(pending)
+                 if step.get("short_summary")),
+                "",
+            )
+            first_long = next(
+                (str(step["long_summary"]) for step in pending
+                 if step.get("long_summary")),
+                "",
+            )
+            last_long = next(
+                (str(step["long_summary"]) for step in reversed(pending)
+                 if step.get("long_summary")),
+                "",
+            )
+            short_summary = f"{len(pending)} routine checks were grouped."
+            if first_short:
+                short_summary += f" First: {first_short}"
+            if last_short and last_short != first_short:
+                short_summary += f" Last: {last_short}"
+            long_summary = (
+                f"This item groups {len(pending)} consecutive successful "
+                "routine polling steps."
+            )
+            if first_long:
+                long_summary += f" The opening check: {first_long}"
+            if last_long and last_long != first_long:
+                long_summary += f" The closing check: {last_long}"
             output.append({
                 "type": "poll_group",
                 "id": f"poll:{pending[0]['id']}:{pending[-1]['id']}",
                 "run_id": pending[0]["run_id"] if len({p["run_id"] for p in pending}) == 1 else None,
+                "short_summary": short_summary,
+                "node_label": f"{len(pending)} routine status checks",
+                "long_summary": long_summary,
                 "status": "succeeded",
                 "severity": "warning" if warnings else "info",
                 "start_ts": pending[0]["start_ts"],

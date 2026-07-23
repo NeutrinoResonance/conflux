@@ -1,0 +1,11 @@
+test_bootstrap_creation_graph_and_store_routes (tests.test_workspace_routes.WorkspaceRouteTests.test_bootstrap_creation_graph_and_store_routes) ... ok
+test_ungrouped_history_is_a_conversation_not_an_endeavor (tests.test_workspace_routes.WorkspaceRouteTests.test_ungrouped_history_is_a_conversation_not_an_endeavor) ... ok
+test_untitled_conversation_is_created_then_renameable (tests.test_workspace_routes.WorkspaceRouteTests.test_untitled_conversation_is_created_then_renameable) ... ok
+test_workspace_conversation_is_not_duplicated_as_history_endeavor (tests.test_workspace_routes.WorkspaceRouteTests.test_workspace_conversation_is_not_duplicated_as_history_endeavor) ... ok
+test_workspace_page_is_served_as_the_primary_product_surface (tests.test_workspace_routes.WorkspaceRouteTests.test_workspace_page_is_served_as_the_primary_product_surface) ... ok
+test_workspace_scopes_pending_action_and_continues_after_decision (tests.test_workspace_routes.WorkspaceRouteTests.test_workspace_scopes_pending_action_and_continues_after_decision) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.829s
+
+OK

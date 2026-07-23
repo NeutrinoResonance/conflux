@@ -1,0 +1,31 @@
+{
+  "date": "2026-07-20",
+  "execution_environment": {
+    "provider": "gce",
+    "instance": "llmsuper-new-chat-0720",
+    "machine_type": "e2-micro",
+    "provisioning": "spot",
+    "zone": "us-central1-a"
+  },
+  "acceptance": {
+    "one_click_conversation_created": true,
+    "new_conversation_selected": true,
+    "title_dialog_shown": false,
+    "rich_editor_focused": true,
+    "prompt_terminal_available": true,
+    "draft_preserved_across_modes": true,
+    "inline_rename_succeeded": true,
+    "navigation_title_updated": true,
+    "workspace_title_updated": true
+  },
+  "trace_ledger": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "cost_usd": 0.0
+  },
+  "console_errors_or_warnings": 0,
+  "tests": {
+    "focused_passed": 33,
+    "full_passed": 185
+  }
+}

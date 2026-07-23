@@ -175,6 +175,19 @@ class HistoryViewTest(unittest.TestCase):
             self.assertIn("conversation:s2", ids)
             self.assertIn("session:s4", ids)
 
+            context = view.session_context("s1")
+            self.assertEqual(context["endeavor_id"], "manual")
+            self.assertEqual(context["endeavor_title"], "Manually grouped")
+            self.assertEqual(context["conversation_ids"], ["s0", "s1"])
+            self.assertEqual(context["conversation_count"], 2)
+            self.assertEqual(context["relationship"], "session")
+            self.assertTrue(context["explicit_grouping"])
+            containment = view.list_contexts(limit=10)
+            manual = next(row for row in containment if row["id"] == "manual")
+            self.assertEqual(manual["conversation_ids"], ["s0", "s1"])
+            self.assertEqual(manual["conversation_count"], 2)
+            self.assertTrue(manual["explicit_grouping"])
+
             # Opaque cursors are scoped and cannot silently page another view.
             with self.assertRaises(ValueError):
                 view.list_runs("manual", cursor=first["next_cursor"], limit=2)

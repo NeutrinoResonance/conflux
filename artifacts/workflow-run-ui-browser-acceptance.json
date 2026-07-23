@@ -1,0 +1,46 @@
+{
+  "date": "2026-07-20",
+  "url": "http://35.254.63.91:31849/workspace",
+  "fixture": {
+    "kind": "synthetic durable trace",
+    "live_model_calls": 0,
+    "synthetic_model_steps": 2,
+    "declared_stages": 14,
+    "observed_stages": 5,
+    "recorded_events": 7,
+    "status": "interrupted_at_human_approval"
+  },
+  "assertions": {
+    "assistant_message_uses_shared_markdown_editor": true,
+    "assistant_input_editor_present": true,
+    "assistant_output_editor_present": true,
+    "compact_graph_matches_agent_graph_definition": true,
+    "compact_graph_reports_hidden_llm_steps": true,
+    "observed_path_is_highlighted": true,
+    "expanded_run_is_bright_draggable_resizable_and_pinnable": true,
+    "selected_stage_reports_observed_not_idle": true,
+    "stage_model_input_visible": true,
+    "stage_model_output_visible": true,
+    "stage_model_configuration_visible": true,
+    "stage_token_and_cost_accounting_visible": true,
+    "stage_runtime_events_visible": true,
+    "recorded_json_preserves_original_case": true
+  },
+  "browser_health": {
+    "console_errors_warnings_or_issues": 0,
+    "requests": [
+      {"method": "GET", "path": "/workspace", "status": 200},
+      {"method": "GET", "path": "/admin/workspace/bootstrap", "status": 200},
+      {"method": "GET", "path": "/admin/workspace/workflows/wf_47fb804cc02b4307/execution", "status": 200}
+    ]
+  },
+  "cleanup": {
+    "vm_present_after_cleanup": false,
+    "disk_present_after_cleanup": false,
+    "firewall_present_after_cleanup": false
+  },
+  "screenshots": [
+    "artifacts/workflow-run-expanded-evidence-final.png",
+    "artifacts/assistant-message-shared-markdown-editor-final.png"
+  ]
+}

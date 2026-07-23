@@ -1,0 +1,48 @@
+{
+  "date": "2026-07-20",
+  "execution_environment": {
+    "provider": "gce",
+    "instance": "llmsuper-unified-composer-0720",
+    "machine_type": "e2-micro",
+    "provisioning": "spot",
+    "zone": "us-central1-a"
+  },
+  "composer": {
+    "single_input_surface": true,
+    "rich_editor_in_bottom_composer": true,
+    "prompt_terminal_in_bottom_composer": true,
+    "draft_preserved_between_modes": true,
+    "duplicate_central_editor": false,
+    "empty_conversation_branch_label": "starts this conversation"
+  },
+  "terminal_cursor": {
+    "native_caret_transparent": true,
+    "display": "block",
+    "width_px": 7,
+    "height_px": 16.5,
+    "selection_offset": 54,
+    "remained_inside_terminal": true,
+    "terminal_remained_inside_composer": true
+  },
+  "fetch_failure": {
+    "offline_state_visible": true,
+    "actionable_message_visible": true,
+    "message": "Workspace API is unavailable. This page may be connected to a stopped or expired server; reopen the active llm-super URL and try again."
+  },
+  "clean_reload": {
+    "console_errors_or_warnings": 0,
+    "requests": [
+      {"method": "GET", "path": "/workspace", "status": 200},
+      {"method": "GET", "path": "/admin/workspace/bootstrap", "status": 200}
+    ]
+  },
+  "model_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "cost_usd": 0
+  },
+  "tests": {
+    "focused_passed": 29,
+    "full_passed": 187
+  }
+}

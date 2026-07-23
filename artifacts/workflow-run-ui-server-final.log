@@ -1,0 +1,11 @@
+INFO:     Started server process [1976]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:31849 (Press CTRL+C to quit)
+INFO:     159.250.103.35:55816 - "GET /workspace HTTP/1.1" 200 OK
+INFO:     159.250.103.35:55816 - "GET /admin/workspace/bootstrap HTTP/1.1" 200 OK
+INFO:     159.250.103.35:55817 - "GET /admin/workspace/workflows/wf_47fb804cc02b4307/execution HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1844]

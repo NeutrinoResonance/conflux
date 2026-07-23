@@ -1,0 +1,13 @@
+test_drag_position_does_not_invalidate_or_reexecute_the_graph (tests.test_workspace_service.WorkspaceServiceTests.test_drag_position_does_not_invalidate_or_reexecute_the_graph) ... ok
+test_durable_pending_action_pauses_at_inline_human_approval (tests.test_workspace_service.WorkspaceServiceTests.test_durable_pending_action_pauses_at_inline_human_approval) ... ok
+test_edit_automatically_recalculates_dependent_assistant_nodes (tests.test_workspace_service.WorkspaceServiceTests.test_edit_automatically_recalculates_dependent_assistant_nodes) ... ok
+test_first_response_gets_an_llm_title_but_human_title_wins (tests.test_workspace_service.WorkspaceServiceTests.test_first_response_gets_an_llm_title_but_human_title_wins) ... ok
+test_human_input_node_pauses_before_any_model_call (tests.test_workspace_service.WorkspaceServiceTests.test_human_input_node_pauses_before_any_model_call) ... ok
+test_pause_cancels_in_flight_message_without_releasing_output (tests.test_workspace_service.WorkspaceServiceTests.test_pause_cancels_in_flight_message_without_releasing_output) ... ok
+test_per_message_ensemble_runs_same_model_with_varied_temperatures (tests.test_workspace_service.WorkspaceServiceTests.test_per_message_ensemble_runs_same_model_with_varied_temperatures) ... ok
+test_provider_outage_is_failed_not_verified_completion (tests.test_workspace_service.WorkspaceServiceTests.test_provider_outage_is_failed_not_verified_completion) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.259s
+
+OK

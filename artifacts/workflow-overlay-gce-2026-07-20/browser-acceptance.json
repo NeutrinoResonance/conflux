@@ -1,0 +1,36 @@
+{
+  "execution_backend": "GCE e2-micro Spot VM",
+  "model_calls": 0,
+  "workflow_tools_executed": 0,
+  "full_text_overlay": {
+    "workflow_cards": 14,
+    "all_descriptions_rendered": true,
+    "configuration_cards": 3,
+    "cards_with_routes": 14,
+    "overlay_height_px": 670,
+    "viewport_height_px": 702,
+    "embedded_source_visibility_while_open": "hidden"
+  },
+  "multiple_instances": {
+    "titles": [
+      "Response to · Check whether deployment is safe",
+      "Response to · Start the production migration"
+    ],
+    "both_pinned": true,
+    "active_after_switch": "Response to · Check whether deployment is safe",
+    "active_z_index": 39,
+    "background_z_index": 38
+  },
+  "animated_unpinned_collapse": {
+    "closing_class_during_transition": true,
+    "closing_transform": "translate(388.365px, 525.983px) scale(0.212242, 0.10006)",
+    "source_visibility_during_transition": "hidden",
+    "overlays_after_transition": 0,
+    "source_visibilities_after_transition": ["visible", "visible"]
+  },
+  "browser_console_errors_or_warnings": 0,
+  "network": [
+    "GET /workspace 200",
+    "GET /admin/workspace/bootstrap 200"
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "date": "2026-07-20",
+  "execution_environment": {
+    "provider": "gce",
+    "instance": "llmsuper-workflow-geometry-0720",
+    "machine_type": "e2-micro",
+    "provisioning": "spot",
+    "zone": "us-central1-a"
+  },
+  "model_calls": 0,
+  "initial_geometry": {
+    "left": 103,
+    "top": 16,
+    "width": 986,
+    "height": 670,
+    "columns": 4
+  },
+  "after_header_drag": {
+    "left": 198,
+    "top": 8,
+    "within_viewport": true,
+    "persisted_position": true
+  },
+  "after_resize_grip_drag": {
+    "left": 198,
+    "top": 8,
+    "width": 320,
+    "height": 220,
+    "columns": 1,
+    "within_viewport": true,
+    "persisted_size": true
+  },
+  "rerender": {
+    "position_preserved": true,
+    "size_preserved": true,
+    "within_viewport": true
+  },
+  "console_errors_or_warnings": 0,
+  "network_requests": [
+    {"method": "GET", "path": "/workspace", "status": 200},
+    {"method": "GET", "path": "/admin/workspace/bootstrap", "status": 200}
+  ],
+  "tests": {
+    "focused_passed": 11,
+    "full_passed": 180
+  }
+}

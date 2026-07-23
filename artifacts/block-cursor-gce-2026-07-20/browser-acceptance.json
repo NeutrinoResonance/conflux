@@ -1,0 +1,27 @@
+{
+  "date": "2026-07-20",
+  "execution_environment": {
+    "provider": "gce",
+    "instance": "llmsuper-block-cursor-0720",
+    "machine_type": "e2-micro",
+    "provisioning": "spot",
+    "zone": "us-central1-a"
+  },
+  "cursor": {
+    "native_caret_transparent": true,
+    "display": "block",
+    "width_px": 7.2265625,
+    "height_px": 18.59375,
+    "initial_selection_offset": 0,
+    "moved_selection_offset": 14,
+    "home_selection_offset": 0,
+    "tracked_keyboard_movement": true,
+    "remained_inside_terminal": true
+  },
+  "model_requests": 0,
+  "console_errors_or_warnings": 0,
+  "tests": {
+    "focused_passed": 14,
+    "full_passed": 186
+  }
+}

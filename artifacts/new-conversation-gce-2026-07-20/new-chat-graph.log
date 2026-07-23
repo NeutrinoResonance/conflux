@@ -1,0 +1,11 @@
+test_context_edges_and_vector_store_are_real_prompt_inputs (tests.test_conversation_graph.ConversationGraphStoreTests.test_context_edges_and_vector_store_are_real_prompt_inputs) ... ok
+test_conversation_can_be_renamed_without_changing_its_identity (tests.test_conversation_graph.ConversationGraphStoreTests.test_conversation_can_be_renamed_without_changing_its_identity) ... ok
+test_edit_revisions_and_invalidates_every_dependent_node (tests.test_conversation_graph.ConversationGraphStoreTests.test_edit_revisions_and_invalidates_every_dependent_node) ... ok
+test_messages_grow_downward_as_dependencies_and_contain_workflows (tests.test_conversation_graph.ConversationGraphStoreTests.test_messages_grow_downward_as_dependencies_and_contain_workflows) ... ok
+test_reparenting_updates_conversation_nodes_and_edges_atomically (tests.test_conversation_graph.ConversationGraphStoreTests.test_reparenting_updates_conversation_nodes_and_edges_atomically) ... ok
+test_workflow_nodes_can_be_added_deleted_and_applied_globally (tests.test_conversation_graph.ConversationGraphStoreTests.test_workflow_nodes_can_be_added_deleted_and_applied_globally) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.165s
+
+OK

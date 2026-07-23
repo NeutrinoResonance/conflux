@@ -1,0 +1,15 @@
+test_all_existing_primary_surfaces_link_to_workspace (tests.test_workspace_ui.WorkspaceUIContractTests.test_all_existing_primary_surfaces_link_to_workspace) ... ok
+test_endeavors_visibly_contain_conversations_in_one_navigation_tree (tests.test_workspace_ui.WorkspaceUIContractTests.test_endeavors_visibly_contain_conversations_in_one_navigation_tree) ... ok
+test_nodes_are_draggable_without_recalculating_conversation_content (tests.test_workspace_ui.WorkspaceUIContractTests.test_nodes_are_draggable_without_recalculating_conversation_content) ... ok
+test_pending_governed_action_is_decided_and_continued_inline (tests.test_workspace_ui.WorkspaceUIContractTests.test_pending_governed_action_is_decided_and_continued_inline) ... ok
+test_terminal_makes_both_message_fields_editable_and_recalculates (tests.test_workspace_ui.WorkspaceUIContractTests.test_terminal_makes_both_message_fields_editable_and_recalculates) ... ok
+test_unpinned_workflow_overlays_morph_back_and_pinned_overlays_stack (tests.test_workspace_ui.WorkspaceUIContractTests.test_unpinned_workflow_overlays_morph_back_and_pinned_overlays_stack) ... ok
+test_workflow_instances_expand_into_pinnable_full_text_overlays (tests.test_workspace_ui.WorkspaceUIContractTests.test_workflow_instances_expand_into_pinnable_full_text_overlays) ... ok
+test_workflow_palette_covers_ensemble_context_human_and_stores (tests.test_workspace_ui.WorkspaceUIContractTests.test_workflow_palette_covers_ensemble_context_human_and_stores) ... ok
+test_workspace_is_a_downward_nested_conversation_graph (tests.test_workspace_ui.WorkspaceUIContractTests.test_workspace_is_a_downward_nested_conversation_graph) ... ok
+test_workspace_never_exposes_an_execution_backend_selector (tests.test_workspace_ui.WorkspaceUIContractTests.test_workspace_never_exposes_an_execution_backend_selector) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.002s
+
+OK

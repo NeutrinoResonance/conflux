@@ -1,0 +1,44 @@
+{
+  "date": "2026-07-20",
+  "execution": {
+    "backend": "gce",
+    "instance": "llmsuper-markdown-composer-0720",
+    "zone": "us-central1-a",
+    "machine_type": "e2-micro",
+    "provisioning": "spot",
+    "disk": "10 GB pd-standard",
+    "application_code_executed_locally": false
+  },
+  "tests": {
+    "focused": {"passed": 29, "failed": 0},
+    "full": {"passed": 187, "failed": 0}
+  },
+  "browser": {
+    "editable_composer_surfaces": 1,
+    "preview_editable": false,
+    "markdown_bold_rendered": true,
+    "markdown_list_rendered": true,
+    "block_cursor_visible": true,
+    "execution_boundary_inspector": true,
+    "execution_boundary_mutable_controls": 0,
+    "console_errors_warnings_or_issues": 0,
+    "network_requests": [
+      {"method": "GET", "path": "/workspace", "status": 200},
+      {"method": "GET", "path": "/admin/workspace/bootstrap", "status": 200}
+    ]
+  },
+  "model_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "cost_usd": 0
+  },
+  "cleanup": {
+    "evidence_copied_before_teardown": true,
+    "firewall_deleted": true,
+    "instance_deleted": true,
+    "disk_deleted": true,
+    "post_delete_instance_matches": 0,
+    "post_delete_disk_matches": 0,
+    "post_delete_firewall_matches": 0
+  }
+}
