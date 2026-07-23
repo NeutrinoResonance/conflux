@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import hmac
 import json
+import sys
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -44,6 +46,15 @@ state: dict = {}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     cfg = load(state.get("config_path", "models.yaml"))
+    if not cfg.admin.enabled:
+        print(
+            "WARNING: control-plane authentication is DISABLED. Every /admin/* "
+            "endpoint — including action approvals, routing overrides, exports, "
+            "and deletion — is reachable by ANYONE who can reach this port. "
+            "Set admin.token in models.yaml or export LLM_SUPER_ADMIN_TOKEN "
+            "to enable authentication.",
+            file=sys.stderr, flush=True,
+        )
     client = Client(cfg)
     trace_path = state.get("trace_path", "traces.db")
     trace = Trace(trace_path)
@@ -97,6 +108,61 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="llm-super", lifespan=lifespan)
+
+_ADMIN_COOKIE = "llm_super_admin"
+
+
+def _admin_token() -> str | None:
+    cfg = state.get("cfg")
+    admin = getattr(cfg, "admin", None)
+    return admin.token if admin is not None and admin.enabled else None
+
+
+def _supplied_admin_token(request: Request) -> tuple[str | None, bool]:
+    """Return (token, came_from_query). Header > cookie > query."""
+    auth = request.headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip(), False
+    header = request.headers.get("x-llm-super-token")
+    if header:
+        return header.strip(), False
+    cookie = request.cookies.get(_ADMIN_COOKIE)
+    if cookie:
+        return cookie, False
+    query = request.query_params.get("token")
+    if query:
+        return query, True
+    return None, False
+
+
+@app.middleware("http")
+async def _admin_auth(request: Request, call_next):
+    """Gate every /admin/* route (incl. action decisions) behind the token.
+
+    Authentication is DISABLED unless the operator sets admin.token /
+    LLM_SUPER_ADMIN_TOKEN (the lifespan prints an explicit warning in that
+    state). A valid ?token= on any route sets the dashboard cookie so the
+    browser UIs work after a single tokened visit.
+    """
+    expected = _admin_token()
+    if expected is None:
+        return await call_next(request)
+    supplied, from_query = _supplied_admin_token(request)
+    valid = supplied is not None and hmac.compare_digest(
+        supplied.encode(), expected.encode()
+    )
+    if request.url.path.startswith("/admin") and not valid:
+        return JSONResponse(
+            {"error": "control-plane authentication required "
+                      "(Authorization: Bearer <admin token>)"},
+            status_code=401,
+        )
+    response = await call_next(request)
+    if valid and from_query:
+        response.set_cookie(
+            _ADMIN_COOKIE, expected, httponly=True, samesite="strict",
+        )
+    return response
 
 
 def _session_id(messages: list[dict]) -> str:

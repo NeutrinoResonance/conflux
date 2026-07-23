@@ -168,6 +168,15 @@ routing:
   learned: true        # route to the best-scoring executor once sampled
   min_samples: 5       # turns per model before its stats can win routing
 
+admin:
+  # Control-plane authentication. DISABLED by default (empty token): the
+  # server prints a startup warning that /admin/* is open to anyone who can
+  # reach the port. Enable with a single setting — a non-empty token here or
+  # the LLM_SUPER_ADMIN_TOKEN environment variable (env wins). Clients send
+  # "Authorization: Bearer <token>" / "X-LLM-Super-Token"; browsers may visit
+  # any dashboard once with ?token=<token> to set the session cookie.
+  token: ""
+
 execution:
   # Generated/model-authored code is fail-closed to GCE. "off" is the only
   # runtime override that bypasses the lock because it spawns no process.

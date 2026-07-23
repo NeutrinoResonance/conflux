@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -73,6 +74,26 @@ class Execution:
 
 
 @dataclass(frozen=True)
+class AdminAuth:
+    """Control-plane authentication. DISABLED by default.
+
+    Enabling is one setting: put a non-empty token in models.yaml
+    (``admin.token``) or export ``LLM_SUPER_ADMIN_TOKEN``. When set, every
+    /admin/* route — including the action-decision endpoints — requires the
+    token via ``Authorization: Bearer``, the ``X-LLM-Super-Token`` header,
+    the ``llm_super_admin`` cookie, or a one-time ``?token=`` query (which
+    sets the cookie for browser dashboards). When unset, the server prints
+    an explicit warning that the control plane is reachable by anyone who
+    can reach the port.
+    """
+    token: str | None = None
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.token)
+
+
+@dataclass(frozen=True)
 class Supervision:
     score_scale: int = 20
     pass_threshold: float = 0.70
@@ -99,6 +120,7 @@ class Config:
     verifier_pool: list[str]
     supervision: Supervision
     execution: Execution
+    admin: AdminAuth = field(default_factory=AdminAuth)
     learned_routing: bool = True
     min_routing_samples: int = 5
     referee: str = ""              # large model that picks repair strategies
@@ -195,6 +217,11 @@ def load(path: str | Path = "models.yaml") -> Config:
             raise ValueError(f"routing.{key} references unknown model {name!r}")
     sup = Supervision(**raw.get("supervision", {}))
     execution = Execution(**raw.get("execution", {}))
+    admin_raw = raw.get("admin", {}) or {}
+    admin = AdminAuth(
+        token=os.environ.get("LLM_SUPER_ADMIN_TOKEN")
+        or (str(admin_raw.get("token") or "") or None),
+    )
     return Config(
         providers=providers,
         models=models,
@@ -203,6 +230,7 @@ def load(path: str | Path = "models.yaml") -> Config:
         verifier_pool=list(routing.get("verifier_pool", [])),
         supervision=sup,
         execution=execution,
+        admin=admin,
         learned_routing=bool(routing.get("learned", True)),
         min_routing_samples=int(routing.get("min_samples", 5)),
         referee=str(routing.get("referee", "")),
