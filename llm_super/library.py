@@ -230,7 +230,7 @@ class Library:
 
     def delete_session(self, session: str) -> None:
         self._conn.execute("DELETE FROM sessions WHERE session=?", (session,))
-        for t in ("events", "exchanges", "turns"):
+        for t in ("events", "exchanges", "turns", "step_summaries"):
             try:
                 self._conn.execute(f"DELETE FROM {t} WHERE session=?", (session,))
             except sqlite3.OperationalError:

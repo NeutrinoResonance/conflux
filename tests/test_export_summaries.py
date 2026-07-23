@@ -4,7 +4,7 @@ import sqlite3
 from types import SimpleNamespace
 import unittest
 
-from llm_super.export import library_message_summaries
+from llm_super.export import library_message_summaries, library_step_summaries
 
 
 class ExportedMessageSummariesTest(unittest.TestCase):
@@ -51,6 +51,29 @@ class ExportedMessageSummariesTest(unittest.TestCase):
             library_message_summaries(SimpleNamespace(_conn=conn), "session-1"),
             [],
         )
+
+    def test_optional_step_summaries_are_exported_at_all_three_levels(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        conn.execute(
+            """CREATE TABLE step_summaries (
+                 session TEXT, task TEXT, short_summary TEXT, node_label TEXT,
+                 long_summary TEXT, generator TEXT, prompt_version TEXT,
+                 created_ts REAL, updated_ts REAL
+               )"""
+        )
+        conn.execute(
+            "INSERT INTO step_summaries VALUES (?,?,?,?,?,?,?,?,?)",
+            (
+                "session-1", "task-1", "Short.", "Build kernel", "Long.",
+                "deterministic", "step-summary-v1", 1.0, 2.0,
+            ),
+        )
+        rows = library_step_summaries(SimpleNamespace(_conn=conn), "session-1")
+        conn.close()
+
+        self.assertEqual(rows[0]["short_summary"], "Short.")
+        self.assertEqual(rows[0]["node_label"], "Build kernel")
+        self.assertEqual(rows[0]["long_summary"], "Long.")
 
 
 if __name__ == "__main__":  # pragma: no cover

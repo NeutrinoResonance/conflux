@@ -60,6 +60,21 @@ def main() -> None:
     sm.add_argument("--claude-command", default="claude",
                     help=argparse.SUPPRESS)
 
+    ss = sub.add_parser(
+        "summarize-steps",
+        help="backfill three-level UI summaries for stored conversation steps",
+    )
+    ss.add_argument("--db", default="traces.db")
+    ss.add_argument("--model", default="haiku")
+    ss.add_argument("--batch-chars", type=int, default=40_000)
+    ss.add_argument("--batch-size", type=int, default=8)
+    ss.add_argument("--max-budget-usd", type=float, default=0.75,
+                    help="per-Claude-process safety ceiling")
+    ss.add_argument("--force", action="store_true",
+                    help="regenerate current-version step summaries")
+    ss.add_argument("--claude-command", default="claude",
+                    help=argparse.SUPPRESS)
+
     args = p.parse_args()
     if args.cmd == "serve":
         import socket
@@ -163,6 +178,36 @@ def main() -> None:
             f"{result['generated']} generated this run · "
             f"${result['cost_usd']:.6f} reported usage"
         )
+    elif args.cmd == "summarize-steps":
+        import sys
+
+        from . import step_summary_backfill
+
+        try:
+            result = step_summary_backfill.backfill(
+                args.db,
+                model=args.model,
+                batch_chars=args.batch_chars,
+                batch_size=args.batch_size,
+                max_budget_usd=args.max_budget_usd,
+                force=args.force,
+                command=args.claude_command,
+                progress=lambda event: print(_summary_progress(event), flush=True),
+            )
+        except KeyboardInterrupt:
+            print(
+                "\nstep-summary backfill interrupted; validated batches remain committed",
+                file=sys.stderr,
+            )
+            raise SystemExit(130) from None
+        except (step_summary_backfill.SummaryError, ValueError) as exc:
+            sys.exit(f"llm-super: step-summary backfill failed: {exc}")
+        print(
+            "step summaries complete: "
+            f"{result['summarized']}/{result['steps']} conversation steps · "
+            f"{result['generated']} generated this run · "
+            f"${result['cost_usd']:.6f} reported usage"
+        )
 
 
 def _summary_progress(event: dict) -> str:
@@ -211,6 +256,45 @@ def _summary_progress(event: dict) -> str:
         return (
             f"verified coverage {event.get('summarized', 0)}/"
             f"{event.get('unique', 0)}"
+        )
+    if kind == "indexed_steps":
+        return (
+            f"indexed {event.get('steps', 0)} conversation steps · "
+            f"{event.get('pending', 0)} pending"
+        )
+    if kind == "step_batch_start":
+        return (
+            f"step batch {event.get('batch')} started · "
+            f"{event.get('items', 0)} elements · "
+            f"{event.get('chars', 0)} sanitized characters"
+        )
+    if kind == "step_batch_split":
+        usage = (
+            f" · {event.get('duration_ms', 0) / 1000:.1f}s · "
+            f"${event.get('cost_usd', 0.0):.6f} reported"
+            if event.get("cost_usd") or event.get("duration_ms") else ""
+        )
+        return (
+            f"step batch {event.get('batch')} did not validate; retrying its "
+            f"{event.get('items', 0)} elements in smaller batches{usage}"
+        )
+    if kind == "step_batch_failed":
+        return (
+            f"step batch {event.get('batch')} failed at one element · "
+            f"{event.get('duration_ms', 0) / 1000:.1f}s · "
+            f"${event.get('cost_usd', 0.0):.6f} reported"
+        )
+    if kind == "step_batch_complete":
+        return (
+            f"step batch {event.get('batch')} complete · "
+            f"{event.get('items', 0)} elements · "
+            f"{event.get('duration_ms', 0) / 1000:.1f}s · "
+            f"${event.get('cost_usd', 0.0):.6f}"
+        )
+    if kind == "step_complete":
+        return (
+            f"verified step coverage {event.get('summarized', 0)}/"
+            f"{event.get('steps', 0)}"
         )
     return "history summary backfill progressing"
 

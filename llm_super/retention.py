@@ -95,6 +95,25 @@ def prune(path: str | Path, settings: dict[str, Any]) -> dict[str, Any]:
                 report["deleted"][table] = cur.rowcount
             except sqlite3.OperationalError:
                 report["deleted"][table] = 0
+        # Step summaries are intentionally retained after raw exchanges age
+        # out so the event timeline stays readable.  Once both the exchanges
+        # and events for a task are gone, the display row has no owner.
+        try:
+            cur = conn.execute(
+                """DELETE FROM step_summaries AS summary
+                    WHERE NOT EXISTS (
+                      SELECT 1 FROM events
+                       WHERE events.session=summary.session
+                         AND events.task=summary.task
+                    ) AND NOT EXISTS (
+                      SELECT 1 FROM exchanges
+                       WHERE exchanges.session=summary.session
+                         AND exchanges.task=summary.task
+                    )"""
+            )
+            report["deleted"]["step_summaries"] = cur.rowcount
+        except sqlite3.OperationalError:
+            report["deleted"]["step_summaries"] = 0
         conn.commit()
         if settings.get("vacuum", True) and any(report["deleted"].values()):
             try:

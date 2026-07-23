@@ -8,9 +8,16 @@ import time
 from pathlib import Path
 from typing import Any
 
+from .step_summaries import (
+    derive_step_summary,
+    ensure_schema as ensure_step_summary_schema,
+    upsert_step_summary,
+)
+
 
 class Trace:
     def __init__(self, path: str | Path = "traces.db"):
+        self.path = str(path)
         self._conn = sqlite3.connect(str(path), check_same_thread=False)
         # Trace opens traces.db first (before History/Library/Checkpoints),
         # so this is the one moment the auto_vacuum migration can VACUUM.
@@ -45,7 +52,18 @@ class Trace:
                 payload TEXT NOT NULL        -- full JSON
             )"""
         )
+        ensure_step_summary_schema(self._conn)
         self._conn.commit()
+
+    @property
+    def connection(self) -> sqlite3.Connection:
+        """Shared control-plane connection for additive durable ledgers.
+
+        Flow and action state live beside trace events so a proxy restart
+        cannot separate an approval or preflight from the proposal it gates.
+        Callers keep database operations short and commit at graph boundaries.
+        """
+        return self._conn
 
     def record(
         self,
@@ -79,8 +97,15 @@ class Trace:
 
     def recent(self, n: int = 50) -> list[dict[str, Any]]:
         cur = self._conn.execute(
-            "SELECT ts, session, task, kind, model, fm_id, tokens_in, tokens_out, cost_usd, data "
-            "FROM events ORDER BY ts DESC LIMIT ?",
+            """SELECT event.ts, event.session, event.task, event.kind,
+                      event.model, event.fm_id, event.tokens_in,
+                      event.tokens_out, event.cost_usd, event.data,
+                      summary.short_summary, summary.node_label,
+                      summary.long_summary
+                 FROM events AS event
+                 LEFT JOIN step_summaries AS summary
+                   ON summary.session=event.session AND summary.task=event.task
+                ORDER BY event.ts DESC, event.rowid DESC LIMIT ?""",
             (n,),
         )
         cols = [c[0] for c in cur.description]
@@ -92,6 +117,27 @@ class Trace:
             rows.append(d)
         return rows
 
+    def task_events(self, session: str, task: str,
+                    n: int = 500) -> list[dict[str, Any]]:
+        """Return one task's complete ordered event trail for product inspectors."""
+        cur = self._conn.execute(
+            """SELECT rowid AS id,ts,session,task,kind,model,fm_id,tokens_in,
+                      tokens_out,cost_usd,data
+                 FROM events WHERE session=? AND task=?
+                ORDER BY ts,rowid LIMIT ?""",
+            (session, task, max(1, min(int(n), 2000))),
+        )
+        cols = [column[0] for column in cur.description]
+        rows = []
+        for raw in cur.fetchall():
+            item = dict(zip(cols, raw))
+            try:
+                item["data"] = json.loads(item["data"]) if item.get("data") else {}
+            except (json.JSONDecodeError, TypeError):
+                item["data"] = {"unparsed": str(item.get("data") or "")}
+            rows.append(item)
+        return rows
+
     MAX_PAYLOAD = 400_000  # chars; guards against pathological rows
 
     def record_exchange(self, session: str, task: str, kind: str,
@@ -100,11 +146,44 @@ class Trace:
         if len(blob) > self.MAX_PAYLOAD:
             blob = json.dumps({"truncated": True, "chars": len(blob),
                                "head": blob[: self.MAX_PAYLOAD]})
+        now = time.time()
         self._conn.execute(
             "INSERT INTO exchanges (ts, session, task, kind, model, payload) "
             "VALUES (?,?,?,?,?,?)",
-            (time.time(), session, task, kind, model, blob),
+            (now, session, task, kind, model, blob),
         )
+        # A request creates immediately useful metadata for an in-flight task;
+        # its paired response then upgrades the same row with what the prompt
+        # elicited.  This is intentionally local and deterministic so tracing
+        # can never cause another model call or provider spend.
+        if task != "-" and kind in {"client_request", "client_response"}:
+            try:
+                if kind == "client_request":
+                    request_payload = payload if isinstance(payload, dict) else {}
+                    response_payload: dict[str, Any] = {}
+                else:
+                    row = self._conn.execute(
+                        """SELECT payload FROM exchanges
+                            WHERE session=? AND task=? AND kind='client_request'
+                            ORDER BY id DESC LIMIT 1""",
+                        (session, task),
+                    ).fetchone()
+                    try:
+                        request_payload = json.loads(row[0]) if row else {}
+                    except (json.JSONDecodeError, TypeError):
+                        request_payload = {}
+                    response_payload = payload if isinstance(payload, dict) else {}
+                upsert_step_summary(
+                    self._conn,
+                    session,
+                    task,
+                    derive_step_summary(request_payload, response_payload),
+                    timestamp=now,
+                )
+            except (sqlite3.Error, TypeError, ValueError):
+                # Summary indexing is additive observability.  A malformed
+                # legacy/provider payload must not drop its forensic exchange.
+                pass
         self._conn.commit()
 
     def last_client_request(self, session: str) -> list[dict] | None:
@@ -124,15 +203,24 @@ class Trace:
 
     def exchanges(self, task: str | None = None, session: str | None = None,
                   n: int = 100) -> list[dict[str, Any]]:
-        q = ("SELECT id, ts, session, task, kind, model, payload FROM exchanges")
+        q = (
+            """SELECT exchange.id, exchange.ts, exchange.session, exchange.task,
+                      exchange.kind, exchange.model, exchange.payload,
+                      summary.short_summary, summary.node_label,
+                      summary.long_summary
+                 FROM exchanges AS exchange
+                 LEFT JOIN step_summaries AS summary
+                   ON summary.session=exchange.session
+                  AND summary.task=exchange.task"""
+        )
         cond, args = [], []
         if task:
-            cond.append("task=?"); args.append(task)
+            cond.append("exchange.task=?"); args.append(task)
         if session:
-            cond.append("session=?"); args.append(session)
+            cond.append("exchange.session=?"); args.append(session)
         if cond:
             q += " WHERE " + " AND ".join(cond)
-        q += " ORDER BY id DESC LIMIT ?"
+        q += " ORDER BY exchange.id DESC LIMIT ?"
         args.append(n)
         cur = self._conn.execute(q, args)
         cols = [c[0] for c in cur.description]

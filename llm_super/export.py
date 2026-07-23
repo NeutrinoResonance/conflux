@@ -70,6 +70,7 @@ def build_bundle(trace, library, *, session: str | None = None,
             # retain the readable history view without re-sending content to a
             # summarizer.  Older databases simply produce an empty list.
             "message_summaries": library_message_summaries(trace, sid),
+            "step_summaries": library_step_summaries(trace, sid),
         })
     return {
         "schema": "llm-super/conversation-bundle@1",
@@ -108,6 +109,23 @@ def library_message_summaries(trace, sid: str) -> list[dict[str, Any]]:
                   AND summary.prompt_version=src.prompt_version
                 WHERE src.session=?
                 ORDER BY src.ts, src.exchange_id, src.ordinal""",
+            (sid,),
+        )
+        columns = [item[0] for item in cursor.description]
+        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+    except sqlite3.OperationalError:
+        return []
+
+
+def library_step_summaries(trace, sid: str) -> list[dict[str, Any]]:
+    """Return the three-level UI metadata for each exported logical step."""
+    try:
+        cursor = trace._conn.execute(
+            """SELECT session, task, short_summary, node_label, long_summary,
+                      generator, prompt_version, created_ts, updated_ts
+                 FROM step_summaries
+                WHERE session=?
+                ORDER BY created_ts, task""",
             (sid,),
         )
         columns = [item[0] for item in cursor.description]
