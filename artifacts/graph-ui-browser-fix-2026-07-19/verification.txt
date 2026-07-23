@@ -1,0 +1,136 @@
+Agent Graphs browser and GCE verification — 2026-07-19
+
+Browser MCP checks
+------------------
+- Viewport: 1440 x 1000; document: 1440 x 1000 (no page overflow).
+- Desktop center column: 892 px; graph canvas: 892 x 743.594 px.
+- A 37-event run remained contained: graph scroll width 2543 px; decision-trail
+  scroll width 4444 px; center-column width remained 892 px.
+- Run overlay selected `client_tool`, automatically scrolled it fully into view,
+  exposed its runtime evidence in the inspector, and preserved independent
+  graph/trail scrolling.
+- Mobile MCP viewport: 500 x 844; body and center remained 500 px wide; the
+  Definition/Run and Fit controls remained available; selected-node evidence
+  appeared in the compact inspector.
+- Accessibility tree exposed 14 individually named graph-node buttons rather
+  than flattening the graph into one opaque image.
+- Duplicate DOM ids: 0. Visible unnamed interactive elements: 0.
+- Browser console errors, warnings, and issues after final reload: 0.
+- All graph, run, action, and favicon network requests observed by MCP returned
+  successfully.
+
+GCE-only repository tests
+-------------------------
+Target: llmsuper-graph-ui-test-0719
+Project: project96-sar
+Zone: us-central1-a
+Machine: Spot e2-micro
+Disk: 10 GB standard persistent disk, auto-delete=true
+Instance termination action: DELETE
+
+Focused graph suite:
+  Ran 6 tests in 0.074s
+  OK
+  Remote log lines: 11
+  Remote log SHA-256: aa3fce8b1c8c27fbfef4d99b09d17925e7bf8330a15f483162f8ed5c032c7c1d
+
+Complete repository suite:
+  Ran 131 tests in 5.399s
+  OK
+  Remote log lines: 147
+  Remote log SHA-256: a07cff68e5e26519ecad35a471b129644a75de19991141b80afcb22a98afc063
+
+No repository test or workload command ran on the local controller. The local
+process served the control-plane web UI for browser inspection only.
+
+Cleanup
+-------
+The exact test instance was deleted after evidence capture. Final project
+queries returned no instance or disk named `llmsuper-graph-ui-test-0719`.
+
+Drag-and-pan follow-up
+----------------------
+Browser MCP exercised real pointer gestures after the interaction update:
+
+- Dragged `ingress` from declared coordinates (52, 177) to
+  (660.9384497665778, 231.99997022675305).
+- The connected SVG edge path changed during the drag and the final coordinates
+  were written under the flow-specific browser-storage key.
+- A reload restored the exact saved coordinates.
+- A background pointer drag changed canvas scrollLeft from 0 to 880 (maximum
+  943), then released pointer capture with no gesture or cursor state left over.
+- Reset restored `ingress` to (52, 177) and removed the flow's saved layout.
+- Ordinary node click still selected `executor` and populated the inspector.
+- Browser console errors, warnings, and issues: 0.
+
+GCE-only follow-up tests
+------------------------
+Target: llmsuper-graph-drag-test-0719
+Project: project96-sar
+Zone: us-central1-a
+Machine: Spot e2-micro
+Disk: 10 GB standard persistent disk, auto-delete=true
+Instance termination action: DELETE
+
+Focused graph suite:
+  Ran 7 tests in 0.069s
+  OK
+  Remote log lines: 12
+  Remote log SHA-256: 85cf4494598ae343ca5247c6b8d6ecf4fff1a1f4b56120934212dbb2627a6f82
+
+Complete repository suite:
+  Ran 132 tests in 5.899s
+  OK
+  Remote log lines: 151
+  Remote log SHA-256: 3495dcd0e3cf795e204ea8c8bd563351d79556ec0c6069496454a2379cd3042b
+
+The follow-up VM was deleted after capture. Final project queries returned no
+instance or disk named `llmsuper-graph-drag-test-0719`.
+
+Edge-semantics follow-up
+------------------------
+Browser MCP verified the graph after the edge-meaning update:
+
+- All 24 declared transitions render a nonblank labeled pill and a wide click
+  target; previously unlabeled forward transitions are presented as `continue`.
+- The persistent legend explains direction, solid forward routes, dashed
+  recovery loops, green observed transitions, and blue active routes.
+- Selecting an edge exposes its named source and destination, full declared
+  condition, route type, and definition/observed/active runtime state.
+- The 24 labels had zero pairwise visual overlaps at the 1440 x 1000 desktop
+  viewport after deterministic collision-aware placement.
+- The legend and interaction hint remained visible after a selected run
+  auto-panned the canvas to scrollLeft 1423 at the 500 x 844 mobile viewport.
+- Moving `ingress` in the browser changed the visible edge, transparent hit
+  path, and collision-aware label position; restoring it returned the exact
+  original node transform.
+- Final browser state: definition view, scrollLeft 0, 24 labels, 24 hit paths,
+  0 blank labels, 0 label overlaps, and 0 console errors/warnings/issues.
+
+GCE-only edge-semantics tests
+-----------------------------
+Target: llmsuper-edge-ui-test-0719
+Project: project96-sar
+Zone: us-central1-a
+Machine: Spot e2-micro
+Disk: 10 GB standard persistent disk, auto-delete=true
+Instance termination action: DELETE
+
+Focused graph suite:
+  Ran 8 tests in 0.073s
+  OK
+  Remote log lines: 13
+  Remote log SHA-256: 5733a4e0d3deb81eb6c38c058fe889d230da300a20a8efc5c72872a3136be7db
+
+Complete repository suite:
+  Ran 133 tests in 5.883s
+  OK
+  Remote log lines: 153
+  Remote log SHA-256: e5888d735167e6a566d9539e34568a9a742025355958c8823a0995d69cb5f3d6
+
+No repository test or workload command ran on the local controller. The local
+process served the control-plane web UI for Browser MCP inspection only.
+
+The exact VM was deleted after evidence capture. Final project queries returned
+no instance or disk named `llmsuper-edge-ui-test-0719`; both pre-existing
+instances remained unchanged.

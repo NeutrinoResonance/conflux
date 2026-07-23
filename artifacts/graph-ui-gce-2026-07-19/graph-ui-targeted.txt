@@ -1,0 +1,15 @@
+test_graph_and_run_routes_return_declared_and_observed_state (tests.test_graph_ui.GraphAdminRouteTests.test_graph_and_run_routes_return_declared_and_observed_state) ... ok
+test_job_routes_expose_lock_state_and_durable_events (tests.test_graph_ui.GraphAdminRouteTests.test_job_routes_expose_lock_state_and_durable_events) ... ok
+test_operator_decision_is_durable_and_updates_the_graph (tests.test_graph_ui.GraphAdminRouteTests.test_operator_decision_is_durable_and_updates_the_graph) ... ok
+test_definition_payload_is_serializable_for_the_browser (tests.test_graph_ui.GraphUIContractTests.test_definition_payload_is_serializable_for_the_browser) ... ok
+test_every_primary_surface_links_to_agent_graphs (tests.test_graph_ui.GraphUIContractTests.test_every_primary_surface_links_to_agent_graphs) ... ok
+test_graph_edges_explain_routes_and_open_a_detailed_inspector (tests.test_graph_ui.GraphUIContractTests.test_graph_edges_explain_routes_and_open_a_detailed_inspector) ... ok
+test_graph_nodes_are_draggable_and_canvas_is_pointer_pannable (tests.test_graph_ui.GraphUIContractTests.test_graph_nodes_are_draggable_and_canvas_is_pointer_pannable) ... ok
+test_graph_studio_exposes_definition_run_overlay_and_human_queue (tests.test_graph_ui.GraphUIContractTests.test_graph_studio_exposes_definition_run_overlay_and_human_queue) ... ok
+test_graph_workspace_contains_intrinsic_size_and_reveals_runtime_focus (tests.test_graph_ui.GraphUIContractTests.test_graph_workspace_contains_intrinsic_size_and_reveals_runtime_focus) ... ok
+test_runs_and_soundness_are_explicitly_bound_to_conversation_context (tests.test_graph_ui.GraphUIContractTests.test_runs_and_soundness_are_explicitly_bound_to_conversation_context) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.148s
+
+OK
