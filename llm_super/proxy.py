@@ -31,7 +31,9 @@ from .config import load
 from .conversation_graph import ConversationGraphStore
 from .control import PAUSED_NOTICE, ControlState, gate_warning, handle
 from .durable_jobs import DurableJobStore
+from .endeavors import EndeavorLedger
 from .execution_backends import ExecutionBoundaryError
+from .history_view import NETBSD_ARM64_ENDEAVOR
 from .history import History
 from .history_view import HistoryView
 from .library import DEFAULT_SETTINGS, Library
@@ -71,6 +73,22 @@ async def lifespan(app: FastAPI):
     workspace_service = WorkspaceService(
         workspace_store, orch, library, trace
     )
+
+    def workspace_endeavor_for(session: str) -> str | None:
+        row = trace.connection.execute(
+            "SELECT endeavor_id FROM workspace_conversations WHERE session=?",
+            (session,),
+        ).fetchone()
+        return row[0] if row else None
+
+    ledger = EndeavorLedger(
+        trace.connection,
+        workspace_endeavor_for=workspace_endeavor_for,
+    )
+    ledger.migrate_grouping(NETBSD_ARM64_ENDEAVOR)
+    trace.add_listener(ledger.observe)
+    trace.record("-", "-", "server_start",
+                 server_instance_id=ledger.server_instance_id)
     state.update(
         cfg=cfg,
         client=client,
@@ -82,6 +100,7 @@ async def lifespan(app: FastAPI):
         checkpoints=checkpoints,
         armed_sessions=set(),
         orch=orch,
+        endeavor_ledger=ledger,
         flow_runtime=orch.flow_runtime,
         action_store=orch.action_store,
         job_store=job_store,

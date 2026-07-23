@@ -282,6 +282,13 @@ class HistoryView:
         }
         result["target"] = dict(resolved.get("target") or {})
         result["metadata"] = dict(resolved.get("metadata") or {})
+        provenance = self._durable_run_provenance(resolved["sessions"])
+        captured_steps = self._durable_step_map(resolved["sessions"])
+        result["capture"] = {
+            "durable": bool(provenance or captured_steps),
+            "runs": sum(len(rows) for rows in provenance.values()),
+            "steps": len(captured_steps),
+        }
         return result
 
     def list_contexts(self, *, limit: int = 100) -> list[dict[str, Any]]:
@@ -350,6 +357,11 @@ class HistoryView:
         """Return one compact run per member session, in chronological order."""
         resolved = self._find_endeavor(endeavor_id)
         runs = [self._run_summary(resolved, sid) for sid in resolved["sessions"]]
+        provenance = self._durable_run_provenance(resolved["sessions"])
+        for run in runs:
+            captured = provenance.get(run["session_id"])
+            if captured:
+                run["capture"] = captured
         runs.sort(key=lambda r: (r["start_ts"], r["session_id"]))
         counts = Counter(r["status"] for r in runs)
         return self._page(
@@ -377,6 +389,14 @@ class HistoryView:
         """
         resolved = self._find_endeavor(endeavor_id)
         steps, result_warning_groups = self._timeline_steps(resolved)
+        captured_steps = self._durable_step_map(resolved["sessions"])
+        if captured_steps:
+            for step in steps:
+                identity = captured_steps.get(
+                    (step.get("session_id"), step.get("task_id"))
+                )
+                if identity:
+                    step["capture"] = identity
         raw_step_count = len(steps)
         control_count = sum(step["type"] == "control" for step in steps)
         workload_count = raw_step_count - control_count
@@ -546,13 +566,151 @@ class HistoryView:
             }
         return records
 
+    def _durable_run_provenance(
+        self, sessions: Sequence[str]
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Capture-time run rows (restart/client provenance) per session."""
+        if not sessions or not self._table_exists("runs"):
+            return {}
+        placeholders = ",".join("?" for _ in sessions)
+        out: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for row in self._conn.execute(
+            f"""SELECT id, session, status, client_name, server_instance_id,
+                       start_ts, end_ts, interruption_reason,
+                       resume_from_run_id
+                  FROM runs WHERE session IN ({placeholders})
+                 ORDER BY start_ts""",
+            tuple(sessions),
+        ):
+            out[str(row["session"])].append({
+                "run_id": str(row["id"]),
+                "status": str(row["status"]),
+                "client_name": str(row["client_name"] or ""),
+                "server_instance_id": str(row["server_instance_id"] or ""),
+                "start_ts": float(row["start_ts"]),
+                "end_ts": float(row["end_ts"]) if row["end_ts"] else None,
+                "interruption_reason": row["interruption_reason"],
+                "resume_from_run_id": row["resume_from_run_id"],
+            })
+        return dict(out)
+
+    def _durable_step_map(
+        self, sessions: Sequence[str]
+    ) -> dict[tuple[str, str], dict[str, Any]]:
+        """Capture-time step identity keyed by (session, task)."""
+        if not sessions or not self._table_exists("steps"):
+            return {}
+        placeholders = ",".join("?" for _ in sessions)
+        out: dict[tuple[str, str], dict[str, Any]] = {}
+        for row in self._conn.execute(
+            f"""SELECT id, run_id, session, task, phase, status, severity,
+                       ordinal
+                  FROM steps WHERE session IN ({placeholders})""",
+            tuple(sessions),
+        ):
+            out[(str(row["session"]), str(row["task"]))] = {
+                "step_id": str(row["id"]),
+                "run_id": str(row["run_id"]),
+                "phase": row["phase"],
+                "status": str(row["status"]),
+                "severity": str(row["severity"]),
+                "ordinal": int(row["ordinal"]),
+            }
+        return out
+
+    def _durable_groupings(
+        self, records: Mapping[str, Mapping[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Write-time endeavor identity (endeavors/endeavor_members tables).
+
+        Capture-time rows are explicit and authoritative: they claim their
+        sessions before the documented fixture constants and before any
+        alias/fallback grouping. Databases that predate the ledger simply
+        have no rows here and fall through to the compatibility paths.
+        """
+        if not (self._table_exists("endeavors")
+                and self._table_exists("endeavor_members")):
+            return []
+        members: dict[str, list[sqlite3.Row]] = defaultdict(list)
+        for row in self._conn.execute(
+            """SELECT endeavor_id, session, ordinal, relationship, attached_by
+                 FROM endeavor_members ORDER BY endeavor_id, ordinal"""
+        ):
+            members[row["endeavor_id"]].append(row)
+        run_statuses: dict[str, dict[str, str]] = defaultdict(dict)
+        if self._table_exists("runs"):
+            for row in self._conn.execute(
+                """SELECT endeavor_id, session, status FROM runs
+                    ORDER BY start_ts"""
+            ):
+                run_statuses[row["endeavor_id"]][row["session"]] = row["status"]
+        out: list[dict[str, Any]] = []
+        for row in self._conn.execute(
+            """SELECT id, project_id, title, status, target_json,
+                      metadata_json FROM endeavors"""
+        ):
+            rows = members.get(row["id"], [])
+            present = tuple(
+                str(m["session"]) for m in rows if m["session"] in records
+            )
+            if not present:
+                continue
+            title = str(row["title"] or "").strip()
+            if not title:
+                title = records[present[0]]["title"]
+            try:
+                metadata = json.loads(row["metadata_json"] or "{}")
+            except json.JSONDecodeError:
+                metadata = {}
+            try:
+                target = json.loads(row["target_json"] or "{}")
+            except json.JSONDecodeError:
+                target = {}
+            attached_by = {
+                str(m["session"]): str(m["attached_by"]) for m in rows
+            }
+            out.append({
+                "id": str(row["id"]),
+                "title": title,
+                "sessions": present,
+                "status": row["status"] if row["status"] not in
+                ("active", "") else None,
+                "relationship_by_session": {
+                    str(m["session"]): str(m["relationship"]) for m in rows
+                },
+                "run_statuses": dict(run_statuses.get(row["id"], {})),
+                "project_id": row["project_id"],
+                "target": target,
+                "metadata": {**metadata, "attached_by_session": attached_by,
+                             "captured": True},
+                "recovered_errors": False,
+                "control_milestones": (),
+                "expected_session_count": len(rows),
+                "missing_session_ids": tuple(
+                    str(m["session"]) for m in rows
+                    if m["session"] not in records
+                ),
+                "acceptance_anchors_satisfied": True,
+                "explicit": True,
+            })
+        return out
+
     def _resolved_endeavors(self) -> list[dict[str, Any]]:
         records = self._session_records()
         claimed: set[str] = set()
         out: list[dict[str, Any]] = []
 
+        durable_ids: set[str] = set()
+        for durable in self._durable_groupings(records):
+            durable_ids.add(durable["id"])
+            claimed.update(durable["sessions"])
+            out.append(durable)
+
         for grouping in self._groupings:
-            present = tuple(sid for sid in grouping.sessions if sid in records)
+            if grouping.id in durable_ids:
+                continue  # migrated to durable rows; those are authoritative
+            present = tuple(sid for sid in grouping.sessions
+                            if sid in records and sid not in claimed)
             if not present:
                 continue
             missing = tuple(sid for sid in grouping.sessions if sid not in records)
