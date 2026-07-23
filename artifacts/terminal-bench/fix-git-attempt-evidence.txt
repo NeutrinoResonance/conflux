@@ -1,0 +1,18 @@
+6934426 (HEAD -> master) Move to Stanford
+d7d3e4b off the job market woo
+c4e38a1 Add code link for BLADE
+6f46fa0 CV Update
+dd7e395 Adds BLADE to bib
+2cd355a n+1 (for the last time???)
+8eaf505 Add BLADE
+cc2ec78 Underline
+d71094e Underline Conferences
+232b279 Remove posters
+3fdf5f5 Add NeurIPS
+8c4731d Add EMNLP acceptance
+6934426 HEAD@{0}: commit (cherry-pick): Move to Stanford
+d7d3e4b HEAD@{1}: checkout: moving from c499730ae050deb27e5d22972ea28daf778060f2 to master
+c499730 HEAD@{2}: commit: Move to Stanford
+c4e38a1 HEAD@{3}: checkout: moving from master to HEAD~1
+d7d3e4b HEAD@{4}: reset: moving to d7d3e4b
+19b5d10 HEAD@{5}: clone: from https://github.com/TheJDoe/personal-site.git

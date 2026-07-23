@@ -204,15 +204,65 @@ details.unit .subtl { margin: 4px 0 4px 4px; }
 .esc { margin-top: 8px; font-size: 13px; color: var(--ink); }
 .msgbtn { font-size: 11px; padding: 2px 10px; margin-left: auto; }
 .msgview { border-top: 1px solid var(--grid); padding: 10px 14px; }
-.msg { margin-bottom: 8px; }
-.msg .mh { font-size: 11px; color: var(--muted); margin-bottom: 2px;
-           font-family: ui-monospace, monospace; }
-.msg .role { display: inline-block; min-width: 70px; font-weight: 600;
-             color: var(--ink); }
-.msg pre { margin: 0 0 4px; padding: 6px 10px; background: var(--page);
-           border: 1px solid var(--grid); border-radius: 6px; font-size: 11.5px;
-           white-space: pre-wrap; word-break: break-word; max-height: 300px;
-           overflow: auto; }
+/* A task is a conversation element, not a bag of JSON.  The three-stage
+   map stays compact in the polling view; the transcript beneath it is only
+   fetched after an explicit inspection action. */
+.task-story { margin: 0; padding: 12px 14px; border-top: 1px solid var(--grid);
+  background: color-mix(in srgb, var(--task-hue, var(--seq)) 3%, var(--surface)); }
+.story-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px;
+  margin-bottom: 9px; }
+.story-title strong { font-size: 13px; }
+.story-short { color: var(--ink-2); font-size: 12px; flex: 1 1 360px; }
+.story-flow { display: grid; grid-template-columns: minmax(0,1fr) 28px minmax(0,1fr) 28px minmax(0,1fr);
+  align-items: stretch; }
+.story-arrow { display: grid; place-items: center; color: var(--task-hue, var(--seq));
+  font-size: 17px; }
+.story-stage { min-width: 0; border: 1px solid var(--grid); border-radius: 8px;
+  padding: 8px 9px; background: var(--surface); }
+.story-stage .sk { display: flex; align-items: center; gap: 5px; color: var(--muted);
+  font-size: 9.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.story-stage .sv { margin-top: 3px; color: var(--ink); font-size: 11.5px;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+.story-stage.model { border-top: 2px solid var(--task-hue, var(--seq)); }
+.story-long { margin-top: 8px; color: var(--ink-2); font-size: 12px; }
+.story-long summary { cursor: pointer; color: var(--seq); font-size: 11px; }
+.story-long p { margin: 6px 0 0; white-space: pre-wrap; }
+.msg { margin-bottom: 12px; border: 1px solid var(--grid); border-radius: 9px;
+  overflow: hidden; background: var(--surface); }
+.msg .mh { display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  padding: 6px 9px; color: var(--muted); background: var(--page); font-size: 10.5px;
+  font-family: ui-monospace, monospace; border-bottom: 1px solid var(--grid); }
+.exchange-summary { padding: 8px 10px; border-bottom: 1px solid var(--grid); }
+.exchange-summary .elabel { color: var(--task-hue, var(--seq)); font-size: 9.5px;
+  font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.exchange-summary .eshort { margin-top: 2px; color: var(--ink); font-size: 12px; }
+.exchange-summary details { margin-top: 4px; color: var(--ink-2); font-size: 11.5px; }
+.exchange-summary details summary { cursor: pointer; color: var(--seq); }
+.chat-thread { padding: 10px; display: grid; gap: 8px; }
+.chat-msg { display: grid; grid-template-columns: 25px minmax(0, 1fr); gap: 7px;
+  align-items: start; max-width: min(88%, 900px); }
+.chat-msg.assistant, .chat-msg.client { margin-left: auto; grid-template-columns: minmax(0,1fr) 25px; }
+.chat-msg .avatar { width: 25px; height: 25px; display: grid; place-items: center;
+  border: 1px solid var(--grid); border-radius: 50%; color: var(--ink-2); background: var(--page);
+  font-size: 11px; font-weight: 700; }
+.chat-msg.assistant .avatar, .chat-msg.client .avatar { grid-column: 2; background:
+  color-mix(in srgb, var(--task-hue, var(--seq)) 14%, var(--surface)); }
+.chat-msg .bubble { min-width: 0; border: 1px solid var(--grid); border-radius: 4px 10px 10px 10px;
+  padding: 7px 9px; background: var(--page); }
+.chat-msg.assistant .bubble, .chat-msg.client .bubble { grid-column: 1; grid-row: 1;
+  border-radius: 10px 4px 10px 10px; background:
+  color-mix(in srgb, var(--task-hue, var(--seq)) 7%, var(--surface)); }
+.chat-msg .role { display: block; margin-bottom: 3px; color: var(--muted); font-size: 9.5px;
+  font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.chat-msg pre { margin: 0; padding: 0; border: 0; background: transparent; color: var(--ink);
+  font: 11.5px/1.45 ui-monospace, monospace; white-space: pre-wrap; word-break: break-word;
+  max-height: 340px; overflow: auto; }
+.ioout .chat-thread { margin-top: 6px; border: 1px solid var(--grid); border-radius: 8px; }
+@media (max-width: 720px) {
+  .story-flow { grid-template-columns: 1fr; gap: 5px; }
+  .story-arrow { transform: rotate(90deg); min-height: 18px; }
+  .chat-msg { max-width: 96%; }
+}
 .note { margin-top: 6px; font-size: 12px; color: var(--ink-2); }
 .note::before { content: "↩ "; color: var(--muted); }
 table { width: 100%; border-collapse: collapse; background: var(--surface);
@@ -320,8 +370,10 @@ tr:last-child td { border-bottom: none; }
   <h1>llm-super</h1>
   <div class="sub">live control plane — <span id="clock">…</span> · auto-refresh 2s</div>
   <nav class="topnav" aria-label="Primary">
+    <a href="/workspace">Workspace</a>
     <a href="/" aria-current="page">Live</a>
     <a href="/history">History</a>
+    <a href="/graphs">Agent Graphs</a>
     <a href="#analytics-section">Analytics</a>
     <a href="#settings-section">Settings</a>
   </nav>
@@ -353,10 +405,10 @@ tr:last-child td { border-bottom: none; }
           <option value="skip">skip next turn</option>
         </select>
       </label>
-      <label>sandbox
-        <select id="sandboxSel">
-          <option value="auto">auto</option><option value="local">local</option>
-          <option value="gcloud">gcloud</option><option value="off">off</option>
+      <label>execution
+        <select id="sandboxSel" title="Generated workloads are operator-locked to GCE">
+          <option value="auto">GCE · locked</option>
+          <option value="gce">GCE · explicit</option><option value="off">off</option>
         </select>
       </label>
       <label>plan
@@ -549,6 +601,92 @@ function hueFor(id) {
   return `hsl(${h} 60% 52%)`;
 }
 
+// New records carry three deliberately different summary layers.  Keep the
+// reader tolerant of the nested shapes used by development snapshots, and of
+// old rows that have only a prompt/answer preview.
+function summaryFields(...sources) {
+  const expanded = [];
+  for (const source of sources) {
+    if (!source || typeof source !== "object") continue;
+    expanded.push(source);
+    for (const key of ["step_summary", "conversation_summary", "summary_metadata"])
+      if (source[key] && typeof source[key] === "object") expanded.push(source[key]);
+  }
+  const pick = keys => {
+    for (const source of expanded) for (const key of keys) {
+      const value = source[key];
+      if (typeof value === "string" && value.trim()) return value.trim();
+    }
+    return "";
+  };
+  return {
+    short: pick(["short_summary", "summary"]),
+    label: pick(["node_label", "node_descriptor", "headline"]),
+    long: pick(["long_summary"]),
+  };
+}
+function taskPresentation(evs) {
+  const merged = {short:"", label:"", long:""};
+  for (const event of [...evs].reverse()) {
+    const found = summaryFields(event, event.data);
+    for (const key of Object.keys(merged)) if (!merged[key] && found[key]) merged[key] = found[key];
+  }
+  const start = evs.find(event => event.data?.task_preview);
+  const end = [...evs].reverse().find(event =>
+    event.kind === "turn_end" || event.kind === "agent_end");
+  const prompt = String(start?.data?.task_preview || "").trim();
+  const answer = String(end?.data?.answer_preview || "").trim();
+  const escalated = String(end?.data?.escalated || "").trim();
+  const modelsUsed = [...new Set(evs.map(event => event.model).filter(Boolean))];
+  const calls = evs.filter(event => ["execute", "synthesis", "tool_step"].includes(event.kind)).length;
+  if (!merged.label) merged.label = prompt || "Supervised conversation";
+  if (!merged.short) {
+    const asked = prompt ? `Asked: ${prompt.slice(0, 150)}.` : "The request text was not retained.";
+    const elicited = answer ? ` Elicited: ${answer.slice(0, 180)}.`
+      : escalated ? ` The run stopped for input: ${escalated.slice(0, 180)}.`
+      : " The system is still working on it.";
+    merged.short = asked + elicited;
+  }
+  return {
+    ...merged, prompt,
+    process: `${modelsUsed.length ? modelsUsed.join(", ") : "model pending"}${calls ? ` · ${calls} model/tool step${calls === 1 ? "" : "s"}` : ""}`,
+    outcome: answer || escalated || (end ? "Completed; no answer preview was recorded." : "In progress…"),
+  };
+}
+function taskStoryHTML(evs) {
+  const view = taskPresentation(evs);
+  const label = view.label.length > 100 ? view.label.slice(0, 99) + "…" : view.label;
+  return `<figure class="task-story" aria-label="Conversation flow">
+    <figcaption class="story-title"><strong>${esc(label)}</strong>
+      <span class="story-short">${esc(view.short)}</span></figcaption>
+    <div class="story-flow">
+      <div class="story-stage"><div class="sk">① Prompt</div>
+        <div class="sv">${esc(view.prompt || "Prompt unavailable for this legacy turn.")}</div></div>
+      <div class="story-arrow" aria-hidden="true">→</div>
+      <div class="story-stage model"><div class="sk">② LLM activity</div>
+        <div class="sv">${esc(view.process)}</div></div>
+      <div class="story-arrow" aria-hidden="true">→</div>
+      <div class="story-stage"><div class="sk">③ Outcome</div>
+        <div class="sv">${esc(view.outcome)}</div></div>
+    </div>
+    ${view.long && view.long !== view.short ? `<details class="story-long"><summary>Detailed conversation summary</summary>
+      <p>${esc(view.long)}</p></details>` : ""}
+  </figure>`;
+}
+
+function chatBubble(role, text, label) {
+  const normalized = String(role || "message").toLowerCase();
+  const kind = normalized.includes("assistant") || normalized.includes("model")
+    ? "assistant" : normalized.includes("client") ? "client" : "user";
+  const avatar = kind !== "user" ? "AI"
+    : normalized === "user" ? "U" : normalized === "system" ? "S"
+    : normalized === "tool" ? "T" : "•";
+  return `<div class="chat-msg ${kind}">
+    <span class="avatar" aria-hidden="true">${avatar}</span>
+    <div class="bubble"><span class="role">${esc(label || role)}</span><pre>${esc(text)}</pre></div>
+  </div>`;
+}
+
 function renderStatus(st, cfgModels) {
   const paused = !!st.paused;
   $("#pauseBtn").textContent = paused ? "Resume" : "Pause";
@@ -700,9 +838,9 @@ async function loadOut(ev, task, model, nth, kind, elId) {
   } else {
     let outTxt = "(empty answer)";
     try { outTxt = p.response.choices[0].message.content || "(empty answer)"; } catch (e) {}
-    html = mdlBlk(`input — prompt sent to ${esc(model)} (assembled by llm-super; may embed task, feedback, or candidate texts)`,
-                  esc(lastTxt(p).slice(0, 4000)))
-         + mdlBlk(`output — ${esc(model)}'s response, verbatim`, esc(outTxt.slice(0, 6000)));
+    html = `<div class="chat-thread" aria-label="Model request and response">` +
+      chatBubble("user", lastTxt(p).slice(0, 4000), "Prompt assembled by llm-super") +
+      chatBubble("assistant", outTxt.slice(0, 6000), `${model} response`) + `</div>`;
   }
   ioLoaded.set(elId, html);
   el.innerHTML = html;
@@ -828,6 +966,7 @@ function renderTasks(events) {
     const fms = [...new Set(evs.filter(e => e.kind === "fm_event").map(e => e.fm_id || e.data?.fm_id))];
     const escalated = end?.data?.escalated;
     const preview = evs.find(e => e.data?.task_preview)?.data?.task_preview;
+    const presentation = taskPresentation(evs);
     const planUnits = evs.find(e => e.kind === "plan")?.data?.units || [];
     const agentic = evs.some(e => e.kind === "agent_turn" || e.kind === "tool_step");
     const status = end
@@ -891,7 +1030,7 @@ function renderTasks(events) {
     cards.push(`<details class="turn" data-nid="${tnid}"${open ? " open" : ""} style="--task-hue:${hueFor(task)}">
       <summary>
         ${status}
-        <span class="goal" title="${esc(preview || "")}">${esc((preview || "(no prompt recorded)").slice(0, 150))}</span>
+        <span class="goal" title="${esc(presentation.short || preview || "")}">${esc((presentation.label || preview || "(no prompt recorded)").slice(0, 150))}</span>
         ${scorebar(lastScore)}
         <span class="gcost">$${cost.toFixed(4)}</span>
         ${fms.map(fmBadge).join(" ")}
@@ -902,6 +1041,7 @@ function renderTasks(events) {
         <button class="msgbtn" onclick="focusGraph(event, '${esc(task)}')"
           title="show this turn in the pipeline graph">⛓ graph</button>
       </summary>
+      ${taskStoryHTML(evs)}
       <div class="tl">${rows.join("")}
         ${escalated ? `<div class="esc"><div class="cap">⛔ needs input — the supervisor stopped without a verified answer. Reply in this conversation to resolve:</div>${esc(escalated)}</div>` : ""}
       </div>
@@ -944,7 +1084,8 @@ function graphModel(evs) {
   const score = s => s == null ? "" : Number(s).toFixed(2);
 
   const startEv = evs.find(e => e.kind === "turn_start" || e.kind === "agent_turn");
-  add("start", "goal", (startEv?.data?.task_preview || "").slice(0, 24),
+  const presentation = taskPresentation(evs);
+  add("start", presentation.label || "goal", presentation.short.slice(0, 40),
       "ok", 0, 0, startEv && {ev: startEv});
   const c = evs.find(e =>
     ["contract", "contract_skipped", "contract_failed"].includes(e.kind));
@@ -1089,8 +1230,9 @@ function renderGraph(events) {
   }
   const selEl = $("#gTaskSel");
   const opts = tasks.map(t => {
-    const p = events.find(e => e.task === t && e.data?.task_preview)?.data.task_preview;
-    return `<option value="${esc(t)}">${esc(t)} — ${esc((p || "").slice(0, 40))}</option>`;
+    const tev = events.filter(e => e.task === t);
+    const p = taskPresentation(tev);
+    return `<option value="${esc(t)}">${esc(t)} — ${esc((p.label || p.prompt || "").slice(0, 56))}</option>`;
   }).join("");
   if (selEl.innerHTML !== opts) selEl.innerHTML = opts;
   if ($("#gFollow").checked || !gSel.task || !tasks.includes(gSel.task))
@@ -1737,30 +1879,37 @@ function fmtContent(c) {
 }
 function renderMessage(m, i) {
   const rows = [];
-  const add = (role, text) =>
-    rows.push(`<div><span class="role">${esc(role)}</span></div><pre>${esc(text)}</pre>`);
+  const add = (role, text, label) => rows.push(chatBubble(role, text, label));
   if (m.kind === "client_request") {
     for (const msg of (m.payload.messages || [])) {
       let t = fmtContent(msg.content);
       if (msg.tool_calls) t += "\n[tool_calls] " + JSON.stringify(msg.tool_calls, null, 1);
-      add(msg.role, t);
+      add(msg.role, t, msg.role === "user" ? "You" : msg.role);
     }
   } else if (m.kind === "upstream") {
     for (const msg of ((m.payload.request || {}).messages || []).slice(-2))
-      add(msg.role, fmtContent(msg.content));
+      add(msg.role, fmtContent(msg.content), msg.role === "user" ? "Prompt to model" : msg.role);
     const rmsg = (((m.payload.response || {}).choices || [])[0] || {}).message || {};
     let t = fmtContent(rmsg.content);
     if (rmsg.tool_calls) t += "\n[tool_calls] " + JSON.stringify(rmsg.tool_calls, null, 1);
-    add("↳ " + (m.model || "model"), t);
+    add("assistant", t, (m.model || "model") + " response");
   } else {  // client_response
     const p = m.payload;
     const rmsg = ((p.choices || [])[0] || {}).message;
     let t = rmsg ? fmtContent(rmsg.content) : fmtContent(p.text);
     if (rmsg && rmsg.tool_calls) t += "\n[tool_calls] " + JSON.stringify(rmsg.tool_calls, null, 1);
-    add("→ client", t);
+    add("client", t, "Response returned to client");
   }
+  const summary = summaryFields(m, m.payload);
+  const summaryHTML = summary.short || summary.label || summary.long
+    ? `<div class="exchange-summary">
+        <div class="elabel">${esc(summary.label || "Exchange summary")}</div>
+        ${summary.short ? `<div class="eshort">${esc(summary.short)}</div>` : ""}
+        ${summary.long && summary.long !== summary.short ? `<details><summary>More detail</summary>${esc(summary.long)}</details>` : ""}
+      </div>` : "";
   return `<div class="msg"><div class="mh">#${i + 1} ${esc(m.kind)}${
-    m.model ? " · " + esc(m.model) : ""} · ${hhmmss(m.ts)}</div>${rows.join("")}</div>`;
+    m.model ? " · " + esc(m.model) : ""} · ${hhmmss(m.ts)}</div>${summaryHTML}
+    <div class="chat-thread">${rows.join("")}</div></div>`;
 }
 async function toggleMessages(ev, task) {
   ev.preventDefault(); ev.stopPropagation();

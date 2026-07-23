@@ -1,0 +1,12 @@
+Conclude the already completed Terminal-Bench `fix-git` task inside the
+operator-locked container on the authorized GCE VM. The repository is pinned
+at `/app/personal-site`. Do not mutate anything and do not inspect benchmark
+tests or solutions.
+
+Use exactly one tool call: make one bounded, read-only observation that shows
+the current branch and cleanliness, the latest commit and both of its parents,
+that recovered commit `c499730` is reachable from master, and the final
+Stanford content in `_includes/about.md` and `_layouts/default.html`. Avoid
+shell substitution, negation, heredocs, redirection, or trailing status-masking
+commands. Incorporate that evidence, then stop using tools and give the concise
+final result.

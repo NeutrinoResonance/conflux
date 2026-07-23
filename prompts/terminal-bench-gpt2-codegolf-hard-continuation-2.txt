@@ -1,0 +1,39 @@
+Continue the Terminal-Bench task `gpt2-codegolf` in the existing operator-locked
+task container on the authorized GCE VM. This is a second bounded continuation
+phase after the prior phase reached its declared governor-correction limit; do
+not repeat work for which evidence is already recorded.
+
+The required deliverable remains a single dependency-free C program at
+`/app/gpt2.c`. It must compile with `gcc -O3 -lm`, load the TensorFlow GPT-2 124M
+checkpoint `/app/gpt2-124M.ckpt` and `/app/vocab.bpe`, accept an arbitrary prompt
+as argv[3], greedily generate exactly 20 new tokens, print only the decoded text,
+and contain fewer than 5000 bytes. Internet access is allowed, but do not inspect
+benchmark verifier files, tests, oracle answers, or public solutions.
+
+Authoritative carried-forward evidence:
+
+- `/app/gpt2.c` is now an atomic 4852-byte revision with SHA-256
+  `1f8c11c75bf8bcceee25b2a22016444eb80f2b071cd73467ed9b3c679cbd93c4`.
+- This exact 4852-byte revision has not yet been compiled or executed.
+- The preceding 4461-byte revision compiled, but execution on `Hello world`
+  exited 139. Earlier revisions also segfaulted. A write or clean compile is not
+  completion evidence; isolate and repair the checkpoint-layout or memory-index
+  defect before claiming success.
+- A prior 5234-byte revision instead consumed the assigned CPU until a timeout,
+  so both correctness and bounded runtime need positive evidence.
+
+All commands and code execution must remain inside the pinned task container on
+the pinned GCE VM. Never invoke Docker, sudo, gcloud, SSH, or any host/backend
+selector. Use `write_file_in_locked_container` for complete source replacement;
+do not use heredocs, shell redirection, base64 commands, or printf to create
+source files. Use one tool call per turn. Preserve meaningful exit status: never
+append an always-success command, and use pipefail if a non-read pipeline is
+unavoidable. Prefer narrow, read-only observations over pipelines.
+
+Use at most 24 tool calls in this continuation phase. Work from the existing
+source and stop only after a bounded falsification sequence has established all
+of: actual byte count below 5000, genuine compilation success, checkpoint and BPE
+loading, arbitrary-prompt handling, exactly 20 generated token IDs, decoded
+output consistent with those generated IDs, and completion within the benchmark
+timeout. Incorporate every failed check into the next plan rather than treating
+an intermediate write, build, crash, or timeout as success.

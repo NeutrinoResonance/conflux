@@ -1,0 +1,34 @@
+Continue `gpt2-codegolf` in the existing locked GCE task container. Never inspect
+benchmark tests, verifier files, oracle answers, or solutions.
+
+Current `/app/gpt2.c` is 4470 bytes, SHA-256
+`136ae100e41b7ed5e888fe00bd7d80d831bc6a5b2e0c0485b2ca644712ce0509`.
+Its tokenizer is proven (50,000 merges; `Hello` -> 15496), and its Conv1D access
+is correctly input-major `w[i*d+j]`, but two prompts both generate twenty copies
+of `elsius` because the checkpoint loader uses the wrong parameter order.
+
+Numeric evidence from the 497759232-byte official TF shard selects this exact
+TensorFlow variable-name layout. Each physical block stores:
+
+`cb[2304], cw[768*2304], pb[768], pw[768*768], lb[768], lg[768],
+l2b[768], l2g[768], fb[3072], fw[768*3072], p2b[768],
+p2w[3072*768]`.
+
+The physical blocks are globally name-sorted as logical layers
+`0,1,10,11,2,3,4,5,6,7,8,9`. Map each physical slot accordingly. The tail is
+`lfb[768], lfg[768], wpe[1024*768], wte[50257*768]`. Evidence: the first tail
+segment is near zero while the second is gain-like around 1.2–1.9; the old `cw`
+began at float 1536 inside the 2304-element attention bias.
+
+Read `/app/gpt2.c` once, atomically replace only its loader/order logic with
+`write_file_in_locked_container`, preserve everything else, then compile exactly
+`gcc -O3 -o /app/gpt2 /app/gpt2.c -lm`. Let native status propagate; never append
+`echo`, `true`, or redirect stderr. Run separate direct 60-second tests for
+`Hello` and `Once upon a time` using `/app/gpt2-124M.ckpt` and `/app/vocab.bpe`.
+
+The final dependency-free C must stay under 5000 bytes, greedily emit exactly 20
+new tokens, and print only decoded bytes. All execution stays in the pinned GCE
+container. Never invoke Docker, sudo, gcloud, SSH, or backend selectors. No
+heredocs, redirection, base64, or printf source writes. One tool call per turn;
+at most 8 calls. Repetition is failure. Stop only with positive evidence or a
+precise remaining failure.

@@ -1,0 +1,34 @@
+Continue the Terminal-Bench task `gpt2-codegolf` in the existing operator-locked
+task container on the authorized GCE VM. This phase begins after the prior phase
+used its governor-correction allowance; keep the same guardrails. Do not inspect
+benchmark verifier files, tests, oracle answers, or public solutions.
+
+The deliverable remains `/app/gpt2.c`: dependency-free C, fewer than 5000 bytes,
+compiled with `gcc -O3 -lm`, loading `/app/gpt2-124M.ckpt` and `/app/vocab.bpe`,
+accepting an arbitrary prompt as argv[3], greedily generating exactly 20 new
+tokens, and printing only their decoded text.
+
+Authoritative evidence:
+
+- `/app/gpt2.c` is 3935 bytes with SHA-256
+  `661f76dd1dfc51862564ef74a5a2280740c4e8c65df0c741c30da35acd0a8761`.
+- This exact revision was compiled successfully as `/app/gpt2` with
+  `gcc -O3 -o gpt2 gpt2.c -lm`, genuine exit 0, and the binary's existence was
+  independently confirmed. Do not recompile unless source changes.
+- The current binary has not been run. Output semantics remain unverified after
+  earlier revisions produced twenty dashes.
+
+All commands and code execution must remain inside the pinned task container on
+the pinned GCE VM. Never invoke Docker, sudo, gcloud, SSH, or a host/backend
+selector. Use `write_file_in_locked_container` for complete source replacement;
+do not use heredocs, shell redirection, base64 commands, or printf to create
+source files. Use one tool call per turn. Preserve meaningful exit status. Use a
+bounded `timeout` directly around candidate executions; do not pipe or append
+output-masking commands. The image has gcc and Perl but no Python and no `file`.
+
+Use at most 12 tool calls. Run the current binary on at least two prompts, then
+independently try to falsify that exactly 20 token IDs are generated and that
+decoding those IDs yields the printed bytes. Repetitive or nonsensical output is
+failure. If source changes, recompile the new hash before its runtime can count.
+Stop only with positive evidence for every task requirement, or precisely report
+the next falsified or unverified condition without claiming completion.

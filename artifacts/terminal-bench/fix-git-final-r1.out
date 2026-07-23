@@ -1,0 +1,22 @@
+## Summary
+
+**Task**: Recover lost Git changes and merge them into `master`.
+
+**Investigation**:
+- Checked `git reflog` and found a dangling commit `c499730` ("Move to Stanford") created on a detached HEAD at `HEAD~1` (commit `c4e38a1`), then orphaned when the user checked out `master`.
+- Commit `c499730` modified `_includes/about.md` (changed bio from UW PhD candidate to Stanford Postdoc) and `_layouts/default.html` (updated subtitle to "Postdoc @ Stanford" with formatting fixes).
+- The original `master` tip (`d7d3e4b` "off the job market woo") was left intact.
+
+**Recovery**:
+- Merged the lost commit `c499730` into `master` using `git merge c499730`.
+- Resolved a conflict in `_includes/about.md` by retaining the lost commit's content (Stanford postdoc bio supersedes the UW PhD candidate line from `d7d3e4b`).
+- `_layouts/default.html` merged cleanly.
+
+**Final State**:
+- Branch: `master`
+- HEAD: `0c8d74e` (merge commit with parents `d7d3e4b` and `c499730`)
+- Working tree: clean, no conflicts
+- Key changes present:
+  - `_includes/about.md`: "I am a Postdoctoral Researcher at Stanford CS."
+  - `_layouts/default.html`: "Postdoc @ Stanford"
+- Both the lost commit and original master history are preserved and reachable.

@@ -1,0 +1,38 @@
+Continue the Terminal-Bench task `gpt2-codegolf` in the existing operator-locked
+task container on the authorized GCE VM. This is a fresh bounded verification
+and repair phase. Do not inspect benchmark verifier files, tests, oracle answers,
+or public solutions.
+
+The deliverable remains `/app/gpt2.c`: dependency-free C, fewer than 5000 bytes,
+compiled with `gcc -O3 -lm`, loading `/app/gpt2-124M.ckpt` and `/app/vocab.bpe`,
+accepting an arbitrary prompt as argv[3], greedily generating exactly 20 new
+tokens, and printing only their decoded text.
+
+Authoritative carried-forward evidence:
+
+- Current atomic `/app/gpt2.c` is 3935 bytes with SHA-256
+  `661f76dd1dfc51862564ef74a5a2280740c4e8c65df0c741c30da35acd0a8761`.
+- This exact revision has not been compiled. The existing `/app/gpt2` binary is
+  stale, and the final runtime in the prior phase therefore provides no evidence
+  about the current source. Compile first.
+- The prior revision compiled and completed, but output correctness was still
+  under repair after earlier output of twenty dashes falsified semantics.
+- Confirmed matrix-dimension and byte-to-Unicode out-of-bounds defects were
+  repaired in the preceding phase, but no current-revision evidence yet proves
+  checkpoint layout, exact twenty-token generation, decoding consistency, or
+  multiple-prompt correctness.
+
+All commands and code execution must remain inside the pinned task container on
+the pinned GCE VM. Never invoke Docker, sudo, gcloud, SSH, or a host/backend
+selector. Use `write_file_in_locked_container` for complete source replacement;
+do not use heredocs, shell redirection, base64 commands, or printf to create
+source files. Use one tool call per turn. Preserve meaningful exit status and
+prefer narrow observations over output-masking pipelines. Put `-lm` after the C
+input at link time. The image has gcc and Perl but no Python and no `file`.
+
+Use at most 16 tool calls. Compile the exact current hash before running it.
+Perform bounded runs on more than one prompt and independently try to falsify
+that exactly 20 token IDs are generated and that decoding those IDs yields the
+printed bytes. Repetitive or nonsensical output is failure. Stop only with
+positive evidence for every task requirement, or precisely identify the next
+falsified or unverified condition without claiming completion.

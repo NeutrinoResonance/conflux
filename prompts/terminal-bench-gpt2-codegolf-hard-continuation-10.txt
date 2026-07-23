@@ -1,0 +1,40 @@
+Continue the Terminal-Bench task `gpt2-codegolf` in the existing operator-locked
+task container on the authorized GCE VM. Implement the already-diagnosed GPT-2
+base-token mapping fix; do not repeat BPE-header or checkpoint probes. Do not
+inspect benchmark verifier files, tests, oracle answers, or public solutions.
+
+The deliverable remains `/app/gpt2.c`: dependency-free C under 5000 bytes,
+compiled with `gcc -O3 -lm`, loading `/app/gpt2-124M.ckpt` and `/app/vocab.bpe`,
+accepting argv[3], greedily generating exactly 20 new tokens, and printing only
+their decoded bytes.
+
+Current `/app/gpt2.c` is unchanged at 3922 bytes, SHA-256
+`bd7e0c191f76e9b1c7b0a42f88dbd481b0a76418ad32ea0a0b60444d6c6f1343`.
+It compiles and runs but maps `Hello` to 15365, loads only 49,266/50,000 merges,
+and generates twenty copies of internal string `Ġdaytime`.
+
+Implement this exact mapping invariant:
+
+- ordered raw bytes `B` are 33..126, 161..172, 174..255, then every raw byte
+  not already present in ascending order;
+- corresponding Unicode code points `U` are those same first-range values,
+  then 256,257,... for the appended bytes;
+- the hash used by BPE lookup must map UTF-8(U[position]) to base token ID
+  `position`, not to raw byte B[position];
+- the reverse table must map base token ID `position` back to raw byte
+  B[position], so final decoding emits actual bytes such as a space rather than
+  the internal UTF-8 marker `Ġ`.
+
+Inspect `/app/gpt2.c` at most once if necessary, then replace it atomically with
+`write_file_in_locked_container`. Do not read `vocab.bpe` again before the write.
+All commands/code execution remain inside the pinned GCE task container. Never
+invoke Docker, sudo, gcloud, SSH, or backend selectors. No heredocs, redirection,
+base64, or printf for source writes. Use one tool call per turn, bounded candidate
+runs, meaningful exit status, and `-lm` after the C input. The image has gcc and
+Perl but no Python or `file`.
+
+Use at most 12 tool calls. After the write, establish all 50,000 merges load and
+`Hello` encodes to 15496, then compile and test at least two prompts. Verify 20
+generated IDs and decoded-byte consistency. Repetitive/nonsensical output is
+failure. Stop only with positive evidence for all requirements or precisely
+report the remaining failure.

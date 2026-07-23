@@ -1,0 +1,39 @@
+Continue the Terminal-Bench task `gpt2-codegolf` in the existing operator-locked
+task container on the authorized GCE VM. This is a fresh bounded verification
+and repair phase after the preceding transcript reached its declared cumulative
+tool-call limit. Do not claim success from carried-forward work alone.
+
+The deliverable remains `/app/gpt2.c`: dependency-free C, fewer than 5000 bytes,
+compiled with `gcc -O3 -lm`, loading `/app/gpt2-124M.ckpt` and `/app/vocab.bpe`,
+accepting an arbitrary prompt as argv[3], greedily generating exactly 20 new
+tokens, and printing only their decoded text. Do not inspect benchmark verifier
+files, tests, oracle answers, or public solutions.
+
+Authoritative carried-forward evidence:
+
+- The current atomic `/app/gpt2.c` is 4121 bytes with SHA-256
+  `b96fee7d5f478c1922ded4709f5170ff00c9c85803a212dc849b9cb41e06fba4`.
+- This exact revision includes a claimed KV-cache optimization and checkpoint
+  layout corrections, but it has not been compiled or executed. Those claims
+  are hypotheses, not evidence.
+- The immediately preceding 4163-byte revision compiled and completed under 60
+  seconds on two prompts. It was then replaced after an independent diagnostic
+  suggested checkpoint-layout problems.
+- Earlier revisions either segfaulted or timed out. A source write, a clean
+  compile, or a zero exit status alone is insufficient completion evidence.
+
+All commands and code execution must remain inside the pinned task container on
+the pinned GCE VM. Never invoke Docker, sudo, gcloud, SSH, or any host/backend
+selector. Use `write_file_in_locked_container` for complete source replacement;
+do not use heredocs, shell redirection, base64 commands, or printf to create
+source files. Use one tool call per turn. Preserve meaningful exit status and
+prefer narrow, read-only observations over output-masking pipelines. The image
+has gcc and Perl but no Python and no `file` utility.
+
+Use at most 16 tool calls in this phase. First compile and run the exact current
+revision under a bounded timeout. Then try to falsify output correctness across
+more than one prompt, including independently establishing exactly 20 generated
+token IDs and consistency between those IDs and the decoded output. Repair any
+failure and repeat the relevant checks. Stop only when source size, compilation,
+input loading, arbitrary-prompt handling, output semantics, and runtime have
+positive evidence; otherwise state precisely what remains unverified.

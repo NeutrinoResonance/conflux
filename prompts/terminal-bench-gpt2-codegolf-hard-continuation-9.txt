@@ -1,0 +1,44 @@
+Continue the Terminal-Bench task `gpt2-codegolf` in the existing operator-locked
+task container on the authorized GCE VM. This phase is a focused tokenizer and
+decoder repair. Do not inspect benchmark verifier files, tests, oracle answers,
+or public solutions.
+
+The deliverable remains `/app/gpt2.c`: dependency-free C, fewer than 5000 bytes,
+compiled with `gcc -O3 -lm`, loading `/app/gpt2-124M.ckpt` and `/app/vocab.bpe`,
+accepting an arbitrary prompt as argv[3], greedily generating exactly 20 new
+tokens, and printing only their decoded text.
+
+Authoritative evidence:
+
+- Current `/app/gpt2.c` is 3922 bytes with SHA-256
+  `bd7e0c191f76e9b1c7b0a42f88dbd481b0a76418ad32ea0a0b60444d6c6f1343`.
+- It compiles and runs quickly, but always generates token 32495 and prints 20
+  copies of the internal token string `Ġdaytime`.
+- The diagnostic found `Hello` encodes as token 15365; correct GPT-2 encoding is
+  token 15496. Only 49,266 of 50,000 BPE merges load because 734 base-token
+  references fail lookup and are silently skipped.
+- Root cause: the GPT-2 base vocabulary IDs follow the ordered byte list
+  `[33..126, 161..172, 174..255, then every remaining byte in ascending order]`,
+  paired with Unicode code points `[same first ranges, then 256,257,...]`.
+  Current code maps the Unicode representation back to raw byte value as the
+  token ID, which is wrong. Encoding must map each Unicode representation to its
+  position 0..255 in that ordered list; decoding must map each base token ID back
+  to its raw byte and emit actual decoded bytes, not internal `Ġ` UTF-8 text.
+- Checkpoint size/layout and forward-pass structure have independent supporting
+  evidence. Fix the tokenizer/decoder first; only investigate model math again
+  if repetition persists after all 50,000 merges load and `Hello` becomes 15496.
+
+All commands and code execution must remain inside the pinned task container on
+the pinned GCE VM. Never invoke Docker, sudo, gcloud, SSH, or a host/backend
+selector. Use `write_file_in_locked_container` for complete source replacement;
+do not use heredocs, shell redirection, base64 commands, or printf to create
+source files. Use one tool call per turn. Preserve meaningful exit status. Use a
+bounded `timeout` directly around candidate executions and put `-lm` after the C
+input. The image has gcc and Perl but no Python and no `file`.
+
+Use at most 16 tool calls. Repair the exact base-ID and reverse-decoding mapping,
+then independently establish that all 50,000 merges load and `Hello` encodes as
+15496 before relying on model output. Recompile after source changes and run at
+least two bounded prompts. Verify exactly 20 generated IDs and printed-byte
+consistency. Repetitive/nonsensical output is failure. Stop only with positive
+evidence for every requirement, or precisely report the remaining failure.

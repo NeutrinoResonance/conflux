@@ -1,0 +1,42 @@
+Continue the Terminal-Bench task `gpt2-codegolf` in the existing operator-locked
+task container on the authorized GCE VM. Give an independent diagnosis of the
+remaining semantic failure. Do not inspect benchmark verifier files, tests,
+oracle answers, or public solutions.
+
+The deliverable remains `/app/gpt2.c`: dependency-free C, fewer than 5000 bytes,
+compiled with `gcc -O3 -lm`, loading `/app/gpt2-124M.ckpt` and `/app/vocab.bpe`,
+accepting an arbitrary prompt as argv[3], greedily generating exactly 20 new
+tokens, and printing only their decoded text.
+
+Authoritative evidence:
+
+- Current `/app/gpt2.c` is 3922 bytes with SHA-256
+  `bd7e0c191f76e9b1c7b0a42f88dbd481b0a76418ad32ea0a0b60444d6c6f1343`.
+- This exact revision compiles successfully and completes well within 120
+  seconds, but prompt `Hello` outputs twenty repetitions of `Ġdaytime`. That is
+  semantic failure, not completion.
+- Earlier confirmed defects that have already been repaired include: qkv,
+  attention-output, and feed-forward matmul input dimensions; out-of-bounds
+  byte-to-Unicode construction; layer weight/bias pointer ordering; final layer
+  norm gain/bias ordering; and row-major `mv` indexing.
+- Read-only checkpoint offset probes have been performed, but checkpoint layout,
+  attention/KV-cache correctness, position handling, and logits remain plausible
+  causes. Exact generation count appears to be 20, while correct token IDs and
+  decoding consistency are not established.
+
+All commands and code execution must remain inside the pinned task container on
+the pinned GCE VM. Never invoke Docker, sudo, gcloud, SSH, or a host/backend
+selector. Use `write_file_in_locked_container` for complete source replacement;
+do not use heredocs, shell redirection, base64 commands, or printf to create
+source files. Use one tool call per turn. Preserve meaningful exit status. Use a
+bounded `timeout` directly around candidate executions; do not pipe or append
+output-masking commands. Put `-lm` after the C input. The image has gcc and Perl
+but no Python and no `file`.
+
+Use at most 16 tool calls. Inspect the current source and select the smallest
+diagnostic that discriminates among the remaining hypotheses. Repair observed
+failures, recompile after every source change, and use bounded runs on at least
+two prompts. Independently try to falsify that exactly 20 token IDs are generated
+and that decoding them yields the printed bytes. Repetitive or nonsensical output
+is failure. Stop only with positive evidence for every requirement, or precisely
+report what remains falsified or unverified without claiming completion.

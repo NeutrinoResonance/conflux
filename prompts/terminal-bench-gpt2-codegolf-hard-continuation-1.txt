@@ -1,0 +1,38 @@
+Continue the Terminal-Bench task `gpt2-codegolf` in the existing operator-locked
+task container on the authorized GCE VM. This is a new bounded continuation
+phase after the initial phase exhausted its declared tool-call budget; do not
+repeat work for which evidence is already recorded.
+
+The required deliverable remains a single dependency-free C program at
+`/app/gpt2.c`. It must compile with `gcc -O3 -lm`, load the TensorFlow GPT-2 124M
+checkpoint `/app/gpt2-124M.ckpt` and `/app/vocab.bpe`, accept an arbitrary prompt
+as argv[3], greedily generate exactly 20 new tokens, print only the decoded text,
+and contain fewer than 5000 bytes. Internet access is allowed, but do not inspect
+benchmark verifier files, tests, oracle answers, or public solutions.
+
+Authoritative carried-forward evidence:
+
+- `/app/gpt2.c` is an atomic 5234-byte revision with SHA-256
+  `5631a4880371cdee0768bcd343db915bca7e10d0db821a9efdaefbffd39c1efb`.
+- That revision compiled successfully with `gcc -O3 -o a.out gpt2.c -lm` and
+  an authentic exit status of 0.
+- Running it on `Hello world` under `timeout 30` used the assigned CPU until it
+  exited 124 with no output. This is failure evidence, not completion evidence.
+- The strict source-size condition is still falsified by 234 bytes.
+
+All commands and code execution must remain inside the pinned task container on
+the pinned GCE VM. Never invoke Docker, sudo, gcloud, SSH, or any host/backend
+selector. Use `write_file_in_locked_container` for complete source replacement;
+do not use heredocs, shell redirection, base64 commands, or printf to create
+source files. Use one tool call per turn. Preserve meaningful exit status: never
+append an always-success command, and use pipefail if a non-read pipeline is
+unavoidable.
+
+Use at most 24 tool calls in this continuation phase. Work from the existing
+source, fix correctness and performance defects, reduce it below 5000 bytes,
+and stop only after a bounded falsification sequence has established all of:
+actual byte count below 5000, genuine compilation success, checkpoint and BPE
+loading, arbitrary-prompt handling, exactly 20 generated token IDs, and decoded
+output consistent with those generated IDs. Incorporate every failed check into
+the next plan rather than treating an intermediate write, build, or timeout as
+success.

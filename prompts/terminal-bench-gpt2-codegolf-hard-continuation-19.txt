@@ -1,0 +1,46 @@
+Continue the Terminal-Bench task `gpt2-codegolf` inside the existing pinned GCE
+task container. Do not inspect verifier files, tests, oracle answers, or public
+solutions.
+
+Production `/app/gpt2.c` is still 4470 bytes, SHA-256
+`136ae100e41b7ed5e888fe00bd7d80d831bc6a5b2e0c0485b2ca644712ce0509`.
+Both tested prompts produce twenty copies of `elsius`. The proven tokenizer and
+input-major `w[i*d+j]` matrix access must be preserved.
+
+The checkpoint is the raw official TensorFlow GPT-2 124M data shard, exactly
+497759232 bytes. A compiled diagnostic established:
+
+- at the current tail final-LN offset, the first 768 floats are near zero
+  (`0.001087, 0.036529, -0.067296, ...`), while the next 768 are gain-like
+  (`1.397080, 1.374953, 1.886957, ...`);
+- current `cw[0]` starts only 1536 floats into the first block; values change
+  sharply at another 768-float boundary and a ones-vector projection becomes
+  absurdly large, showing it begins inside a 2304-element bias, not at a weight;
+- tail `wpe` and `wte` magnitudes are plausible.
+
+This selects TensorFlow variable-name order, not the current semantic order. For
+each physical layer block the segment order is:
+
+`c_attn/b[2304], c_attn/w[768*2304], c_proj/b[768],
+c_proj/w[768*768], ln_1/b[768], ln_1/g[768], ln_2/b[768],
+ln_2/g[768], c_fc/b[3072], c_fc/w[768*3072],
+c_mlp_proj/b[768], c_mlp_proj/w[3072*768]`.
+
+The global TensorFlow name order is physical blocks
+`h0,h1,h10,h11,h2,h3,h4,h5,h6,h7,h8,h9`, so map each physical slot to that
+logical layer. The tail order is `ln_f/b, ln_f/g, wpe, wte`; reverse the current
+final-LN pointers but keep the embedding pointers.
+
+First read the current source once, then atomically replace only the loader/order
+logic using `write_file_in_locked_container`. Compile with
+`gcc -O3 -o /app/gpt2 /app/gpt2.c -lm`; do not append `echo`, `true`, or any
+always-success command and do not redirect stderr. Test `Hello` and
+`Once upon a time` separately with direct 60-second timeouts and the exact
+`/app/gpt2-124M.ckpt` and `/app/vocab.bpe` paths.
+
+The final program must be dependency-free C under 5000 bytes, greedily generate
+exactly 20 new tokens, and print only decoded bytes. All execution stays inside
+the locked GCE container. Never invoke Docker, sudo, gcloud, SSH, or backend
+selectors. No heredocs, redirection, base64, or printf source writes. One tool
+call per turn. Use at most 8 tool calls. Repetition is failure. Stop only with
+positive evidence or precisely report the remaining failure.

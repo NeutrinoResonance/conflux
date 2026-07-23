@@ -1,0 +1,40 @@
+Continue the Terminal-Bench task `gpt2-codegolf` in the existing operator-locked
+task container on the authorized GCE VM. This is a fresh independent repair
+phase after another provider became unavailable. Do not inspect benchmark
+verifier files, tests, oracle answers, or public solutions.
+
+The deliverable remains `/app/gpt2.c`: dependency-free C, fewer than 5000 bytes,
+compiled with `gcc -O3 -lm`, loading `/app/gpt2-124M.ckpt` and `/app/vocab.bpe`,
+accepting an arbitrary prompt as argv[3], greedily generating exactly 20 new
+tokens, and printing only their decoded text.
+
+Authoritative evidence:
+
+- Current `/app/gpt2.c` is 3922 bytes with SHA-256
+  `bd7e0c191f76e9b1c7b0a42f88dbd481b0a76418ad32ea0a0b60444d6c6f1343`.
+- This exact revision compiles and completes within 60 seconds, but prompt
+  `Hello` produces twenty repetitions of `Ġdaytime`; semantic correctness is
+  falsified.
+- Repaired defects already include projection input dimensions, byte-to-Unicode
+  bounds, layer weight/bias ordering, final layer-norm ordering, and row-major
+  matmul indexing. Treat these as evidence, but re-check them if the source
+  contradicts the summary.
+- Previous agents suspected checkpoint layout, attention/KV-cache state,
+  position handling, or logits. Read-only checkpoint offset probes did not yet
+  resolve the cause. Exactly 20 iterations occur, but correct token IDs and
+  decoded bytes are not established.
+
+All commands and code execution must remain inside the pinned task container on
+the pinned GCE VM. Never invoke Docker, sudo, gcloud, SSH, or a host/backend
+selector. Use `write_file_in_locked_container` for complete source replacement;
+do not use heredocs, shell redirection, base64 commands, or printf to create
+source files. Use one tool call per turn. Preserve meaningful exit status. Use a
+bounded `timeout` directly around candidate executions and put `-lm` after the C
+input. The image has gcc and Perl but no Python and no `file`.
+
+Use at most 16 tool calls. Inspect source, design the smallest discriminating
+diagnostic, repair observed failures, and recompile after every source change.
+Use bounded runs on at least two prompts and independently falsify token count
+and ID-to-decoding consistency. Repetitive/nonsensical output is failure. Stop
+only with positive evidence for all requirements, or precisely report the
+remaining failure without claiming completion.

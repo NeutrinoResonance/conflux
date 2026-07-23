@@ -1,0 +1,31 @@
+Continue `gpt2-codegolf` in the existing locked GCE task container. After three
+Spot preemptions, the same retained disk is now attached to a standard VM for a
+short, stable completion window. State is intact. Do not inspect benchmark tests,
+verifier files, oracle answers, or solutions.
+
+Current `/app/gpt2.c` is 4515 bytes, SHA-256
+`d2e91be7b27af37abdaa7763a79b9a80d1853b75a931ead8f9102ffbd5c2532b`.
+It has the selected TensorFlow segment order but needs exactly two corrections:
+
+1. Physical slots map to logical layers as
+   `m={0,1,10,11,2,3,4,5,6,7,8,9}`. Iterate physical `i`, set `l=m[i]`, set
+   `lw=p+i*7087872`, and assign all layer pointers at `[l]`. The current code
+   incorrectly uses `lw=p+m[i]*...` and assigns `[i]`.
+2. Near the end of `fwd1`, the MLP residual line ends `;}}`, closing the function
+   before `ln(x,lfg,lfb,C);}`. Change that location to one brace `;}` so it closes
+   only the layer loop and the final LN remains inside the function.
+
+Read current source once, atomically replace the complete file through
+`write_file_in_locked_container` with only those corrections, preserving the
+tokenizer, `w[i*d+j]`, block order `cb,cw,pb,pw,lb,lg,l2b,l2g,fb,fw,p2b,p2w`,
+and tail `lfb,lfg,wpe,wte`.
+
+Compile exactly `gcc -O3 -o /app/gpt2 /app/gpt2.c -lm`. Then test `Hello` and
+`Once upon a time` separately with direct 60-second timeouts and the exact
+checkpoint/vocab paths. Never append `echo`, `true`, or redirect stderr. Final C
+must remain under 5000 bytes, dependency-free, greedily emit exactly 20 new
+tokens, and print only decoded bytes.
+
+All execution stays in the pinned GCE container. Never invoke Docker, sudo,
+gcloud, SSH, or backend selectors. No heredocs, redirection, base64, or printf
+source writes. One tool call per turn; at most 6 calls. Repetition is failure.

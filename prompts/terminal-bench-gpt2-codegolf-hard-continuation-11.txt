@@ -1,0 +1,41 @@
+Continue the Terminal-Bench task `gpt2-codegolf` in the existing operator-locked
+task container on the authorized GCE VM. This phase must establish current-source
+tokenizer evidence without using stale copied diagnostics. Do not inspect
+benchmark verifier files, tests, oracle answers, or public solutions.
+
+The deliverable remains `/app/gpt2.c`: dependency-free C under 5000 bytes,
+compiled with `gcc -O3 -lm`, loading `/app/gpt2-124M.ckpt` and `/app/vocab.bpe`,
+accepting argv[3], greedily generating exactly 20 new tokens, and printing only
+their decoded bytes.
+
+Authoritative state:
+
+- Current atomic `/app/gpt2.c` is 4401 bytes with SHA-256
+  `326863f8968b694ef33c5c4a3cbb5e62742a4e38c2c952db1f24baabe37147d6`.
+- It implements a new base-ID/reverse-byte mapping and compiled successfully.
+- It has not been run. The reported 49,266 merges and `Hello` token 15365 came
+  from stale `/app/test_gpt2`, compiled from an older source revision. Those
+  values are invalid for the current source and must not guide another repair.
+- The current binary `/app/gpt2` was compiled from the exact current source.
+
+First run the current `/app/gpt2` under a direct bounded timeout. For merge count
+and `Hello` tokenization, create a small diagnostic wrapper that is compiled
+against the current source itself (for example, rename its `main` with a macro,
+`#include "/app/gpt2.c"`, then provide a diagnostic main that initializes the
+same tokenizer and prints only merge count/token IDs). Write that wrapper only
+with `write_file_in_locked_container`; do not copy the production source into a
+second independent implementation. Compile the wrapper after the include so it
+cannot be stale. Establish whether current source loads all 50,000 merges and
+maps `Hello` to 15496 before modifying production again.
+
+All commands/code execution remain inside the pinned GCE task container. Never
+invoke Docker, sudo, gcloud, SSH, or backend selectors. No heredocs, redirection,
+base64, or printf for source writes. Use one tool call per turn, bounded candidate
+runs, meaningful exit status, and `-lm` after the C input. The image has gcc and
+Perl but no Python or `file`.
+
+Use at most 12 tool calls. If current mapping fails, repair the observed current
+failure, recompile, and repeat the derived diagnostic. Then test at least two
+prompts, exactly 20 generated IDs, and decoded-byte consistency. Repetitive or
+nonsensical output is failure. Stop only with positive evidence for every
+requirement or precisely report the remaining failure.

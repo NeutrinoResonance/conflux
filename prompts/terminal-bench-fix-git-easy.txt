@@ -1,0 +1,24 @@
+Complete the Terminal-Bench task `fix-git` inside the operator-locked task
+container on the authorized GCE VM. The execution tool already pins the VM,
+container, and `/app/personal-site` working directory. Supply only commands to
+run inside that container; never invoke Docker, sudo, gcloud, SSH, or another
+container. The repository is `/app/personal-site`.
+
+Task: I made changes to my personal site and checked out master, but now I
+cannot find those changes. Find the lost work and merge it into master.
+
+Do not inspect any Terminal-Bench verifier, tests, answer key, or solution.
+Investigate the repository rather than guessing. Make the smallest sound
+change that recovers the work without losing existing master history. Issue
+one tool call per turn; combine closely related
+read-only Git observations in
+one bounded command rather than proposing a parallel batch. Do not append
+`echo`, `printf`, or `true` after a meaningful command, because that can mask
+its failure status. Before
+claiming completion, explicitly devise and run a falsification-oriented check
+inside the task container: try to disprove that master contains the recovered
+commit and intended tree while preserving a clean, non-conflicted repository.
+Use what that check teaches you to repair or re-check as needed. Run only one
+final independent check; once it passes, stop using tools and return the final
+answer. Stop only when the task is complete and report the observed branch, recovered evidence,
+merge result, and final verification concisely.

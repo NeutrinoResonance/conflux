@@ -1,0 +1,17 @@
+Finish the already investigated Terminal-Bench `fix-git` task inside the
+operator-locked container on the authorized GCE VM. The tool pins
+`/app/personal-site`; supply only commands inside it. Never invoke Docker,
+sudo, gcloud, SSH, another container, or any benchmark test or solution.
+
+The governed run is currently in an in-progress merge of recovered commit
+`c499730` into master. The human-approved conflict selection has placed the
+lost commit's Stanford version of `_includes/about.md` in the working tree,
+but it may still need to be staged. Verify the exact current status, stage only
+the conflict resolution, and complete the existing merge. Preserve both merge
+parents. Do not append `echo`, `printf`, `true`, or unconditional status reads
+after a meaningful mutation; its exit status must propagate.
+
+Run one final falsification-oriented read checking that `c499730` is an
+ancestor of master, both intended Stanford strings are present, no conflict
+markers or unresolved paths remain, and the working tree is clean. Once it
+passes, stop using tools and report the observed result concisely.

@@ -72,6 +72,12 @@ class HistoryRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(runs["total"], 1)
         self.assertEqual(runs["items"][0]["session_id"], self.session)
 
+        context = await proxy.admin_history_session_context(self.session)
+        self.assertEqual(context["endeavor_id"], endeavor_id)
+        self.assertEqual(context["conversation_ids"], [self.session])
+        self.assertEqual(context["conversation_count"], 1)
+        self.assertEqual(context["relationship"], "initial")
+
         timeline = await proxy.admin_history_timeline(
             endeavor_id, routine="collapse", limit=10
         )
@@ -94,6 +100,10 @@ class HistoryRouteTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(HTTPException) as missing:
             await proxy.admin_history_endeavor("missing")
         self.assertEqual(missing.exception.status_code, 404)
+
+        with self.assertRaises(HTTPException) as missing_context:
+            await proxy.admin_history_session_context("missing")
+        self.assertEqual(missing_context.exception.status_code, 404)
 
         with self.assertRaises(HTTPException) as bad_limit:
             await proxy.admin_history_endeavors(limit=0)

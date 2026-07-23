@@ -1,0 +1,34 @@
+Continue the Terminal-Bench task `gpt2-codegolf` in the existing operator-locked
+task container on the authorized GCE VM. Do not inspect benchmark verifier files,
+tests, oracle answers, or public solutions.
+
+Current production `/app/gpt2.c` is 4401 bytes, SHA-256
+`326863f8968b694ef33c5c4a3cbb5e62742a4e38c2c952db1f24baabe37147d6`.
+A wrapper derived by including this exact source established 49,266 loaded merges
+and `Hello` token 15365, so current tokenizer correctness is falsified.
+
+An expanded current-derived diagnostic already exists at `/app/diag_gpt2.c`
+(1272 bytes). It was written to identify which merge references fail but was not
+compiled/run before the previous phase cap. Your first action must compile and
+run this exact wrapper with correct link order, equivalent to:
+`gcc -O3 -o /app/diag_gpt2 /app/diag_gpt2.c -lm && /app/diag_gpt2 /app/vocab.bpe`
+Do not rewrite or re-read production before collecting that evidence.
+
+Use the failed-reference evidence to distinguish `ib()` initialization, `hi`/`hg`
+hash lookup, and `lv()` merge ID construction. Repair only the observed defect in
+production via `write_file_in_locked_container`, recompile, and repeat a wrapper
+derived from the new production source. Required tokenizer evidence is exactly
+50,000 merges and `Hello` token 15496.
+
+The final program must be dependency-free C under 5000 bytes, compile with
+`gcc -O3 -lm`, accept prompt argv[3], greedily generate exactly 20 new tokens,
+and print only decoded bytes. All commands/code execution remain inside the
+pinned GCE task container. Never invoke Docker, sudo, gcloud, SSH, or backend
+selectors. No heredocs, redirection, base64, or printf for source writes. One tool
+call per turn; bounded candidate runs; meaningful exit status; `-lm` after C
+input. The image has gcc and Perl but no Python or `file`.
+
+Use at most 10 tool calls. After tokenizer proof, test at least two bounded
+prompts, exactly 20 generated IDs, and decoded-byte consistency. Repetition is
+failure. Stop only with positive evidence for every requirement or precisely
+report the remaining failure.

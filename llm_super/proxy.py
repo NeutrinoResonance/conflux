@@ -18,7 +18,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
-from . import history_ui, ui
+from . import graph_ui, history_ui, ui, workspace_ui
 
 from . import balance as balance_mod
 from . import export as export_mod
@@ -26,13 +26,17 @@ from . import report as report_mod
 from . import retention
 from .checkpoint import Checkpoints
 from .config import load
+from .conversation_graph import ConversationGraphStore
 from .control import PAUSED_NOTICE, ControlState, gate_warning, handle
+from .durable_jobs import DurableJobStore
+from .execution_backends import ExecutionBoundaryError
 from .history import History
 from .history_view import HistoryView
 from .library import DEFAULT_SETTINGS, Library
 from .orchestrator import Orchestrator, _last_user_text
 from .providers import Client, ProviderError  # noqa: F401 (ProviderError used below)
 from .trace import Trace
+from .workspace import WorkspaceService
 
 state: dict = {}
 
@@ -43,10 +47,19 @@ async def lifespan(app: FastAPI):
     client = Client(cfg)
     trace_path = state.get("trace_path", "traces.db")
     trace = Trace(trace_path)
+    job_store = DurableJobStore(trace.connection)
     control = ControlState()
     history = History(trace_path)
     library = Library(trace_path)
     checkpoints = Checkpoints(trace_path)
+    orch = Orchestrator(cfg, client, trace, control,
+                        checkpoints=checkpoints, history=history)
+    workspace_store = ConversationGraphStore(
+        trace.connection, orch.flow_runtime.registry
+    )
+    workspace_service = WorkspaceService(
+        workspace_store, orch, library, trace
+    )
     state.update(
         cfg=cfg,
         client=client,
@@ -57,9 +70,12 @@ async def lifespan(app: FastAPI):
         trace_path=trace_path,
         checkpoints=checkpoints,
         armed_sessions=set(),
-        orch=Orchestrator(cfg, client, trace, control,
-                          checkpoints=checkpoints,
-                          history=history),
+        orch=orch,
+        flow_runtime=orch.flow_runtime,
+        action_store=orch.action_store,
+        job_store=job_store,
+        workspace_store=workspace_store,
+        workspace_service=workspace_service,
     )
 
     async def retention_loop():
@@ -122,6 +138,23 @@ def _completion_body(
         ],
         "usage": _usage(prompt_tokens, completion_tokens),
     }
+
+
+def _record_proxy_exchange(
+    session: str,
+    task: str,
+    kind: str,
+    model: str | None,
+    payload: dict,
+) -> None:
+    """Record a direct proxy exchange when the configured trace supports it.
+
+    The small capability check keeps compatibility with embedders and tests
+    that provide an event-only trace sink.
+    """
+    recorder = getattr(state.get("trace"), "record_exchange", None)
+    if callable(recorder):
+        recorder(session, task, kind, model, payload)
 
 
 def _sse_raw(data: dict, model: str, *, include_usage: bool = False):
@@ -220,7 +253,8 @@ async def chat_completions(request: Request):
                    checkpoints=state["checkpoints"],
                    session=session,
                    history=state["history"],
-                   library=state["library"], raw_session=raw_session)
+                   library=state["library"], raw_session=raw_session,
+                   execution_backend_lock=cfg.execution.locked_backend)
     if reply is not None:
         state["trace"].record(session, "-", "control", command=_last_user_text(messages))
         return _sse(reply, model_name) if stream else JSONResponse(_completion_body(reply, model_name))
@@ -262,6 +296,10 @@ async def chat_completions(request: Request):
     # the supervised executor path (8192): reasoning models can burn 4096
     # entirely on thought and return an EMPTY answer at the ceiling.
     if model_name in cfg.models:
+        task_id = uuid.uuid4().hex[:8]
+        _record_proxy_exchange(
+            session, task_id, "client_request", None, body
+        )
         try:
             # Explicit registry models are unsupervised passthrough, including
             # tool-carrying agent requests.  Sending those through chat()
@@ -271,16 +309,20 @@ async def chat_completions(request: Request):
                 usage = data.get("usage") or {}
                 selected = cfg.model(model_name)
                 state["trace"].record(
-                    session, "-", "passthrough", model=model_name,
+                    session, task_id, "passthrough", model=model_name,
                     tokens_in=usage.get("prompt_tokens", 0),
                     tokens_out=usage.get("completion_tokens", 0),
                     cost_usd=selected.cost(
                         usage.get("prompt_tokens", 0),
                         usage.get("completion_tokens", 0),
                     ),
-                    agentic=True,
+                    agentic=True, governed=False,
+                    safety_boundary="unsafe explicit-model passthrough",
                 )
                 data["model"] = model_name
+                _record_proxy_exchange(
+                    session, task_id, "client_response", model_name, data
+                )
                 if not stream:
                     return JSONResponse(data)
                 include_usage = bool(
@@ -293,11 +335,26 @@ async def chat_completions(request: Request):
                                              max_tokens=body.get("max_tokens", 8192),
                                              temperature=body.get("temperature", 0.2))
         except ProviderError as e:
+            state["trace"].record(
+                session, task_id, "provider_error", model=model_name,
+                error=str(e)[:300],
+            )
+            _record_proxy_exchange(
+                session,
+                task_id,
+                "client_response",
+                model_name,
+                {"error": {"message": str(e)}},
+            )
             return JSONResponse({"error": {"message": str(e)}}, status_code=502)
-        state["trace"].record(session, "-", "passthrough", model=model_name,
+        data = _completion_body(res.text, model_name)
+        state["trace"].record(session, task_id, "passthrough", model=model_name,
                               tokens_in=res.tokens_in, tokens_out=res.tokens_out,
                               cost_usd=res.cost_usd)
-        return _sse(res.text, model_name) if stream else JSONResponse(_completion_body(res.text, model_name))
+        _record_proxy_exchange(
+            session, task_id, "client_response", model_name, data
+        )
+        return _sse(res.text, model_name) if stream else JSONResponse(data)
 
     # Agentic tool-carrying turns (Hermes, OpenCode, …): mid-loop tool_calls
     # pass through untouched; final text answers get monitored + verified
@@ -419,6 +476,925 @@ async def history_dashboard():
     return HTMLResponse(history_ui.PAGE)
 
 
+@app.get("/graphs", include_in_schema=False)
+async def graph_dashboard():
+    """Declared agent architecture with live governed-run overlays."""
+    return HTMLResponse(graph_ui.PAGE)
+
+
+@app.get("/workspace", include_in_schema=False)
+async def workspace_dashboard():
+    """Unified editable conversation and per-message workflow workspace."""
+    return HTMLResponse(workspace_ui.PAGE)
+
+
+@app.get("/admin/graphs")
+async def admin_graphs():
+    runtime = state["flow_runtime"]
+    declared = runtime.registry.describe()
+    declared["compiled"] = {
+        flow_id: runtime.compile(flow_id)
+        for flow_id in runtime.registry.flows
+    }
+    return declared
+
+
+@app.get("/admin/graphs/runs")
+async def admin_graph_runs(flow_id: str | None = None, limit: int = 50):
+    if flow_id and flow_id not in state["flow_runtime"].registry.flows:
+        raise HTTPException(status_code=404, detail="flow not found")
+    return {"items": _graph_run_context(
+        state["flow_runtime"].recent_runs(flow_id, limit)
+    )}
+
+
+@app.get("/admin/graphs/runs/{run_id}")
+async def admin_graph_run(run_id: str):
+    try:
+        return _graph_run_context([state["flow_runtime"].inspect(run_id)])[0]
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="graph run not found") from exc
+
+
+async def _workspace_contexts() -> list[dict]:
+    try:
+        return await _history_query("list_contexts", limit=100)
+    except HTTPException as exc:
+        if exc.status_code == 503:
+            return []
+        raise
+
+
+_UNASSIGNED_ENDEAVOR_ID = "end_unassigned_history"
+
+
+def _workspace_history_titles() -> dict[str, str]:
+    return {
+        str(item.get("session")): str(item.get("title") or "")
+        for item in state["library"].sessions()
+    }
+
+
+def _workspace_import_session(
+    endeavor_id: str, endeavor_title: str, session: str, titles: dict[str, str]
+) -> None:
+    store: ConversationGraphStore = state["workspace_store"]
+    exchanges = state["trace"].exchanges(session=session, n=1000)
+    store.import_trace_conversation(
+        endeavor_id, endeavor_title, session,
+        titles.get(session) or f"Conversation {session}", exchanges,
+    )
+
+
+def _workspace_rehome_legacy_singletons(contexts: list[dict]) -> None:
+    """Move old session-shaped containers under one honest parent.
+
+    Earlier workspace builds projected every ungrouped history conversation
+    as an endeavor.  The message data remains untouched; only its derived
+    workspace parent is corrected.  Empty legacy containers are retained in
+    SQLite for auditability and omitted from the product navigation.
+    """
+    store: ConversationGraphStore = state["workspace_store"]
+    synthetic_ids = {
+        str(item.get("id") or "") for item in contexts
+        if not item.get("explicit_grouping")
+    }
+    legacy = [
+        item for item in store.endeavors(limit=500)
+        if item["id"] in synthetic_ids and item.get("conversation_count")
+    ]
+    if not legacy:
+        return
+    store.create_endeavor(
+        "Unassigned conversations", endeavor_id=_UNASSIGNED_ENDEAVOR_ID,
+        status="historical",
+    )
+    for item in legacy:
+        for conversation in store.endeavor(item["id"])["conversations"]:
+            store.move_conversation(
+                conversation["session"], _UNASSIGNED_ENDEAVOR_ID
+            )
+
+
+def _workspace_navigation(contexts: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Return explicit endeavor trees and separately unassigned conversations."""
+    store: ConversationGraphStore = state["workspace_store"]
+    titles = _workspace_history_titles()
+    synthetic_ids = {
+        str(item.get("id") or "") for item in contexts
+        if not item.get("explicit_grouping")
+    }
+    actual = []
+    managed_sessions: set[str] = set()
+    for item in store.endeavors(limit=500):
+        detail = store.endeavor(item["id"])
+        conversations = detail.get("conversations", [])
+        managed_sessions.update(str(value["session"]) for value in conversations)
+        if item["id"] in synthetic_ids:
+            continue
+        actual.append({**item, "source": "workspace", "conversations": conversations})
+
+    merged = {item["id"]: item for item in actual}
+    unassigned: list[dict] = []
+    for context in contexts:
+        sessions = [
+            str(value) for value in context.get("conversation_ids", [])
+            if str(value) not in managed_sessions
+        ]
+        if not sessions:
+            continue
+        if context.get("explicit_grouping"):
+            merged[str(context["id"])] = {
+                **dict(context),
+                "source": "history",
+                "conversations": [
+                    {
+                        "session": session,
+                        "endeavor_id": str(context["id"]),
+                        "title": titles.get(session) or f"Conversation {session}",
+                        "status": "historical", "node_count": 0,
+                        "updated_at": context.get("last_ts"),
+                    }
+                    for session in sessions
+                ],
+            }
+        else:
+            unassigned.extend({
+                "session": session,
+                "title": titles.get(session) or str(context.get("title") or f"Conversation {session}"),
+                "status": "historical", "updated_at": context.get("last_ts"),
+                "source_context_id": str(context.get("id") or ""),
+            } for session in sessions)
+
+    endeavors = sorted(
+        merged.values(),
+        key=lambda item: float(item.get("updated_at") or item.get("last_ts") or 0),
+        reverse=True,
+    )
+    unassigned.sort(key=lambda item: float(item.get("updated_at") or 0), reverse=True)
+    return endeavors, unassigned
+
+
+async def _workspace_ensure_endeavor(
+    endeavor_id: str, contexts: list[dict] | None = None
+) -> dict:
+    """Import one selected history container into the editable projection."""
+    store: ConversationGraphStore = state["workspace_store"]
+    contexts = contexts if contexts is not None else await _workspace_contexts()
+    context = next((item for item in contexts if item["id"] == endeavor_id), None)
+    try:
+        existing = store.endeavor(endeavor_id)
+    except KeyError:
+        existing = None
+    if context is None:
+        if existing is None:
+            raise HTTPException(status_code=404, detail="endeavor not found")
+        return existing
+    titles = _workspace_history_titles()
+    target_id = endeavor_id
+    target_title = str(context["title"])
+    for session in context.get("conversation_ids", []):
+        try:
+            managed = store.conversation(str(session))
+        except KeyError:
+            continue
+        target_id = managed["endeavor_id"]
+        target_title = store.endeavor(target_id)["title"]
+        break
+    if not context.get("explicit_grouping"):
+        target_id = _UNASSIGNED_ENDEAVOR_ID
+        target_title = "Unassigned conversations"
+    for session in context.get("conversation_ids", []):
+        try:
+            store.conversation(str(session))
+        except KeyError:
+            _workspace_import_session(
+                target_id, target_title, str(session), titles
+            )
+    return store.endeavor(target_id)
+
+
+async def _workspace_import_unassigned(
+    session: str, contexts: list[dict]
+) -> dict:
+    context = next(
+        (item for item in contexts
+         if not item.get("explicit_grouping")
+         and session in [str(value) for value in item.get("conversation_ids", [])]),
+        None,
+    )
+    if context is None:
+        raise HTTPException(status_code=404, detail="archived conversation not found")
+    _workspace_import_session(
+        _UNASSIGNED_ENDEAVOR_ID, "Unassigned conversations", session,
+        _workspace_history_titles(),
+    )
+    return state["workspace_store"].endeavor(_UNASSIGNED_ENDEAVOR_ID)
+
+
+def _workspace_graph(session: str) -> dict:
+    """Project a conversation together with only its pending decisions."""
+    store: ConversationGraphStore = state["workspace_store"]
+    graph = store.graph(session)
+    for workflow in graph.get("workflows", []):
+        workflow["execution_summary"] = _workspace_workflow_execution(
+            workflow["instance_id"], include_payloads=False
+        )
+    action_store = state.get("action_store")
+    if action_store is None:
+        graph["pending_actions"] = []
+        return graph
+    nodes_by_task = {
+        str((node.get("config") or {}).get("task_id") or ""): node["node_id"]
+        for node in graph["nodes"]
+        if (node.get("config") or {}).get("task_id")
+    }
+    pending = []
+    for action in action_store.list(status="human_pending", limit=100):
+        if str(action.get("session") or "") != session:
+            continue
+        projected = _public_action(action)
+        projected["workspace_node_id"] = nodes_by_task.get(
+            str(action.get("task") or "")
+        )
+        pending.append(projected)
+    graph["pending_actions"] = pending
+    return graph
+
+
+def _workspace_stage_for_event(workflow: dict, kind: str,
+                               data: dict | None = None) -> str | None:
+    """Project legacy trace vocabulary onto the declared workflow graph."""
+    nodes = workflow.get("graph", {}).get("nodes", [])
+    data = data or {}
+
+    def first(*types: str, ids: tuple[str, ...] = ()) -> str | None:
+        return next((node["id"] for node in nodes
+                     if node.get("id") in ids or node.get("type") in types), None)
+
+    if kind.startswith("ensemble_") or data.get("ensemble"):
+        return first("ensemble", "agent")
+    if kind.startswith("soundness_"):
+        return first("checker", ids=("soundness_checker",))
+    if kind in {"action_critic", "critic_review", "critic_error"}:
+        return first("critic", ids=("action_critic",))
+    if kind in {"execute", "executor_fallback", "synthesis", "unit_done",
+                "wave_start", "repair_requested"}:
+        return first("agent")
+    if kind in {"verify", "verify_error", "ensemble_fusion_rejected"}:
+        return first("verifier", "checker")
+    if kind in {"tool_step", "tool_result"}:
+        return first("tool")
+    if kind in {"policy", "risk_assessment", "contract", "contract_failed",
+                "contract_skipped", "plan", "difficulty_route", "fm_event"}:
+        return first("ingress", "policy")
+    if kind in {"turn_start", "resume", "operator_guidance_added"}:
+        return first("ingress")
+    if kind == "turn_end":
+        return first("terminal", ids=("completed", "job_complete"))
+    return None
+
+
+def _workspace_runtime_run(workflow: dict, session: str,
+                           task: str) -> dict | None:
+    runtime = state.get("flow_runtime")
+    recent = getattr(runtime, "recent_runs", None)
+    inspect = getattr(runtime, "inspect", None)
+    if not callable(recent) or not callable(inspect) or not task:
+        return None
+    try:
+        candidates = recent(workflow.get("flow_id"), 200)
+        match = next((item for item in candidates
+                      if str(item.get("session") or "") == session
+                      and str(item.get("task") or "") == task), None)
+        return inspect(match["run_id"]) if match else None
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _workspace_workflow_execution(instance_id: str, *,
+                                  include_payloads: bool) -> dict:
+    """Join a message workflow definition to its actual run and LLM exchanges."""
+    store: ConversationGraphStore = state["workspace_store"]
+    workflow = store.workflow(instance_id)
+    owner = store.node(workflow["owner_node_id"])
+    session = str(owner.get("session") or "")
+    task = str((owner.get("config") or {}).get("task_id")
+               or owner.get("run_id") or "")
+    trace = state.get("trace")
+    trace_events = (
+        trace.task_events(session, task, n=1000)
+        if trace is not None and task and hasattr(trace, "task_events") else []
+    )
+    projected = []
+    for event in trace_events:
+        stage_id = _workspace_stage_for_event(
+            workflow, str(event.get("kind") or ""), event.get("data") or {}
+        )
+        projected.append({**event, "node_id": stage_id})
+
+    run = _workspace_runtime_run(workflow, session, task)
+    runtime_events = list((run or {}).get("events") or [])
+    route_events = runtime_events or [event for event in projected if event["node_id"]]
+    observed_sequence = [str(event.get("node_id") or "") for event in route_events
+                         if event.get("node_id")]
+    observed_transitions = [
+        {"source": before, "target": after}
+        for before, after in zip(observed_sequence, observed_sequence[1:])
+        if before != after
+    ]
+
+    exchange_count = 0
+    upstream_count = 0
+    if trace is not None and task:
+        try:
+            exchange_count, upstream_count = trace.connection.execute(
+                """SELECT COUNT(*),COALESCE(SUM(kind='upstream'),0)
+                     FROM exchanges WHERE session=? AND task=?""",
+                (session, task),
+            ).fetchone()
+        except (AttributeError, TypeError):
+            pass
+    exchanges = (
+        trace.exchanges(task=task, session=session, n=500)
+        if include_payloads and trace is not None and task else []
+    )
+    upstream = [item for item in exchanges if item.get("kind") == "upstream"]
+    model_events = [event for event in projected
+                    if event.get("model") or event.get("tokens_in")
+                    or event.get("tokens_out")]
+    used_event_ids: set[int] = set()
+    model_steps = []
+    for index, exchange in enumerate(upstream):
+        model = str(exchange.get("model") or "")
+        eligible = [event for event in model_events
+                    if int(event.get("id") or 0) not in used_event_ids
+                    and float(event.get("ts") or 0) >= float(exchange.get("ts") or 0)
+                    and (not model or not event.get("model")
+                         or str(event.get("model")) == model)]
+        matched = min(eligible, key=lambda event: float(event.get("ts") or 0),
+                      default=None)
+        if matched:
+            used_event_ids.add(int(matched.get("id") or 0))
+        payload = exchange.get("payload") if isinstance(exchange.get("payload"), dict) else {}
+        stage_id = (matched or {}).get("node_id") or _workspace_stage_for_event(
+            workflow, str((matched or {}).get("kind") or "execute"),
+            (matched or {}).get("data") or {},
+        )
+        model_steps.append({
+            "id": str(exchange.get("id") or index + 1),
+            "ts": exchange.get("ts"),
+            "node_id": stage_id,
+            "kind": (matched or {}).get("kind") or "model_exchange",
+            "model": model or (matched or {}).get("model") or "routed model",
+            "tokens_in": int((matched or {}).get("tokens_in") or 0),
+            "tokens_out": int((matched or {}).get("tokens_out") or 0),
+            "cost_usd": float((matched or {}).get("cost_usd") or 0),
+            "configuration": (matched or {}).get("data") or {},
+            "input": payload.get("request", payload),
+            "output": payload.get("response", {}),
+        })
+
+    result = {
+        "instance_id": instance_id,
+        "task_id": task,
+        "run_id": (run or {}).get("run_id"),
+        "status": (run or {}).get("status") or workflow.get("status") or "idle",
+        "current_node": (run or {}).get("current_node") or workflow.get("active_node"),
+        "observed_sequence": observed_sequence,
+        "observed_nodes": list(dict.fromkeys(observed_sequence)),
+        "observed_transitions": observed_transitions,
+        "runtime_event_count": len(runtime_events),
+        "trace_event_count": len(trace_events),
+        "model_step_count": int(upstream_count or len(upstream)),
+        "exchange_count": int(exchange_count),
+    }
+    if include_payloads:
+        result.update({
+            "run": run,
+            "runtime_events": runtime_events,
+            "trace_events": projected,
+            "model_steps": model_steps,
+            "client_exchanges": [item for item in exchanges
+                                 if item.get("kind") != "upstream"],
+        })
+    return result
+
+
+@app.get("/admin/workspace/bootstrap")
+async def admin_workspace_bootstrap(
+    endeavor_id: str | None = None, conversation_id: str | None = None,
+    history_conversation_id: str | None = None,
+):
+    store: ConversationGraphStore = state["workspace_store"]
+    contexts = await _workspace_contexts()
+    _workspace_rehome_legacy_singletons(contexts)
+    endeavors, unassigned = _workspace_navigation(contexts)
+    if history_conversation_id:
+        endeavor = await _workspace_import_unassigned(
+            history_conversation_id, contexts
+        )
+        selected_id = endeavor["id"]
+        conversation_id = history_conversation_id
+    elif conversation_id:
+        try:
+            selected_id = store.conversation(conversation_id)["endeavor_id"]
+            endeavor = store.endeavor(selected_id)
+        except KeyError:
+            context = next(
+                (item for item in contexts
+                 if conversation_id in [str(value) for value in item.get("conversation_ids", [])]),
+                None,
+            )
+            if context is None:
+                raise HTTPException(status_code=404, detail="conversation not found")
+            endeavor = await _workspace_ensure_endeavor(str(context["id"]), contexts)
+            selected_id = endeavor["id"]
+    elif endeavor_id:
+        endeavor = await _workspace_ensure_endeavor(endeavor_id, contexts)
+        selected_id = endeavor["id"]
+    elif endeavors:
+        endeavor = await _workspace_ensure_endeavor(endeavors[0]["id"], contexts)
+        selected_id = endeavor["id"]
+    elif unassigned:
+        conversation_id = unassigned[0]["session"]
+        endeavor = await _workspace_import_unassigned(conversation_id, contexts)
+        selected_id = endeavor["id"]
+    else:
+        created = store.create_endeavor("My first endeavor")
+        store.create_conversation(created["id"], "New conversation")
+        selected_id = created["id"]
+        endeavor = store.endeavor(selected_id)
+    conversations = endeavor.get("conversations") or []
+    if not conversations:
+        created = store.create_conversation(selected_id, "New conversation")
+        conversations = [created]
+        endeavor = store.endeavor(selected_id)
+    selected_conversation = conversation_id or conversations[0]["session"]
+    try:
+        graph = _workspace_graph(selected_conversation)
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404, detail="conversation is not in the selected endeavor"
+        ) from exc
+    endeavors, unassigned = _workspace_navigation(contexts)
+    cfg = state["cfg"]
+    execution = cfg.execution
+    execution_lock = {
+        "backend": execution.locked_backend,
+        "agent_selectable": False,
+        "local_workload_spawn": False,
+    }
+    if hasattr(execution, "gcloud_zone"):
+        execution_lock.update({
+            "target": {
+                "project": execution.gcloud_project or "active gcloud project",
+                "account": execution.gcloud_account or "active gcloud account",
+                "zone": execution.gcloud_zone,
+                "machine_type": execution.gcloud_machine_type,
+            },
+            "provisioning": "Spot",
+            "lifecycle": "ephemeral · delete after execution",
+            "configuration_source": str(getattr(cfg, "path", "models.yaml")),
+        })
+    registry_description = state["flow_runtime"].registry.describe()
+    return {
+        "endeavors": endeavors,
+        "unassigned_conversations": unassigned,
+        "graph": graph,
+        "models": [
+            {"id": name, "family": model.family, "roles": list(model.roles)}
+            for name, model in cfg.models.items()
+        ],
+        "flows": registry_description["flows"],
+        "agents": registry_description["agents"],
+        "execution_lock": execution_lock,
+    }
+
+
+@app.get("/admin/workspace/conversations/{session}")
+async def admin_workspace_conversation(session: str):
+    try:
+        return _workspace_graph(session)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="conversation not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/admin/workspace/workflows/{instance_id}/execution")
+async def admin_workspace_workflow_execution(instance_id: str):
+    """Full, on-demand run evidence for one assistant-message workflow."""
+    try:
+        return _workspace_workflow_execution(instance_id, include_payloads=True)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="workflow instance not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/admin/workspace/endeavors")
+async def admin_workspace_create_endeavor(request: Request):
+    body = await request.json()
+    try:
+        store: ConversationGraphStore = state["workspace_store"]
+        endeavor = store.create_endeavor(str(body.get("title") or ""))
+        if body.get("create_conversation"):
+            endeavor["conversation"] = store.create_conversation(
+                endeavor["id"], str(body.get("conversation_title") or "")
+            )
+        return endeavor
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.patch("/admin/workspace/endeavors/{endeavor_id}")
+async def admin_workspace_rename_endeavor(endeavor_id: str, request: Request):
+    body = await request.json()
+    try:
+        return state["workspace_store"].rename_endeavor(
+            endeavor_id, str(body.get("title") or "")
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="endeavor not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/admin/workspace/endeavors/{endeavor_id}/conversations")
+async def admin_workspace_create_conversation(endeavor_id: str, request: Request):
+    body = await request.json()
+    try:
+        return state["workspace_store"].create_conversation(
+            endeavor_id, str(body.get("title") or "")
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="endeavor not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.patch("/admin/workspace/conversations/{session}")
+async def admin_workspace_rename_conversation(session: str, request: Request):
+    body = await request.json()
+    try:
+        conversation = state["workspace_store"].rename_conversation(
+            session, str(body.get("title") or "")
+        )
+        library = state.get("library")
+        if library is not None:
+            library.set_session_title(session, conversation["title"])
+        return conversation
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="conversation not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/admin/workspace/conversations/{session}/messages", status_code=202)
+async def admin_workspace_send_message(session: str, request: Request):
+    body = await request.json()
+    try:
+        return state["workspace_service"].send(
+            session, str(body.get("content") or ""),
+            parent_id=body.get("parent_id"),
+            flow_id=str(body.get("flow_id") or "supervised_tool_turn"),
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="conversation or workflow not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/admin/workspace/conversations/{session}/nodes")
+async def admin_workspace_add_conversation_node(session: str, request: Request):
+    body = await request.json()
+    try:
+        return state["workspace_store"].add_node(
+            session, kind=str(body.get("kind") or "context"),
+            label=str(body.get("label") or "Context"),
+            input_text=str(body.get("input_text") or ""),
+            parent_id=body.get("parent_id"), target_id=body.get("target_id"),
+            config=body.get("config") or {},
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="conversation or node not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.patch("/admin/workspace/nodes/{node_id}")
+async def admin_workspace_edit_node(node_id: str, request: Request):
+    body = await request.json()
+    auto = bool(body.pop("auto_recalculate", True))
+    try:
+        return state["workspace_service"].edit_node(
+            node_id, body, auto_recalculate=auto
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="node not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/admin/workspace/nodes/{node_id}/revisions")
+async def admin_workspace_node_revisions(node_id: str):
+    try:
+        return {"items": state["workspace_store"].revisions(node_id)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/admin/workspace/nodes/{node_id}/pause")
+async def admin_workspace_pause_node(node_id: str):
+    try:
+        return state["workspace_service"].pause(node_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="node not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/admin/workspace/nodes/{node_id}/resume", status_code=202)
+async def admin_workspace_resume_node(node_id: str):
+    try:
+        return state["workspace_service"].resume(node_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="node not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/admin/workspace/nodes/{node_id}/recalculate", status_code=202)
+async def admin_workspace_recalculate_node(node_id: str, request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    try:
+        return state["workspace_service"].recalculate(
+            node_id, include_root=bool(body.get("include_root", False))
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="node not found") from exc
+
+
+@app.post("/admin/workspace/workflows/{instance_id}/nodes")
+async def admin_workspace_add_workflow_node(instance_id: str, request: Request):
+    body = await request.json()
+    try:
+        return state["workspace_store"].add_workflow_node(
+            instance_id, node_type=str(body.get("type") or "context"),
+            label=str(body.get("label") or "Workflow node"),
+            after_node_id=str(body.get("after_node_id") or ""),
+            config=body.get("config") or {},
+            apply_globally=bool(body.get("apply_globally", False)),
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="workflow or node not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.patch("/admin/workspace/workflows/{instance_id}/nodes/{node_id}")
+async def admin_workspace_edit_workflow_node(
+    instance_id: str, node_id: str, request: Request
+):
+    body = await request.json()
+    apply_globally = bool(body.pop("apply_globally", False))
+    try:
+        return state["workspace_store"].update_workflow_node(
+            instance_id, node_id, body, apply_globally=apply_globally
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="workflow or node not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/admin/workspace/workflows/{instance_id}/nodes/{node_id}")
+async def admin_workspace_delete_workflow_node(
+    instance_id: str, node_id: str, request: Request
+):
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    try:
+        return state["workspace_store"].delete_workflow_node(
+            instance_id, node_id,
+            apply_globally=bool(body.get("apply_globally", False)),
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="workflow or node not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/admin/workspace/stores")
+async def admin_workspace_stores():
+    return {"items": state["workspace_store"].stores()}
+
+
+@app.post("/admin/workspace/stores")
+async def admin_workspace_create_store(request: Request):
+    body = await request.json()
+    try:
+        return state["workspace_store"].create_store(
+            str(body.get("name") or ""),
+            description=str(body.get("description") or ""),
+            adapter=str(body.get("adapter") or "sqlite-vector"),
+            connection_ref=str(body.get("connection_ref") or "local"),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/admin/workspace/stores/{store_id}/records")
+async def admin_workspace_store_record(store_id: str, request: Request):
+    body = await request.json()
+    try:
+        return state["workspace_store"].save_record(
+            store_id, str(body.get("text") or ""),
+            source_node_id=body.get("source_node_id"),
+            metadata=body.get("metadata") or {},
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="store not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/admin/workspace/stores/{store_id}/query")
+async def admin_workspace_query_store(store_id: str, request: Request):
+    body = await request.json()
+    try:
+        return {"items": state["workspace_store"].query_store(
+            store_id, str(body.get("query") or ""),
+            top_k=int(body.get("top_k", 5)),
+            query_prompt=str(body.get("query_prompt") or ""),
+        )}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="store not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _graph_run_context(items: list[dict]) -> list[dict]:
+    """Add human-facing provenance without exposing raw conversation payloads."""
+    titles: dict[str, str] = {}
+    library = state.get("library")
+    if library is not None:
+        try:
+            titles = {
+                str(row.get("session")): str(row.get("title") or "")
+                for row in library.sessions()
+            }
+        except (AttributeError, TypeError):
+            titles = {}
+    for item in items:
+        run_input = item.get("input") if isinstance(item.get("input"), dict) else {}
+        task_label = str(
+            run_input.get("goal") or run_input.get("label")
+            or item.get("task") or item.get("run_id") or "Task run"
+        )
+        session = str(item.get("session") or "-")
+        conversation_title = titles.get(session, "")
+        item["task_label"] = task_label
+        item["conversation_title"] = conversation_title or f"Conversation {session}"
+    return items
+
+
+@app.get("/admin/jobs")
+async def admin_jobs(status: str | None = None, limit: int = 100):
+    """Low-noise durable workload projection for the graph studio."""
+    return {
+        "items": state["job_store"].list(state=status, limit=limit),
+        "execution_lock": {
+            "backend": state["cfg"].execution.locked_backend,
+            "agent_selectable": False,
+            "local_workload_spawn": False,
+        },
+    }
+
+
+@app.get("/admin/jobs/{job_id}")
+async def admin_job(job_id: str):
+    try:
+        item = state["job_store"].get(job_id)
+        item["events"] = state["job_store"].events(job_id, limit=300)
+        return item
+    except ExecutionBoundaryError as exc:
+        raise HTTPException(status_code=404, detail="job not found") from exc
+
+
+@app.get("/admin/jobs/{job_id}/events")
+async def admin_job_events(job_id: str, after: int = 0, limit: int = 200):
+    try:
+        return {"items": state["job_store"].events(
+            job_id, after=after, limit=limit
+        )}
+    except ExecutionBoundaryError as exc:
+        raise HTTPException(status_code=404, detail="job not found") from exc
+
+
+def _public_action(item: dict) -> dict:
+    """Graph-studio projection: exact call/policy, never the full model response."""
+    projected = {
+        key: value for key, value in item.items()
+        if key not in {"response", "manifest"}
+    } | {
+        "manifest": {
+            key: value for key, value in (item.get("manifest") or {}).items()
+            if key != "parameters"
+        }
+    }
+    projected["soundness_checks"] = state["action_store"].soundness_checks(
+        action_id=str(item.get("action_id", "")), limit=10,
+    )
+    return projected
+
+
+def _resolve_action_decision(action_id: str, decision: str, note: str) -> dict:
+    action = state["action_store"].decide(action_id, decision, note)
+    runtime = state["flow_runtime"]
+    if decision == "approve":
+        runtime.resume(action["run_id"], {
+            "human_decision": "approve", "action_id": action_id,
+        })
+    else:
+        runtime.transition(
+            action["run_id"], "blocked", "human_action_denied",
+            status="blocked", summary=note or "Operator denied the action",
+            verdict="deny",
+        )
+    state["trace"].record(
+        action["session"], action["task"], "human_approval_resolved",
+        graph_id="supervised_tool_turn", graph_run_id=action["run_id"],
+        node_id="human_approval", action_id=action_id,
+        verdict=decision, note=note[:500],
+    )
+    return state["action_store"].get(action_id) or action
+
+
+@app.get("/admin/actions")
+async def admin_actions(status: str | None = None, limit: int = 100):
+    return {"items": [
+        _public_action(item)
+        for item in state["action_store"].list(status=status, limit=limit)
+    ]}
+
+
+@app.post("/admin/actions/{action_id}/decision")
+async def admin_action_decision(action_id: str, request: Request):
+    body = await request.json()
+    decision = str(body.get("decision", ""))
+    note = str(body.get("note", ""))
+    try:
+        action = _resolve_action_decision(action_id, decision, note)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="action not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _public_action(action)
+
+
+@app.post("/admin/workspace/actions/{action_id}/decision", status_code=202)
+async def admin_workspace_action_decision(action_id: str, request: Request):
+    """Resolve an inline approval and automatically continue its message."""
+    body = await request.json()
+    decision = str(body.get("decision", ""))
+    note = str(body.get("note", ""))
+    before = state["action_store"].get(action_id)
+    if before is None:
+        raise HTTPException(status_code=404, detail="action not found")
+    workspace_node = next(
+        (
+            node for node in state["workspace_store"].nodes(before["session"])
+            if node.get("role") == "assistant"
+            and str((node.get("config") or {}).get("task_id") or "")
+            == str(before.get("task") or "")
+        ),
+        None,
+    )
+    try:
+        action = _resolve_action_decision(action_id, decision, note)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="action not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    continuation = None
+    if workspace_node is not None:
+        continuation = state["workspace_service"].resume(
+            workspace_node["node_id"]
+        )
+    return {
+        "action": _public_action(action),
+        "workspace_node_id": workspace_node["node_id"] if workspace_node else None,
+        "continuation": continuation,
+    }
+
+
 async def _history_query(method: str, *args, **kwargs):
     """Run one scoped projection against a short-lived read-only connection.
 
@@ -455,6 +1431,12 @@ async def admin_history_endeavors(
         "list_endeavors", project_id=project, status=status, query=q,
         cursor=cursor, limit=limit,
     )
+
+
+@app.get("/admin/history/sessions/{session}/context")
+async def admin_history_session_context(session: str):
+    """Map one conversation to its containing endeavor without a global scan."""
+    return await _history_query("session_context", session)
 
 
 @app.get("/admin/history/endeavors/{endeavor_id}")
@@ -507,6 +1489,7 @@ async def admin_status():
         "checklist": ("off" if not c.contract_enabled
                       else "skip" if c.contract_skip_once else "on"),
         "sandbox": c.sandbox_backend or "auto",
+        "execution_lock": state["cfg"].execution.locked_backend,
         "plan": c.plan_mode,
         "ensemble": c.ensemble_n,
         "strategy": c.strategy,
@@ -539,6 +1522,12 @@ async def admin_control(request: Request):
         c.contract_enabled = value != "off"
         c.contract_skip_once = value == "skip"
     elif field == "sandbox":
+        lock = state["cfg"].execution.locked_backend
+        if lock and value not in ("auto", "off", lock):
+            return JSONResponse(
+                {"error": f"execution backend is operator-locked to {lock}"},
+                status_code=409,
+            )
         c.sandbox_backend = None if value == "auto" else value
     elif field == "plan":
         if value in ("auto", "on", "off"):

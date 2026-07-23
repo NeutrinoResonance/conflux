@@ -1,0 +1,36 @@
+Complete the Terminal-Bench task `gpt2-codegolf` inside the operator-locked
+task container on the authorized GCE VM. The execution tool pins the exact VM,
+container, and `/app` working directory. Supply only commands to run inside
+that container; never invoke Docker, sudo, gcloud, SSH, another container, or
+any path outside `/app`.
+
+The task is to write `/app/gpt2.c`, a dependency-free C program that performs
+GPT-2 124M inference with arg-max sampling. It will be compiled with
+`gcc -O3 -lm` and invoked as:
+
+`/app/a.out gpt2-124M.ckpt vocab.bpe "[input string here]"`
+
+It must read the supplied TensorFlow checkpoint and BPE file, reproduce GPT-2,
+continue arbitrary input for the next 20 tokens, and contain fewer than 5000
+bytes. A prompt-specific lookup table, canned output, wrapper around another
+runtime, or undeclared dependency is not a solution.
+
+Do not inspect or search for any Terminal-Bench verifier, tests, answer key,
+oracle, public solution, or trajectory. You may inspect the task inputs and
+installed build/runtime tools, write the implementation, compile it, and run
+your own bounded experiments. Work efficiently: use at most 24 tool calls,
+issue one tool call per turn, combine closely related read-only observations,
+and avoid dumping checkpoint data or other unbounded output. Do not append
+`echo`, `printf`, `true`, or an unconditional status read after a meaningful
+mutation, because its real exit status must propagate.
+
+Treat compilation or sample output as evidence, not proof. Before claiming
+completion, explicitly devise the smallest practical falsification-oriented
+test for the full contract, run it, interpret what it teaches, and repair the
+implementation if it exposes a discrepancy. The check must independently
+challenge source size, clean compilation, checkpoint/BPE parsing, arbitrary
+prompt handling, exactly 20-token continuation, and token correctness on more
+than one prompt without consulting benchmark-private material. Run only one
+final independent check after the implementation is ready; once it passes,
+stop using tools and report the observed byte count, build result, prompts
+checked, and correctness evidence concisely.

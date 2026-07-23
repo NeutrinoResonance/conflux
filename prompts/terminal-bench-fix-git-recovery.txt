@@ -1,0 +1,19 @@
+Continue the Terminal-Bench `fix-git` task inside the operator-locked task
+container on the authorized GCE VM. The execution tool pins the container and
+`/app/personal-site`; supply only commands inside it. Never invoke Docker,
+sudo, gcloud, SSH, another container, or any Terminal-Bench test or solution.
+
+A prior governed turn found lost commit `c499730`, attempted to merge it into
+master, and reached a merge conflict before its bounded tool budget expired.
+Treat that as context to verify, not as proof. The container deliberately
+retains that in-progress merge. Use one tool call per turn. First
+inspect the exact merge status and unresolved paths. Preserve both master and
+the lost commit in history, resolve the conflict in favor of the lost Stanford
+bio where it supersedes the older master wording, and complete the merge. Do
+not append `echo`, `printf`, `true`, or status reads after a meaningful
+mutation; let that command's exit status propagate.
+
+Run one final falsification-oriented read that checks the recovered commit is
+an ancestor of master, the intended Stanford content is present, no conflicts
+remain, and the working tree is clean. Once that check passes, stop using tools
+and return the observed result concisely.

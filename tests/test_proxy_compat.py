@@ -132,9 +132,13 @@ class _Library:
 class _Trace:
     def __init__(self) -> None:
         self.events: list[tuple] = []
+        self.exchanges: list[tuple] = []
 
     def record(self, *args, **kwargs) -> None:
         self.events.append((args, kwargs))
+
+    def record_exchange(self, *args, **kwargs) -> None:
+        self.exchanges.append((args, kwargs))
 
 
 class _History:
@@ -240,9 +244,10 @@ class RegistryToolRoutingTests(unittest.IsolatedAsyncioTestCase):
         self.client = _Client()
         self.library = _Library()
         self.control = ControlState(paused=True)
+        self.trace = _Trace()
         proxy.state.update(
             cfg=_config(), control=self.control, client=self.client,
-            library=self.library, trace=_Trace(), history=object(),
+            library=self.library, trace=self.trace, history=object(),
             checkpoints=object(), armed_sessions=set(), orch=object(),
         )
 
@@ -274,6 +279,14 @@ class RegistryToolRoutingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.client.raw_calls[0][0].name, "direct")
         self.assertEqual(payload["model"], "direct")
         self.assertEqual(payload["choices"][0]["finish_reason"], "tool_calls")
+        self.assertEqual(
+            [item[0][2] for item in self.trace.exchanges],
+            ["client_request", "client_response"],
+        )
+        self.assertNotEqual(self.trace.exchanges[0][0][1], "-")
+        self.assertEqual(
+            self.trace.exchanges[0][0][1], self.trace.exchanges[1][0][1]
+        )
 
     async def test_stream_registry_tool_request_preserves_raw_fields(self) -> None:
         response = await proxy.chat_completions(_Request(self._body(stream=True)))

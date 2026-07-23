@@ -1,0 +1,34 @@
+Continue the Terminal-Bench task `gpt2-codegolf` in the existing operator-locked
+task container on the authorized GCE VM. Do not inspect benchmark verifier files,
+tests, oracle answers, or public solutions.
+
+Current `/app/gpt2.c` is 4401 bytes, SHA-256
+`326863f8968b694ef33c5c4a3cbb5e62742a4e38c2c952db1f24baabe37147d6`.
+The matching `/app/gpt2` compiled successfully. Its new base-token mapping has
+not been executed. All results from `/app/test_gpt2` are stale and invalid.
+
+Your first action must be exactly one direct bounded production run equivalent
+to:
+`timeout 60 /app/gpt2 /app/gpt2-124M.ckpt /app/vocab.bpe "Hello"`
+Do not add a pipeline, redirection, `cd`, `echo`, `time`, or another command.
+
+Then create a tiny diagnostic wrapper with `write_file_in_locked_container` that
+renames production `main`, includes `/app/gpt2.c`, and supplies a diagnostic main
+using the current source's tokenizer functions/globals to print merge count and
+the token IDs for `Hello`. Compile the wrapper after the include; do not copy or
+reimplement production. Current evidence must show 50,000 merges and token 15496
+before another production repair.
+
+The final program must remain dependency-free C under 5000 bytes, compile with
+`gcc -O3 -lm`, accept prompt argv[3], greedily generate exactly 20 new tokens,
+and print only decoded bytes. All commands/code execution remain inside the
+pinned GCE task container. Never invoke Docker, sudo, gcloud, SSH, or backend
+selectors. No heredocs, redirection, base64, or printf for source writes. One tool
+call per turn; bounded candidate runs; meaningful exit status; `-lm` after C
+input. The image has gcc and Perl but no Python or `file`.
+
+Use at most 10 tool calls. If the derived diagnostic falsifies current mapping,
+repair it atomically, recompile, and repeat. Then test at least two prompts,
+exactly 20 generated IDs, and decoded-byte consistency. Repetition is failure.
+Stop only with positive evidence for all requirements or precisely report the
+remaining failure.

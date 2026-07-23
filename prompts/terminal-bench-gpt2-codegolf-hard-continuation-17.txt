@@ -1,0 +1,33 @@
+Continue the Terminal-Bench task `gpt2-codegolf` inside the existing pinned GCE
+task container. Do not inspect verifier files, tests, oracle answers, or public
+solutions.
+
+Current `/app/gpt2.c` is 4470 bytes, SHA-256
+`136ae100e41b7ed5e888fe00bd7d80d831bc6a5b2e0c0485b2ca644712ce0509`.
+It already compiled after changing TensorFlow Conv1D access to input-major
+`w[i*d+j]`. The real inputs are `/app/gpt2-124M.ckpt` and `/app/vocab.bpe`.
+
+The prior continuation dispatched no command: every proposal masked a meaningful
+exit status by appending `; echo ...`, and the governor correctly blocked it.
+Never append `echo`, `true`, or any other always-success command. Do not redirect
+stderr to stdout. Run one direct command per call and let its native exit status
+reach the client. If recompilation becomes necessary, the exact form is
+`gcc -O3 -o gpt2 gpt2.c -lm` (the library must follow the C input).
+
+First run the existing binary directly with a 60-second timeout for `Hello`, then
+for `Once upon a time`. Do not rewrite source before observing both results. If
+they are prompt-dependent and non-repetitive, add a temporary diagnostic outside
+the production source that establishes exactly 20 generated IDs and agreement
+between those IDs and decoded output. If semantically wrong, use numeric evidence
+to discriminate checkpoint ordering before editing, while preserving tokenizer
+behavior.
+
+The final program must remain dependency-free C under 5000 bytes, accept
+checkpoint argv[1], vocab argv[2], prompt argv[3], greedily generate exactly 20
+new tokens, and print only decoded bytes. All execution stays inside the locked
+GCE container. Never invoke Docker, sudo, gcloud, SSH, or backend selectors. Use
+`write_file_in_locked_container` for full source replacement. No heredocs,
+redirection, base64, or printf source writes. One tool call per turn.
+
+Use at most 8 tool calls. Repetition is failure. Stop only with positive evidence
+for every requirement or precisely report the remaining failure.

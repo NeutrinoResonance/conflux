@@ -1,0 +1,30 @@
+Continue the Terminal-Bench task `gpt2-codegolf` in the existing operator-locked
+task container on the authorized GCE VM. Do not inspect benchmark verifier files,
+tests, oracle answers, or public solutions.
+
+Current `/app/gpt2.c` is 4470 bytes, SHA-256
+`136ae100e41b7ed5e888fe00bd7d80d831bc6a5b2e0c0485b2ca644712ce0509`.
+It compiles. The preceding phase corrected TensorFlow Conv1D matrix access from
+`w[j*n+i]` to input-major `w[i*d+j]`, but accidentally ran the binary against a
+nonexistent `/app/model.bin`, causing an irrelevant exit 139. The actual task
+inputs are `/app/gpt2-124M.ckpt` and `/app/vocab.bpe`; use those exact paths.
+
+First run the current compiled source with `Hello` and `Once upon a time`, each
+with a direct 60-second timeout. Establish whether the orientation correction
+produces prompt-dependent, non-repetitive text. Do not rewrite source before
+observing those results. If either run fails, diagnose that exact failure. If
+both remain semantically wrong, use numeric evidence to discriminate checkpoint
+layout/order hypotheses before editing; preserve the proven tokenizer.
+
+The final program must be dependency-free C under 5000 bytes, compile with
+`gcc -O3 -lm`, accept checkpoint argv[1], vocab argv[2], and prompt argv[3],
+greedily generate exactly 20 new tokens, and print only decoded bytes. All
+commands/code execution remain inside the pinned GCE task container. Never invoke
+Docker, sudo, gcloud, SSH, or backend selectors. Use
+`write_file_in_locked_container` for full source replacement. No heredocs,
+redirection, base64, or printf source writes. One tool call per turn; direct
+bounded runs; meaningful exit status; `-lm` after C input.
+
+Use at most 8 tool calls. Verify two prompts, exactly 20 generated IDs, and
+decoded-byte consistency. Repetition is failure. Stop only with positive evidence
+for every requirement or precisely report the remaining failure.

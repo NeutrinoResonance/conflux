@@ -1,0 +1,32 @@
+Continue `gpt2-codegolf` in the restarted existing GCE task container. A Spot
+preemption stopped the VM, but the retained disk preserved all state; do not
+reconstruct earlier work or inspect benchmark tests/verifiers/solutions.
+
+Current `/app/gpt2.c` is 4515 bytes, SHA-256
+`d2e91be7b27af37abdaa7763a79b9a80d1853b75a931ead8f9102ffbd5c2532b`.
+Its new TensorFlow segment order is correct, but it does not compile because the
+end of the MLP residual line has `;}}` and therefore closes `fwd1` before
+`ln(x,lfg,lfb,C);}`. It must have only one closing brace there: `;}` closes the
+layer loop, then final LN executes and the following `}` closes the function.
+
+The loader also applies the physical/logical permutation backward. Physical
+checkpoint slots map to logical layers as
+`m={0,1,10,11,2,3,4,5,6,7,8,9}`. Therefore iterate physical slot `i`, set
+logical layer `l=m[i]`, set `lw=p+i*7087872`, and assign every layer pointer at
+index `[l]`. Do not use `lw=p+m[i]*...` while assigning index `[i]`.
+
+Read current source once, then atomically replace the full source using
+`write_file_in_locked_container` with only those two corrections. Preserve the
+proven tokenizer, input-major `w[i*d+j]`, per-block order
+`cb,cw,pb,pw,lb,lg,l2b,l2g,fb,fw,p2b,p2w`, and tail
+`lfb,lfg,wpe,wte`.
+
+Compile exactly `gcc -O3 -o /app/gpt2 /app/gpt2.c -lm`, then directly test
+`Hello` and `Once upon a time` separately with 60-second timeouts using
+`/app/gpt2-124M.ckpt` and `/app/vocab.bpe`. Never append `echo`, `true`, or
+redirect stderr. Final C must be under 5000 bytes, dependency-free, greedily emit
+exactly 20 new tokens, and print only decoded bytes.
+
+All execution stays in the pinned GCE container. Never invoke Docker, sudo,
+gcloud, SSH, or backend selectors. No heredocs, redirection, base64, or printf
+source writes. One tool call per turn; at most 6 calls. Repetition is failure.

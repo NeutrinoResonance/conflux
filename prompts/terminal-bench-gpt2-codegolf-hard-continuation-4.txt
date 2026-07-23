@@ -1,0 +1,39 @@
+Continue the Terminal-Bench task `gpt2-codegolf` in the existing operator-locked
+task container on the authorized GCE VM. This is a focused repair and
+falsification phase. Do not inspect benchmark verifier files, tests, oracle
+answers, or public solutions.
+
+The deliverable remains `/app/gpt2.c`: dependency-free C, fewer than 5000 bytes,
+compiled with `gcc -O3 -lm`, loading `/app/gpt2-124M.ckpt` and `/app/vocab.bpe`,
+accepting an arbitrary prompt as argv[3], greedily generating exactly 20 new
+tokens, and printing only their decoded text.
+
+Authoritative carried-forward evidence:
+
+- Current `/app/gpt2.c` is 4121 bytes with SHA-256
+  `698adf5051eaabeb9d18b01555a31d60abb400889574ee7ca52e0d0702f0e5b9`.
+- It compiles and completes under 60 seconds, but on prompt `Hello` it prints
+  exactly twenty dashes. This falsifies semantic correctness.
+- Source inspection identified three `mv` calls whose input dimension is `1`
+  where it should be `C`: qkv projection, attention output projection, and the
+  first feed-forward projection.
+- Source inspection also identified out-of-bounds construction of `b2u`: the
+  populated `bs` list contains only excluded bytes while later loops index it as
+  if it contains all 256 bytes. This can corrupt the decoder mapping.
+- Checkpoint layout, exact twenty-token generation, ID-to-decoded-output
+  consistency, and multiple-prompt behavior remain unverified.
+
+All commands and code execution must remain inside the pinned task container on
+the pinned GCE VM. Never invoke Docker, sudo, gcloud, SSH, or a host/backend
+selector. Use `write_file_in_locked_container` for complete source replacement;
+do not use heredocs, shell redirection, base64 commands, or printf to create
+source files. Use one tool call per turn. Preserve meaningful exit status and
+prefer narrow observations over output-masking pipelines. The image has gcc and
+Perl but no Python and no `file` utility.
+
+Use at most 16 tool calls. Repair the confirmed defects, compile, and use bounded
+runs on more than one prompt. Independently try to falsify that exactly 20 token
+IDs are generated and that decoding those IDs yields the printed bytes. A clean
+exit with repetitive or nonsensical output is not success. Stop only with
+positive evidence for all requirements, or report the remaining falsified or
+unverified condition precisely.

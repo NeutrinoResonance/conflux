@@ -1,0 +1,26 @@
+Complete the Terminal-Bench task `log-summary-date-ranges` inside the
+operator-locked task container on the authorized GCE VM. The execution tool
+already pins the VM, container, and `/app` working directory. Supply only
+commands to run inside that container; never invoke Docker, sudo, gcloud, SSH,
+or another container. Work only under `/app`.
+
+The files in `/app/logs` are named `YYYY-MM-DD_<source>.log`. Count the exact
+severity levels `ERROR`, `WARNING`, and `INFO` for each of these periods using
+2025-08-12 as today: today; the last 7 days including today; the last 30 days
+including today; current month through today; and all files. Write
+`/app/summary.csv` with header `period,severity,count`, then the three severity
+rows in ERROR, WARNING, INFO order for each period in this exact period order:
+`today`, `last_7_days`, `last_30_days`, `month_to_date`, `total`.
+
+Do not inspect any Terminal-Bench verifier, tests, answer key, or solution.
+Derive counts from the task inputs. Issue one tool call per turn; combine
+closely related read-only observations in one bounded command rather than
+proposing a parallel batch. Do not append `echo`, `printf`, or `true` after a
+meaningful command, because that can mask its failure status. Before claiming
+completion, explicitly
+devise and run an independent falsification-oriented check inside the task
+container that recomputes or otherwise challenges every boundary, row order,
+and count without trusting the first implementation's output. Incorporate what
+the check teaches into any repair and rerun it. Run only one final independent
+check; once it passes, stop using tools and return the final answer. Stop only after the CSV exists
+and the independent check passes; report concise observed evidence.

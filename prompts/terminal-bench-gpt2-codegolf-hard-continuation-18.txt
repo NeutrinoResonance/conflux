@@ -1,0 +1,37 @@
+Continue the Terminal-Bench task `gpt2-codegolf` inside the existing pinned GCE
+task container. Do not inspect verifier files, tests, oracle answers, or public
+solutions.
+
+Production `/app/gpt2.c` remains 4470 bytes, SHA-256
+`136ae100e41b7ed5e888fe00bd7d80d831bc6a5b2e0c0485b2ca644712ce0509`.
+With the real `/app/gpt2-124M.ckpt`, both `Hello` and `Once upon a time` still
+produce exactly twenty repetitions of decoded `elsius`; the input-major matrix
+orientation correction alone was therefore falsified as a complete fix.
+
+The preceding phase wrote a 2146-byte read-only C checkpoint diagnostic to
+`/app/diag.c` but exhausted its declared call budget before compiling it. This
+image has no `file`, `python`, or `python3`; do not retry those programs. First
+compile the existing diagnostic exactly with
+`gcc -O3 -o /app/diag /app/diag.c -lm`, then run `/app/diag`. Let native exit
+statuses reach the client: never append `; echo`, `true`, or another
+always-success command, and do not redirect stderr to stdout. If the diagnostic
+does not compile, inspect/fix only `/app/diag.c`; do not edit production merely
+to make a hypothesis test pass.
+
+Use the numeric segment evidence to identify the checkpoint parameter order.
+In particular, discriminate whether each layer is stored in TensorFlow variable
+name order (biases/weights and layer norms at different offsets) rather than the
+current assumed semantic order. Only after evidence selects an ordering should
+you atomically replace `/app/gpt2.c`, compile it, and test both prompts directly
+with 60-second timeouts.
+
+The final program must be dependency-free C under 5000 bytes, accept checkpoint
+argv[1], vocab argv[2], prompt argv[3], greedily generate exactly 20 new tokens,
+and print only decoded bytes. Preserve the proven 50,000-merge tokenizer and
+`Hello` token 15496. All execution stays inside the locked GCE container. Never
+invoke Docker, sudo, gcloud, SSH, or backend selectors. Use
+`write_file_in_locked_container` for full source replacement. No heredocs,
+redirection, base64, or printf source writes. One tool call per turn.
+
+Use at most 10 tool calls. Repetition is failure. Stop only with positive evidence
+for every requirement or precisely report the remaining failure.
