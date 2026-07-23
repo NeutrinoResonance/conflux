@@ -620,9 +620,17 @@ class GCEJobBackend:
         encoded = base64.b64encode(source.encode()).decode("ascii")
         return "python3 -c \"import base64;exec(base64.b64decode('" + encoded + "'))\""
 
+    def _transport_argv(self, command: str) -> list[str]:
+        """The only backend-specific seam: how one command reaches the target.
+
+        Every remote program, cursor rule, ownership check, and evidence
+        bound is shared across adapters; a new backend overrides just this.
+        """
+        return gcloud_ssh_argv(self.target, command)
+
     def _remote(self, program: str, payload: Mapping[str, Any], *,
                 timeout_s: float | None = None) -> dict[str, Any]:
-        argv = gcloud_ssh_argv(self.target, self._payload_command(program, payload))
+        argv = self._transport_argv(self._payload_command(program, payload))
         try:
             completed = self._runner(
                 argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
@@ -630,9 +638,12 @@ class GCEJobBackend:
                 timeout=min(self.ssh_timeout_s, timeout_s or self.ssh_timeout_s),
             )
         except subprocess.TimeoutExpired:
-            return {"ok": False, "error": "GCE transport timed out"}
+            return {"ok": False,
+                    "error": f"{self.backend_name} transport timed out"}
         except OSError as exc:
-            return {"ok": False, "error": f"GCE transport failed: {str(exc)[:300]}"}
+            return {"ok": False,
+                    "error": f"{self.backend_name} transport failed: "
+                             f"{str(exc)[:300]}"}
         stdout = (completed.stdout or b"").decode("utf-8", "replace")
         stderr = (completed.stderr or b"").decode("utf-8", "replace")
         if completed.returncode != 0:
@@ -833,3 +844,66 @@ class GCEJobBackend:
                 self._graph_move(job_id, "job_complete", "job_evidence_preserved",
                                  "Terminal job evidence is durably preserved")
         return result
+
+
+class DockerAuthorizedTarget:
+    """One immutable local/remote container as the job boundary target."""
+
+    def __init__(self, container: str) -> None:
+        if not isinstance(container, str) or not _SELECTOR.fullmatch(container):
+            raise ExecutionBoundaryError(
+                "invalid container: expected one non-option selector token"
+            )
+        self.container = container
+
+    @property
+    def descriptor(self) -> dict[str, str]:
+        return {"container": self.container}
+
+
+def docker_exec_argv(target: DockerAuthorizedTarget, command: str) -> list[str]:
+    if not isinstance(command, str) or not command.strip() or "\x00" in command:
+        raise ExecutionBoundaryError("remote command must be non-empty and contain no NUL")
+    if len(command.encode()) > 131072:
+        raise ExecutionBoundaryError("remote transport envelope exceeds 131072 bytes")
+    return ["docker", "exec", target.container, "/bin/sh", "-c", command]
+
+
+class DockerJobBackend(GCEJobBackend):
+    """Durable-job adapter whose workloads spawn in one fixed container.
+
+    Proof of the backend-neutral protocol: every remote program (start
+    wrapper, status, cursor-windowed watch, ownership-exact signal, bounded
+    collect), every cursor rule, and every ownership/fingerprint check is
+    inherited unchanged from the shared implementation — only the transport
+    argv differs (``docker exec`` instead of ``gcloud compute ssh``). The
+    container needs python3 and coreutils (e.g. the ``python:3.11-slim``
+    image). Backend and target are trusted operator configuration; there is
+    no agent-visible backend or target argument.
+    """
+
+    backend_name = "docker"
+
+    def __init__(
+        self,
+        target: DockerAuthorizedTarget,
+        store: DurableJobStore,
+        *,
+        boundary_fingerprint: str,
+        exec_timeout_s: float = 120.0,
+        runner: Callable[..., subprocess.CompletedProcess[bytes]] = subprocess.run,
+        job_id_factory: Callable[[], str] | None = None,
+        flow_runtime: Any | None = None,
+    ) -> None:
+        super().__init__(
+            target,  # duck-typed: only .descriptor is used by shared code
+            store,
+            boundary_fingerprint=boundary_fingerprint,
+            ssh_timeout_s=exec_timeout_s,
+            runner=runner,
+            job_id_factory=job_id_factory,
+            flow_runtime=flow_runtime,
+        )
+
+    def _transport_argv(self, command: str) -> list[str]:
+        return docker_exec_argv(self.target, command)

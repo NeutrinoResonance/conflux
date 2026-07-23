@@ -36,6 +36,8 @@ from llm_super.durable_jobs import (
     SIGNAL_JOB_TOOL,
     START_JOB_TOOL,
     WATCH_JOB_TOOL,
+    DockerAuthorizedTarget,
+    DockerJobBackend,
     DurableJobStore,
     GCEAuthorizedTarget,
     GCEJobBackend,
@@ -1156,10 +1158,19 @@ def _parser() -> argparse.ArgumentParser:
         "--endpoint", default="http://127.0.0.1:8055/v1/chat/completions"
     )
     parser.add_argument("--model", default="super")
-    parser.add_argument("--vm", required=True)
-    parser.add_argument("--project", required=True)
-    parser.add_argument("--account", required=True)
-    parser.add_argument("--zone", required=True)
+    parser.add_argument("--vm")
+    parser.add_argument("--project")
+    parser.add_argument("--account")
+    parser.add_argument("--zone")
+    parser.add_argument(
+        "--job-backend", choices=("gce", "docker"), default="gce",
+        help="trusted operator selection of the durable-job adapter; "
+             "never exposed to the agent as a tool argument",
+    )
+    parser.add_argument(
+        "--docker-container",
+        help="immutable container target for --job-backend docker",
+    )
     parser.add_argument(
         "--container",
         help="pin all agent commands inside this container on the authorized VM",
@@ -1207,6 +1218,62 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.durable_only and args.container:
             parser.error("--durable-only and --container cannot be combined")
+        if args.job_backend == "docker":
+            # Docker adapter path: pure durable-job protocol against one
+            # immutable container. No raw terminal tool, no GCE selectors.
+            if not args.durable_only:
+                parser.error("--job-backend docker requires --durable-only")
+            if not args.docker_container:
+                parser.error("--job-backend docker requires --docker-container")
+            if args.container:
+                parser.error("--job-backend docker and --container cannot be combined")
+            docker_target = DockerAuthorizedTarget(args.docker_container)
+            boundary = ExecutionBackendLock("docker", docker_target.descriptor)
+            client = ChatCompletionsClient(
+                args.endpoint,
+                api_key=os.environ.get("LLM_SUPER_API_KEY"),
+                timeout_s=args.api_timeout_seconds,
+            )
+            job_store = DurableJobStore(args.job_db)
+            registry = FlowRegistry.load(
+                Path(__file__).resolve().parents[1] / "agent_flows.yaml"
+            )
+            job_flow_runtime = SQLiteFlowRuntime(job_store.connection, registry)
+            job_backend = DockerJobBackend(
+                docker_target,
+                job_store,
+                boundary_fingerprint=boundary.fingerprint,
+                exec_timeout_s=args.ssh_timeout_seconds,
+                flow_runtime=job_flow_runtime,
+            )
+            result = run_tool_loop(
+                task,
+                model=args.model,
+                client=client,
+                executor=None,
+                job_executor=LockedJobExecutor(boundary, job_backend),
+                max_steps=args.max_steps,
+                max_governor_retries=args.max_governor_retries,
+                max_tokens=args.max_tokens,
+                max_tool_result_bytes=args.max_tool_result_bytes,
+                total_timeout_s=args.total_timeout_seconds,
+                progress=lambda event: print(f"[direct-vm] {event}", file=sys.stderr),
+                tool_definitions=JOB_TOOL_DEFINITIONS,
+                initial_messages=(
+                    load_transcript(Path(args.transcript_file), task)
+                    if args.transcript_file else None
+                ),
+                checkpoint=(
+                    (lambda messages: save_transcript(
+                        Path(args.transcript_file), task, messages
+                    )) if args.transcript_file else None
+                ),
+            )
+            print(result.text)
+            return 0
+        for name in ("vm", "project", "account", "zone"):
+            if not getattr(args, name):
+                parser.error(f"--{name} is required with --job-backend gce")
         target = AuthorizedVM(args.vm, args.project, args.account, args.zone)
         client = ChatCompletionsClient(
             args.endpoint,

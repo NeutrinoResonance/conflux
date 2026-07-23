@@ -48,6 +48,9 @@ class Execution:
     gcloud_account: str = ""
     gcloud_zone: str = "us-central1-a"
     gcloud_machine_type: str = "e2-micro"
+    # Docker adapter target (trusted operator config; never agent-visible).
+    # Selecting it is an operator change: locked_backend: docker.
+    docker_container: str = ""
 
     def resolve_backend(self, requested: str | None = None) -> str:
         desired = self.backend if requested in (None, "", "auto") else requested
@@ -65,6 +68,12 @@ class Execution:
         from .execution_backends import ExecutionBackendLock
         if not self.locked_backend:
             return None
+        if self.locked_backend == "docker":
+            return ExecutionBackendLock(
+                "docker",
+                {"mode": "persistent-container",
+                 "container": self.docker_container or "llm-super-agent"},
+            )
         return ExecutionBackendLock(
             self.locked_backend,
             {"mode": "ephemeral", "project": self.gcloud_project or "active-gcloud-project",
