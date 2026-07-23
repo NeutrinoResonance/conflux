@@ -1,0 +1,51 @@
+{
+  "accepted": true,
+  "backup": {
+    "integrity": "ok",
+    "row_count": 2355,
+    "sha256": "bd3da5b5e951742e3bc20c726fc4054f84283b1a9fb246a689a06a766833b79f",
+    "size": 147456,
+    "user_version": 1
+  },
+  "checks": {
+    "all_hashes_valid": true,
+    "backup_verified": true,
+    "currency_not_null_default_usd": true,
+    "integrity_ok": true,
+    "required_columns": true,
+    "restore_rehearsal_verified": true,
+    "row_preservation": true,
+    "traffic_all_2xx": true,
+    "traffic_contiguous": true,
+    "user_version_2": true
+  },
+  "database": {
+    "bad_hashes": 0,
+    "columns": [
+      "id",
+      "account",
+      "amount_cents",
+      "memo",
+      "created_at",
+      "currency",
+      "entry_hash"
+    ],
+    "integrity": "ok",
+    "row_count": 26802,
+    "user_version": 2
+  },
+  "restore": {
+    "integrity": "ok",
+    "row_count": 2355,
+    "user_version": 1
+  },
+  "root": "/tmp/llm-super-agent/phoenix-ledger",
+  "traffic": {
+    "acknowledged": 26552,
+    "bad_status_count": 0,
+    "contiguous": true,
+    "events": 26552,
+    "parse_errors": []
+  },
+  "validated_at": 1784485311.845951
+}

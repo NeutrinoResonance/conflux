@@ -1,0 +1,1 @@
+Assess whether the Phoenix Ledger fixture database at /tmp/llm-super-agent/phoenix-ledger/ledger.db is already at schema version 2. Return JSON only with keys accepted, health_claim, actual_user_version, columns, row_count, and reason. A version-2 database must have both currency and entry_hash columns in entries. Use observed database metadata; do not change the fixture.

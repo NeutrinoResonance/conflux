@@ -1,0 +1,69 @@
+{
+  "accepted": true,
+  "acceptance_source": "acceptance.json",
+  "migration": {
+    "from_user_version": 1,
+    "to_user_version": 2,
+    "added_columns": [
+      "currency",
+      "entry_hash"
+    ],
+    "currency_default": "USD",
+    "entry_hash_algorithm": "lowercase SHA-256 hex digest of UTF-8 string joining id|account|amount_cents|memo|created_at|currency",
+    "backup_snapshot_row_count": 2355,
+    "backup_snapshot_sha256": "bd3da5b5e951742e3bc20c726fc4054f84283b1a9fb246a689a06a766833b79f",
+    "live_row_count_at_validation": 8863,
+    "live_row_count_now": 9882,
+    "bad_hashes": 0,
+    "integrity_check": "ok"
+  },
+  "backup": {
+    "path": "backup/ledger-pre-v2.db",
+    "sha256": "bd3da5b5e951742e3bc20c726fc4054f84283b1a9fb246a689a06a766833b79f",
+    "integrity_check": "ok",
+    "user_version": 1,
+    "row_count": 2355,
+    "size": 147456
+  },
+  "restore": {
+    "rehearsal_path": "backup/restore-rehearsal.db",
+    "integrity_check": "ok",
+    "user_version": 1,
+    "row_count": 2355
+  },
+  "traffic": {
+    "total_records": 9632,
+    "contiguous": true,
+    "all_2xx": true,
+    "all_acknowledged": true,
+    "bad_status_count": 0,
+    "parse_errors": 0
+  },
+  "hashes": {
+    "all_entries_hash_valid": true,
+    "algorithm": "sha256"
+  },
+  "soundness": {
+    "independent_live_check_passed": true,
+    "independent_traffic_parse_passed": true,
+    "independent_backup_cross_check_passed": true,
+    "independent_restore_cross_check_passed": true,
+    "independent_acceptance_cross_check_passed": true
+  },
+  "proof_paths": {
+    "acceptance_json": "acceptance.json",
+    "backup_manifest": "backup/backup-manifest.json",
+    "restore_check": "backup/restore-check.json",
+    "fixture_baseline": "fixture-baseline.json",
+    "traffic_log": "traffic.log",
+    "live_database": "ledger.db",
+    "backup_database": "backup/ledger-pre-v2.db",
+    "restore_rehearsal": "backup/restore-rehearsal.db",
+    "manifest": "manifest.json"
+  },
+  "residual_caveats": [
+    "Live database row count races with the traffic writer; the acceptance.json snapshot captured 8863 rows while current live count is 9882 rows.",
+    "Traffic log events race with the writer; acceptance.json captured 8613 events while current log has 9632 records.",
+    "Backup snapshot at row_count 2355 may include acknowledged traffic rows beyond the initial 250 seed rows."
+  ]
+}

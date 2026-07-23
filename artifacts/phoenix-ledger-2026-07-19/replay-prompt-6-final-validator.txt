@@ -1,0 +1,16 @@
+[direct-vm] completion=1 decision=final
+[llm-super] ⚠ new-conversation gate — NO model was called and nothing was spent.
+
+This request would start a NEW supervised conversation (session 8598d97dbb7d, strategy single, budget $0.50/task). Conversations are identified by their FIRST user message — a client that rewrites or annotates it silently starts a separate conversation each time.
+
+To proceed, resend or simply continue: the next message in this conversation runs normally. In-band commands never need confirmation and never call a model — !help lists them; !gate off disables this warning.
+[direct-vm] completion=1 decision=final
+[llm-super] Human approval is required before this action can run. Review act_cc8c416db96e4cf6 in the Agent Graphs view, then retry the turn.
+[direct-vm] completion=1 decision=tool_calls count=1
+[direct-vm] tool_step=1 tool=run_on_authorized_gce_vm command=/tmp/llm-super-venv/bin/python /tmp/llm-super-src/scripts/phoenix_ledger_fixture.py validate --root /tmp/llm-super-agent/phoenix-ledger
+[direct-vm] tool_step=1 result ok=true exit=0 timed_out=false
+[direct-vm] completion=2 decision=tool_calls count=1
+[direct-vm] tool_step=2 tool=run_on_authorized_gce_vm command=file /tmp/llm-super-agent/phoenix-ledger /tmp/llm-super-agent/phoenix-ledger/*
+[direct-vm] tool_step=2 result ok=true exit=0 timed_out=false
+[direct-vm] completion=3 decision=final
+{"accepted": true, "schema": ["id", "account", "amount_cents", "memo", "created_at", "currency", "entry_hash"], "integrity": "ok", "row_preservation": true, "hashes": {"all_hashes_valid": true, "bad_hashes": 0}, "backup": {"integrity": "ok", "row_count": 2355, "sha256": "bd3da5b5e951742e3bc20c726fc4054f84283b1a9fb246a689a06a766833b79f", "size": 147456, "user_version": 1}, "restore_rehearsal": {"verified": true, "integrity": "ok", "row_count": 2355, "user_version": 1}, "traffic_continuity": {"contiguous": true, "events": 25007, "acknowledged": 25007, "bad_status_count": 0}, "discrepancies": [], "proof_paths": ["/tmp/llm-super-agent/phoenix-ledger"]}

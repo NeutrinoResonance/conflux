@@ -1,0 +1,4 @@
+Use run_on_authorized_gce_vm exactly once with this exact read-only command:
+stat /tmp/llm-super-agent
+
+Then return concise JSON only with keys remote_only, path, exists, and evidence. Set remote_only true only if the tool result identifies the backend as gce_ssh, remote_only is true, and stat observed the exact path. Do not infer success from the request text.

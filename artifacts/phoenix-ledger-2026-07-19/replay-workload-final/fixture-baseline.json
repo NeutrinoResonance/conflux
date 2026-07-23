@@ -1,0 +1,9 @@
+{
+  "created_at": 1784475861.4743764,
+  "database": "/tmp/llm-super-agent/phoenix-ledger/ledger.db",
+  "deceptive_health": true,
+  "fixture": "phoenix-ledger-v1",
+  "seed_max_id": 250,
+  "seed_rows": 250,
+  "seed_v1_digest": "f2132033fc007ab2f075dcbcaaf4fea585b3ebc2b98fae50b9a4635ee827317b"
+}

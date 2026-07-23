@@ -1,6 +1,76 @@
 # Action governance and orchestration framework evaluation (2026-07-19)
 
-Status: **design recommendation; no framework migration has been performed**.
+Status: **Phase 0 and the framework-neutral graph/runtime contracts are
+implemented and live field-tested; no third-party framework migration has been
+performed**.
+
+Implementation note: the current code now includes the compatibility-mode
+governor and durable pending-action state in `governance.py`, declarative agent
+and flow definitions in `agent_flows.yaml`, the validated SQLite reference
+runtime in `flows.py`, normalized graph/action events, replay/policy tests, and
+the operator-facing Agent Graphs studio at `/graphs`. It also includes an
+immutable, backend-neutral execution boundary in `execution_backends.py` and
+owned durable process adapters/tools in `durable_jobs.py`; this deployment is
+locked to one exact GCE target, while the same protocol can bind Docker or
+another adapter without exposing backend or target selectors to the agent.
+The LangGraph and
+Microsoft Agent Framework comparison remains a future adapter spike; neither
+framework is a correctness dependency today.
+
+## Implementation and live verification result
+
+The implementation was exercised end to end with the Phoenix Ledger prompt
+ladder on a client-pinned GCE Spot `e2-micro`. The model was exposed only to
+`run_on_authorized_gce_vm(command)`; account, project, zone, and VM selectors
+were frozen in the client, and no model-selected command had a local execution
+path. The declared `supervised_tool_turn` graph has six agent identities,
+fourteen nodes, twenty-four edges, bounded cycles, durable checkpoints, and a
+live definition/run overlay in `/graphs`.
+
+The final stable validator accepted a version-2 database with 26,802 rows,
+26,552 contiguous acknowledged traffic events, zero bad statuses, zero bad
+hashes, and the verified 2,355-row backup and restore rehearsal. The complete
+suite ran on the VM: **130 tests passed**. Transcripts, the control-plane graph
+and action records, the test report, validator output, and the complete stable
+workload were copied to `artifacts/phoenix-ledger-2026-07-19/` before teardown.
+The replacement VM was then deleted, and the final project query found zero
+remaining `llmsuper-*` instances.
+
+Watching the live run converted several prompt-only expectations into
+deterministic policy: masked `; echo` and `|| echo` exits, narration-only tool
+calls, heredocs, invalid inline Python, write-capable SQLite “reads”, unscoped
+SQLite `file:` URIs, verifiers that accumulate discrepancies without a failure
+exit, and explicit task tool-call caps now fail closed before execution. The
+independent soundness node also treats increasing live counters as coherent
+snapshots rather than contradictions.
+
+### Durable remote execution extension
+
+The subsequent durable-job ladder used only five backend-neutral typed
+operations: start, watch, inspect, signal, and collect. Every operation
+re-verified the adapter name, exact GCE target descriptor, and boundary
+fingerprint. The only workstation subprocess was the fixed-shape `gcloud
+compute ssh` transport; model-authored commands were encoded inside the remote
+envelope and executed only on a disposable Spot `e2-micro` VM. Durable SQLite
+records preserve job identity, wrapper/workload PIDs, heartbeat, state, exact
+stdout/stderr cursors, bounded log tails, artifacts, and an event trail that is
+projected into the declared `durable_locked_job` graph.
+
+Watching the ladder found two integration defects that are now guardrails.
+First, the action critic was evaluating job launch as if it were workload
+completion; launch now has explicit, falsifiable evidence (`job_id`, `running`,
+owned) and completion still requires later observation and collection. Second,
+signal byte counts could be mistaken for output cursors; signal now returns the
+last consumed cursors explicitly, and watch/collect reject rewinds or skips.
+Nonzero workload exits observed by inspect/watch/collect are terminal evidence,
+not tool-transport failures.
+
+The final evidence-guided retry ran the complete suite as an agent-controlled
+background job: **149 tests passed, zero failures, zero errors**. Browser MCP
+validation confirmed draggable nodes, pointer-pannable canvas navigation,
+clickable edge conditions, definition/run overlays, the GCE lock indicator,
+remote job logs/events, and an empty approval queue without console or network
+errors.
 
 This note records the findings from reviewing llm-super's current agentic path,
 the proposed in-context action verifier and preflight mechanism, and the current

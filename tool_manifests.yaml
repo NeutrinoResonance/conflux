@@ -1,0 +1,147 @@
+# Local capability manifests. Request-side MCP annotations and x-llm-super
+# fields are treated as untrusted hints and cannot grant capabilities.
+#
+# Add entries only for tool identities whose implementation/provenance you
+# control. Example:
+#
+# manifests:
+#   read_workspace_file:
+#     trusted: true
+#     provenance: first-party-filesystem-server
+#     side_effect: read
+#     allowed_targets: ["/absolute/workspace/**"]
+#     timeout_s: 10
+#     max_output_chars: 100000
+#     concurrency: 4
+#     idempotent: true
+#     open_world: false
+#
+# Shell-like tools intentionally remain untrusted and are classified from the
+# exact command on every proposal.
+
+version: 1
+manifests:
+  # First-party compatibility tool used by the field harness. The model can
+  # choose only `command`; account/project/zone/VM and transport argv are
+  # frozen by the client. Both executor actions and soundness probes use this
+  # same remote-only boundary.
+  run_on_authorized_gce_vm:
+    trusted: true
+    provenance: first-party-gce-agent-loop
+    side_effect: unknown
+    shell_command: true
+    # Deterministic schema/scope failures still fail closed. An epistemic
+    # critic block on an in-scope medium/unknown action may be held for an
+    # exact, one-shot operator decision on this disposable pinned VM.
+    reviewable_blocks: true
+    allowed_targets:
+      - /tmp/llm-super-agent
+      - /tmp/llm-super-agent/**
+      - /tmp/llm-super-src/scripts/phoenix_ledger_fixture.py
+    timeout_s: 120
+    max_output_chars: 100000
+    concurrency: 1
+    idempotent: false
+    open_world: false
+
+  # The controller pins both layers. The model supplies only the inner shell
+  # command and cannot choose Docker, the container, the VM, or the workdir.
+  run_in_locked_container:
+    trusted: true
+    provenance: first-party-gce-container-agent-loop
+    side_effect: unknown
+    shell_command: true
+    reviewable_blocks: true
+    allowed_targets:
+      - /app
+      - /app/**
+    timeout_s: 120
+    max_output_chars: 100000
+    concurrency: 1
+    idempotent: false
+    open_world: false
+
+  # The model selects only an exact destination beneath the controller-pinned
+  # workdir and bounded UTF-8 content. The trusted client owns transport,
+  # encoding, temporary-file naming, and the atomic replacement operation.
+  write_file_in_locked_container:
+    trusted: true
+    provenance: first-party-gce-container-file-writer
+    side_effect: write
+    shell_command: false
+    reviewable_blocks: false
+    allowed_targets:
+      - /app
+      - /app/**
+    timeout_s: 120
+    max_output_chars: 20000
+    concurrency: 1
+    idempotent: true
+    open_world: false
+
+  # Backend-neutral durable process operations. The client binds these names
+  # to an immutable ExecutionBackendLock; the model can neither choose GCE nor
+  # replace the pinned VM. A future Docker/Kubernetes adapter can implement
+  # the same contract without changing the agent-visible schemas.
+  start_locked_job:
+    trusted: true
+    provenance: first-party-locked-job-controller
+    # Starting an owned process is a write to the job runtime even when the
+    # nested command later performs only reads. The exact nested shell still
+    # receives its own deterministic classification.
+    side_effect: write
+    shell_command: true
+    reviewable_blocks: true
+    allowed_targets:
+      - /tmp/llm-super-agent
+      - /tmp/llm-super-agent/**
+    timeout_s: 120
+    max_output_chars: 100000
+    concurrency: 1
+    idempotent: false
+    open_world: false
+  watch_locked_job:
+    trusted: true
+    provenance: first-party-locked-job-controller
+    side_effect: read
+    shell_command: false
+    allowed_targets: []
+    timeout_s: 75
+    max_output_chars: 131072
+    concurrency: 4
+    idempotent: true
+    open_world: false
+  inspect_locked_job:
+    trusted: true
+    provenance: first-party-locked-job-controller
+    side_effect: read
+    shell_command: false
+    allowed_targets: []
+    timeout_s: 30
+    max_output_chars: 20000
+    concurrency: 4
+    idempotent: true
+    open_world: false
+  signal_locked_job:
+    trusted: true
+    provenance: first-party-locked-job-controller
+    side_effect: write
+    shell_command: false
+    reviewable_blocks: true
+    allowed_targets: []
+    timeout_s: 30
+    max_output_chars: 20000
+    concurrency: 1
+    idempotent: true
+    open_world: false
+  collect_locked_job:
+    trusted: true
+    provenance: first-party-locked-job-controller
+    side_effect: read
+    shell_command: false
+    allowed_targets: []
+    timeout_s: 30
+    max_output_chars: 262144
+    concurrency: 2
+    idempotent: true
+    open_world: false

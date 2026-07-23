@@ -1,0 +1,47 @@
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+[direct-vm] completion=1 decision=final
+[llm-super] ⚠ new-conversation gate — NO model was called and nothing was spent.
+
+This request would start a NEW supervised conversation (session 3cbe0293164e, strategy single, budget $0.50/task). Conversations are identified by their FIRST user message — a client that rewrites or annotates it silently starts a separate conversation each time.
+
+To proceed, resend or simply continue: the next message in this conversation runs normally. In-band commands never need confirmation and never call a model — !help lists them; !gate off disables this warning.
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+[direct-vm] completion=1 decision=tool_calls count=1
+[direct-vm] tool_step=1 tool=run_on_authorized_gce_vm command=mkdir -p /tmp/llm-super-agent/soundness-smoke && touch /tmp/llm-super-agent/soundness-smoke/created.ok
+[direct-vm] tool_step=1 result ok=true exit=0 timed_out=false
+[direct-vm] completion=2 decision=tool_calls count=1
+[direct-vm] tool_step=2 tool=run_on_authorized_gce_vm command=stat /tmp/llm-super-agent/soundness-smoke/created.ok
+[direct-vm] tool_step=2 result ok=true exit=0 timed_out=false
+[direct-vm] completion=3 decision=tool_calls count=1
+[direct-vm] tool_step=3 tool=run_on_authorized_gce_vm command=echo <redacted-output>
+[direct-vm] tool_step=3 result ok=true exit=0 timed_out=false
+[direct-vm] completion=4 decision=final
+```json
+{"created":true,"path":"/tmp/llm-super-agent/soundness-smoke/created.ok","evidence":"File exists as regular empty file, size 0, perms 0644, exit 0 from stat."}
+```

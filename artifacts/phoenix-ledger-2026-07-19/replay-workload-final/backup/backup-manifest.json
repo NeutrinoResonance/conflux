@@ -1,0 +1,8 @@
+{
+  "backup_path": "backup/ledger-pre-v2.db",
+  "sha256": "bd3da5b5e951742e3bc20c726fc4054f84283b1a9fb246a689a06a766833b79f",
+  "integrity_check": "ok",
+  "user_version": 1,
+  "row_count": 2355,
+  "size": 147456
+}

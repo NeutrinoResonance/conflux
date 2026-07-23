@@ -23,3 +23,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["llm_super"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"agent_flows.yaml" = "llm_super/agent_flows.yaml"
+"tool_manifests.yaml" = "llm_super/tool_manifests.yaml"

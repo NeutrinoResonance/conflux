@@ -1,0 +1,1 @@
+On the authorized GCE VM, create the empty marker /tmp/llm-super-agent/soundness-smoke/created.ok using one bounded command. Then report concise JSON only with keys created, path, and evidence. Complete the task; do not merely describe a command. Do not use another path.

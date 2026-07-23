@@ -1,0 +1,265 @@
+# Declarative control-plane graph.  Models may propose child FlowSpecs, but
+# only this schema and its compiler authorize node types, capabilities, loops,
+# exits, and budgets.
+
+agents:
+  - id: executor
+    label: Executor
+    role: proposes work and incorporates observed tool evidence
+    description: The routed task model. It never authorizes its own side effects.
+    model_selector: routed executor
+    capabilities: [propose_action, synthesize]
+    family_rule: selected per turn
+    accent: cobalt
+    icon: spark
+
+  - id: governor
+    label: Action governor
+    role: deterministic policy and capability boundary
+    description: Validates schemas and exact targets, assigns risk, and enforces hard policy.
+    model_selector: deterministic
+    capabilities: [inspect_proposal, classify_risk, release_action, inspect_result]
+    accent: amber
+    icon: shield
+
+  - id: critic
+    label: Independent critic
+    role: makes the strongest contextual case against uncertain actions
+    description: A bounded, cross-family review identity with no execution capability.
+    model_selector: cross-family verifier pool
+    family_rule: different from executor
+    capabilities: [review_action, propose_safe_probe]
+    accent: violet
+    icon: eye
+
+  - id: soundness
+    label: Soundness checker
+    role: devises a falsification test, interprets it, and returns learned evidence
+    description: An independent identity that turns postconditions into one bounded read-only experiment before the executor continues.
+    model_selector: cross-family verifier pool
+    family_rule: different from executor
+    capabilities: [design_soundness_test, interpret_soundness_evidence]
+    accent: cyan
+    icon: flask
+
+  - id: verifier
+    label: Outcome verifier
+    role: checks final claims against observed evidence
+    description: Existing evidence-first, cross-family final-answer verification.
+    model_selector: cross-family verifier pool
+    family_rule: different from executor
+    capabilities: [review_outcome]
+    accent: emerald
+    icon: check
+
+  - id: operator
+    label: Human operator
+    role: resolves irreversible or ambiguous action boundaries
+    description: The only identity that can approve unresolved high-risk work.
+    model_selector: human
+    capabilities: [approve_high_risk, block_action]
+    accent: rose
+    icon: person
+
+  - id: execution_controller
+    label: Execution controller
+    role: binds durable process operations to one operator-selected backend and target
+    description: A deterministic, model-inaccessible boundary that owns job identity, output cursors, liveness, exact process-group signals, and evidence collection.
+    model_selector: deterministic backend adapter
+    capabilities: [verify_execution_lock, start_locked_process, watch_locked_process, signal_owned_process, collect_job_evidence]
+    family_rule: no model and no agent-selectable backend
+    accent: slate
+    icon: lock
+
+  - id: ensemble_coordinator
+    label: Ensemble coordinator
+    role: samples independent candidates and merges verified distinct results
+    description: A per-message strategy node that can sample one model repeatedly at varied temperatures, use different model families, or mix both before a verified best, union, or fusion selection.
+    model_selector: workflow-instance configuration
+    capabilities: [generate_candidates, merge_candidates]
+    family_rule: candidates are independently verified; same-model sampling preserves candidate identity
+    accent: cobalt
+    icon: branches
+
+flows:
+  - id: supervised_tool_turn
+    version: 1
+    label: Governed tool-carrying turn
+    description: Compatibility-mode action authorization, client execution, postcheck, and final verification.
+    entry: ingress
+    capabilities:
+      [propose_action, synthesize, inspect_proposal, classify_risk,
+       release_action, review_action, propose_safe_probe, client_tool_execution,
+       inspect_result, design_soundness_test, interpret_soundness_evidence,
+       review_outcome, approve_high_risk, block_action,
+       generate_candidates, merge_candidates]
+    budgets:
+      max_iterations: 2
+      max_preflight_probes: 1
+      max_soundness_probes: 1
+      max_revisions: 1
+      max_depth: 2
+      max_fan_out: 3
+    nodes:
+      - id: ingress
+        label: Context intake
+        type: ingress
+        description: Goal, constraints, transcript, evidence, and exposed tool schemas enter one run.
+      - id: executor
+        label: Executor proposes
+        type: agent
+        agent: executor
+        capabilities: [propose_action, synthesize]
+      - id: policy_gate
+        label: Deterministic risk gate
+        type: policy
+        agent: governor
+        capabilities: [inspect_proposal, classify_risk]
+      - id: action_critic
+        label: Independent action critic
+        type: critic
+        agent: critic
+        capabilities: [review_action, propose_safe_probe]
+        config: {max_revisions: 1}
+      - id: preflight
+        label: Safe preflight
+        type: probe
+        agent: governor
+        capabilities: [inspect_proposal, classify_risk]
+        config: {safe_only: true, max_probes: 1}
+      - id: human_approval
+        label: Human approval
+        type: approval
+        agent: operator
+        capabilities: [approve_high_risk, block_action]
+      - id: action_released
+        label: Authorized release
+        type: checkpoint
+        agent: governor
+        capabilities: [release_action]
+      - id: client_tool
+        label: Client executes tool
+        type: tool
+        capabilities: [client_tool_execution]
+      - id: postcheck
+        label: Observable postcondition
+        type: postcheck
+        agent: governor
+        capabilities: [inspect_result]
+      - id: soundness_checker
+        label: Devise falsification test
+        type: checker
+        agent: soundness
+        capabilities: [design_soundness_test, interpret_soundness_evidence]
+        description: Attempts to disprove the claimed effect, then adds the observed result back into executor context.
+        config: {max_probes: 1, safe_only: true}
+      - id: soundness_probe
+        label: Independent check
+        type: probe
+        description: One bounded, deterministic read-only observation selected by the soundness checker.
+      - id: final_verifier
+        label: Final evidence review
+        type: verifier
+        agent: verifier
+        capabilities: [review_outcome]
+      - id: blocked
+        label: Action stopped
+        type: terminal
+        description: Policy, critic, or operator denied the proposed effect.
+      - id: completed
+        label: Verified completion
+        type: terminal
+        description: The final response passed evidence-aware verification.
+    edges:
+      - {source: ingress, target: executor}
+      - {source: executor, target: policy_gate, label: tool proposed, condition: has tool calls}
+      - {source: executor, target: final_verifier, label: final text, condition: no tool calls}
+      - {source: policy_gate, target: action_released, label: low risk, condition: deterministic approval}
+      - {source: policy_gate, target: action_critic, label: uncertain, condition: medium or high risk}
+      - {source: policy_gate, target: blocked, label: hard deny, condition: invalid or forbidden}
+      - {source: action_critic, target: action_released, label: approve, condition: policy permits}
+      - {source: action_critic, target: preflight, label: probe, condition: safe evidence needed}
+      - {source: action_critic, target: human_approval, label: escalate, condition: irreversible or ambiguous}
+      - {source: action_critic, target: blocked, label: block, condition: concrete objection}
+      - {source: preflight, target: action_critic, label: evidence, condition: probe result, loop: true}
+      - {source: preflight, target: action_released, label: pass, condition: deterministic preflight passes}
+      - {source: preflight, target: blocked, label: fail, condition: preflight fails}
+      - {source: human_approval, target: action_released, label: approve, condition: explicit operator approval}
+      - {source: human_approval, target: blocked, label: deny, condition: operator denial}
+      - {source: action_released, target: client_tool}
+      - {source: client_tool, target: postcheck}
+      - {source: postcheck, target: executor, label: deterministic result, condition: low risk or explicit failure, loop: true}
+      - {source: postcheck, target: soundness_checker, label: test the claim, condition: meaningful action passed}
+      - {source: soundness_checker, target: soundness_probe, label: run test, condition: independent evidence needed}
+      - {source: soundness_probe, target: soundness_checker, label: observed evidence, condition: one probe result, loop: true}
+      - {source: soundness_checker, target: executor, label: add learning, condition: accept or recover, loop: true}
+      - {source: final_verifier, target: executor, label: bounded repair, condition: failed review, loop: true}
+      - {source: final_verifier, target: completed, label: pass, condition: verified}
+
+  - id: durable_locked_job
+    version: 1
+    label: Locked durable job lifecycle
+    description: Backend-neutral long-running process control, pinned by trusted configuration to GCE for this deployment.
+    entry: job_request
+    capabilities:
+      [verify_execution_lock, start_locked_process, watch_locked_process,
+       signal_owned_process, collect_job_evidence]
+    budgets:
+      max_iterations: 240
+      max_depth: 1
+      max_fan_out: 2
+      max_watch_seconds: 60
+    nodes:
+      - id: job_request
+        label: Durable work requested
+        type: ingress
+        description: A governed action requests long-running work without supplying a backend or target selector.
+      - id: execution_lock
+        label: Verify backend lock
+        type: policy
+        agent: execution_controller
+        capabilities: [verify_execution_lock]
+        description: Re-checks the immutable adapter name, exact target descriptor, and boundary fingerprint.
+      - id: durable_start
+        label: Start remote process
+        type: tool
+        agent: execution_controller
+        capabilities: [start_locked_process]
+        description: Creates an owned job envelope and returns immediately with a durable job identifier.
+      - id: change_watch
+        label: Watch for change
+        type: checkpoint
+        agent: execution_controller
+        capabilities: [watch_locked_process]
+        description: Waits inside the tool boundary for output or state change, then advances byte cursors without spending model turns.
+      - id: exact_signal
+        label: Signal owned group
+        type: tool
+        agent: execution_controller
+        capabilities: [signal_owned_process]
+        description: Signals only the process group proven to belong to this durable job.
+      - id: evidence_collect
+        label: Collect terminal evidence
+        type: postcheck
+        agent: execution_controller
+        capabilities: [collect_job_evidence]
+        description: Preserves bounded remaining logs, exit state, heartbeat, and artifact manifest.
+      - id: job_blocked
+        label: Spawn refused
+        type: terminal
+        description: The backend lock, target identity, schema, or ownership check failed closed.
+      - id: job_complete
+        label: Evidence preserved
+        type: terminal
+        description: The workload reached a terminal state and its evidence is addressable by durable job id.
+    edges:
+      - {source: job_request, target: execution_lock, label: authorize boundary}
+      - {source: execution_lock, target: durable_start, label: exact match, condition: adapter and target fingerprint match}
+      - {source: execution_lock, target: job_blocked, label: mismatch, condition: backend or target differs}
+      - {source: durable_start, target: change_watch, label: started, condition: durable job id returned}
+      - {source: durable_start, target: job_blocked, label: launch failed, condition: no remote process ownership established}
+      - {source: change_watch, target: change_watch, label: continue, condition: output changed and process remains live, loop: true}
+      - {source: change_watch, target: exact_signal, label: cancel, condition: governed interrupt or timeout requested}
+      - {source: change_watch, target: evidence_collect, label: terminal, condition: completed, failed, or lost}
+      - {source: exact_signal, target: change_watch, label: observe exit, condition: exact owned group signaled, loop: true}
+      - {source: evidence_collect, target: job_complete, label: preserved, condition: logs and state recorded}

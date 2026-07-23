@@ -1,0 +1,51 @@
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+[direct-vm] completion=1 decision=final
+[llm-super] ⚠ new-conversation gate — NO model was called and nothing was spent.
+
+This request would start a NEW supervised conversation (session 2950406223eb, strategy single, budget $0.50/task). Conversations are identified by their FIRST user message — a client that rewrites or annotates it silently starts a separate conversation each time.
+
+To proceed, resend or simply continue: the next message in this conversation runs normally. In-band commands never need confirmation and never call a model — !help lists them; !gate off disables this warning.
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8): Bad file descriptor
+[direct-vm] completion=1 decision=tool_calls count=1
+[direct-vm] tool_step=1 tool=run_on_authorized_gce_vm command=sqlite3 /tmp/llm-super-agent/phoenix-ledger/ledger.db <quoted> 2>&1; echo <redacted-output>
+[direct-vm] tool_step=1 result ok=true exit=0 timed_out=false
+[direct-vm] completion=2 decision=tool_calls count=1
+[direct-vm] tool_step=2 tool=run_on_authorized_gce_vm command=sqlite3 /tmp/llm-super-agent/phoenix-ledger/ledger.db <quoted> 2>&1; echo <redacted-output>
+[direct-vm] tool_step=2 result ok=true exit=0 timed_out=false
+[direct-vm] completion=3 decision=final
+```json
+{
+  "accepted": false,
+  "health_claim": "database is NOT at schema version 2",
+  "actual_user_version": 1,
+  "columns": ["id", "account", "amount_cents", "memo", "created_at"],
+  "row_count": 1521,
+  "reason": "PRAGMA user_version returns 1, not 2. The entries table has only 5 columns (id, account, amount_cents, memo, created_at) — it is missing both required version-2 columns: 'currency' and 'entry_hash'."
+}
+```
