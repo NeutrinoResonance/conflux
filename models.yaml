@@ -177,6 +177,19 @@ admin:
   # any dashboard once with ?token=<token> to set the session cookie.
   token: ""
 
+summaries:
+  # Incremental (non-invoked) summary generation. DISABLED by default: each
+  # run invokes the local Claude CLI and spends model budget. When enabled,
+  # the server periodically fills missing step/message summaries with the
+  # same resumable backfills as `llm-super summarize-steps/-history`; every
+  # run (manual or incremental) is recorded in the durable summary_jobs
+  # ledger (GET /admin/summary-jobs).
+  incremental: false
+  interval_s: 600
+  message_model: sonnet
+  step_model: haiku
+  max_budget_usd: 0.75
+
 execution:
   # Generated/model-authored code is fail-closed to GCE. "off" is the only
   # runtime override that bypasses the lock because it spawns no process.

@@ -94,6 +94,23 @@ class AdminAuth:
 
 
 @dataclass(frozen=True)
+class Summaries:
+    """Incremental summary generation. DISABLED by default: each run invokes
+    the local Claude CLI and spends real model budget, so turning it on is an
+    explicit operator choice. When enabled, the server periodically runs the
+    same resumable message/step backfills the CLI commands use, and every
+    run — manual or incremental — is recorded in the durable summary_jobs
+    ledger."""
+    incremental: bool = False
+    interval_s: float = 600.0
+    message_model: str = "sonnet"
+    step_model: str = "haiku"
+    max_budget_usd: float = 0.75
+    batch_size: int = 8
+    batch_chars: int = 40_000
+
+
+@dataclass(frozen=True)
 class Supervision:
     score_scale: int = 20
     pass_threshold: float = 0.70
@@ -121,6 +138,7 @@ class Config:
     supervision: Supervision
     execution: Execution
     admin: AdminAuth = field(default_factory=AdminAuth)
+    summaries: Summaries = field(default_factory=Summaries)
     learned_routing: bool = True
     min_routing_samples: int = 5
     referee: str = ""              # large model that picks repair strategies
@@ -231,6 +249,7 @@ def load(path: str | Path = "models.yaml") -> Config:
         supervision=sup,
         execution=execution,
         admin=admin,
+        summaries=Summaries(**(raw.get("summaries", {}) or {})),
         learned_routing=bool(routing.get("learned", True)),
         min_routing_samples=int(routing.get("min_samples", 5)),
         referee=str(routing.get("referee", "")),

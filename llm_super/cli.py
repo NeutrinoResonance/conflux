@@ -150,11 +150,13 @@ def main() -> None:
     elif args.cmd == "summarize-history":
         import sys
 
-        from . import message_summaries
+        from . import message_summaries, summary_jobs
 
         try:
-            result = message_summaries.backfill(
+            result = summary_jobs.run_summary_job(
                 args.db,
+                "messages",
+                trigger="manual",
                 model=args.model,
                 batch_chars=args.batch_chars,
                 batch_size=args.batch_size,
@@ -181,11 +183,13 @@ def main() -> None:
     elif args.cmd == "summarize-steps":
         import sys
 
-        from . import step_summary_backfill
+        from . import step_summary_backfill, summary_jobs
 
         try:
-            result = step_summary_backfill.backfill(
+            result = summary_jobs.run_summary_job(
                 args.db,
+                "steps",
+                trigger="manual",
                 model=args.model,
                 batch_chars=args.batch_chars,
                 batch_size=args.batch_size,

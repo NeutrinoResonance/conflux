@@ -25,6 +25,7 @@ from . import graph_ui, history_ui, ui, workspace_ui
 
 from . import balance as balance_mod
 from . import export as export_mod
+from . import summary_jobs
 from . import report as report_mod
 from . import retention
 from .checkpoint import Checkpoints
@@ -121,9 +122,51 @@ async def lifespan(app: FastAPI):
                 pass  # retention must never take the proxy down
             await asyncio.sleep(3600)
 
-    task = asyncio.create_task(retention_loop())
+    async def incremental_summary_loop():
+        """Non-invoked summary generation for newly captured steps/messages.
+
+        Opt-in (summaries.incremental): each cycle checks pending counts
+        cheaply, then runs the same resumable backfills the CLI commands
+        use. Every run lands in the durable summary_jobs ledger; failures
+        are recorded there and must never take the proxy down.
+        """
+        summaries_cfg = cfg.summaries
+        while True:
+            await asyncio.sleep(summaries_cfg.interval_s)
+            try:
+                pending = await asyncio.to_thread(
+                    summary_jobs.pending_counts, trace_path)
+                for scope, model in (
+                    ("steps", summaries_cfg.step_model),
+                    ("messages", summaries_cfg.message_model),
+                ):
+                    if not pending.get(scope):
+                        continue
+                    result = await asyncio.to_thread(
+                        lambda scope=scope, model=model: summary_jobs.run_summary_job(
+                            trace_path, scope, trigger="incremental",
+                            model=model,
+                            batch_size=summaries_cfg.batch_size,
+                            batch_chars=summaries_cfg.batch_chars,
+                            max_budget_usd=summaries_cfg.max_budget_usd,
+                        )
+                    )
+                    trace.record(
+                        "-", "-", "summary_job", scope=scope,
+                        trigger="incremental",
+                        generated=result.get("generated", 0),
+                        job_id=result.get("job_id"),
+                        cost_usd_reported=result.get("cost_usd", 0.0),
+                    )
+            except Exception:
+                pass  # the failed run is recorded in summary_jobs
+
+    tasks = [asyncio.create_task(retention_loop())]
+    if cfg.summaries.incremental:
+        tasks.append(asyncio.create_task(incremental_summary_loop()))
     yield
-    task.cancel()
+    for task in tasks:
+        task.cancel()
     await client.aclose()
 
 
@@ -1875,6 +1918,12 @@ async def admin_events_stream(request: Request, after_id: int = -1):
     return StreamingResponse(gen(), media_type="text/event-stream", headers={
         "Cache-Control": "no-cache", "X-Accel-Buffering": "no",
     })
+
+
+@app.get("/admin/summary-jobs")
+async def admin_summary_jobs(limit: int = 50):
+    """Durable per-run summary-generation job ledger (manual + incremental)."""
+    return {"items": summary_jobs.list_jobs(state["trace_path"], limit=limit)}
 
 
 @app.get("/admin/stats")
