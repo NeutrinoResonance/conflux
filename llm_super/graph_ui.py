@@ -8,24 +8,9 @@ PAGE = r"""<!doctype html>
 <title>Agent Graphs · llm-super</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23111318'/%3E%3Cpath d='M8 19c3-8 13-8 16 0M10 13h12' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
-:root {
-  color-scheme: light;
-  --bg:#f4f5f7; --panel:#fbfbfc; --panel-2:#f7f8fa; --ink:#111318;
-  --ink-2:#4b515c; --muted:#858b96; --line:#dfe2e7; --line-2:#cbd0d8;
-  --blue:#356df3; --blue-soft:#e8efff; --green:#13885a; --green-soft:#e3f5ed;
-  --amber:#ad6b05; --amber-soft:#fff1d6; --red:#c33d49; --red-soft:#fde8ea;
-  --violet:#7653d6; --shadow:0 12px 36px rgba(19,27,43,.07);
-  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-}
-@media (prefers-color-scheme: dark) {
-  :root { color-scheme:dark; --bg:#0d0f12; --panel:#15181d; --panel-2:#111419;
-    --ink:#f5f7fa; --ink-2:#bbc0c9; --muted:#777e89; --line:#292e36;
-    --line-2:#3a414c; --blue:#6b93ff; --blue-soft:#182542; --green:#48c892;
-    --green-soft:#123226; --amber:#e4a847; --amber-soft:#362912; --red:#ef707c;
-    --red-soft:#3a1b20; --violet:#a98afb; --shadow:0 18px 50px rgba(0,0,0,.28); }
-}
+/*__DESIGN_TOKENS__*/
 *{box-sizing:border-box} html,body{height:100%;overflow:hidden} body{margin:0;background:var(--bg);color:var(--ink);
- font:13px/1.45 Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+ font:13px/1.45 var(--ds-font-ui)}
 button,select,input,textarea{font:inherit;color:inherit} button{cursor:pointer}
 .app{height:100vh;min-height:0;display:grid;grid-template-rows:62px minmax(0,1fr)}
 header{height:62px;display:flex;align-items:center;gap:22px;padding:0 22px;
@@ -285,3 +270,7 @@ live.onerror=()=>queueRefresh(2000);
 setInterval(refresh,30000);
 </script>
 </body></html>"""
+
+from .design_tokens import apply as _apply_design_tokens
+
+PAGE = _apply_design_tokens(PAGE, 'graphs')

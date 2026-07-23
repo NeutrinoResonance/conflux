@@ -11,58 +11,11 @@ PAGE = r"""<!doctype html>
 <title>llm-super control plane</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛰️</text></svg>">
 <style>
-:root {
-  color-scheme: light;
-  --page:      #f9f9f7;
-  --surface:   #fcfcfb;
-  --ink:       #0b0b0b;
-  --ink-2:     #52514e;
-  --muted:     #898781;
-  --grid:      #e1e0d9;
-  --baseline:  #c3c2b7;
-  --border:    rgba(11,11,11,0.10);
-  --seq:       #2a78d6;   /* single-hue magnitude (score bars) */
-  --seq-track: #e1e0d9;
-  --good:      #0ca30c;
-  --good-text: #006300;
-  --warning:   #fab219;
-  --serious:   #ec835a;
-  --critical:  #d03b3b;
-}
-@media (prefers-color-scheme: dark) {
-  :root:where(:not([data-theme="light"])) {
-    color-scheme: dark;
-    --page:      #0d0d0d;
-    --surface:   #1a1a19;
-    --ink:       #ffffff;
-    --ink-2:     #c3c2b7;
-    --muted:     #898781;
-    --grid:      #2c2c2a;
-    --baseline:  #383835;
-    --border:    rgba(255,255,255,0.10);
-    --seq:       #3987e5;
-    --seq-track: #2c2c2a;
-    --good-text: #0ca30c;
-  }
-}
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --page:      #0d0d0d;
-  --surface:   #1a1a19;
-  --ink:       #ffffff;
-  --ink-2:     #c3c2b7;
-  --muted:     #898781;
-  --grid:      #2c2c2a;
-  --baseline:  #383835;
-  --border:    rgba(255,255,255,0.10);
-  --seq:       #3987e5;
-  --seq-track: #2c2c2a;
-  --good-text: #0ca30c;
-}
+/*__DESIGN_TOKENS__*/
 * { box-sizing: border-box; }
 body {
   margin: 0; background: var(--page); color: var(--ink);
-  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 14px/1.45 var(--ds-font-ui);
 }
 /* wide cap: the conversation tree needs the room on big displays */
 main { max-width: 1560px; margin: 0 auto; padding: 20px 20px 60px; }
@@ -2008,3 +1961,7 @@ setInterval(refresh, 30000);
 </body>
 </html>
 """
+
+from .design_tokens import apply as _apply_design_tokens
+
+PAGE = _apply_design_tokens(PAGE, 'live')

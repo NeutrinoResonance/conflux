@@ -13,50 +13,7 @@ PAGE = r"""<!doctype html>
 <title>History · llm-super</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛰️</text></svg>">
 <style>
-:root {
-  color-scheme: light;
-  --page: #f6f6f2;
-  --surface: #fff;
-  --surface-2: #f0f1ed;
-  --ink: #151613;
-  --ink-2: #565952;
-  --muted: #7b7e76;
-  --line: #d9dbd3;
-  --line-2: #c8cbc1;
-  --accent: #225fba;
-  --accent-soft: #e8f0fc;
-  --good: #18723a;
-  --good-soft: #e7f5eb;
-  --warn: #8a5a00;
-  --warn-soft: #fff2d1;
-  --bad: #a62d2d;
-  --bad-soft: #fae9e7;
-  --unknown: #62655e;
-  --shadow: 0 12px 40px rgba(26, 31, 23, .08);
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --page: #111310;
-    --surface: #191c18;
-    --surface-2: #222620;
-    --ink: #f3f5ef;
-    --ink-2: #c4c8bd;
-    --muted: #94998e;
-    --line: #343931;
-    --line-2: #484e44;
-    --accent: #81aef0;
-    --accent-soft: #192c49;
-    --good: #72ce8d;
-    --good-soft: #173421;
-    --warn: #e3b557;
-    --warn-soft: #3d3014;
-    --bad: #f08780;
-    --bad-soft: #421f1c;
-    --unknown: #aeb3a8;
-    --shadow: none;
-  }
-}
+/*__DESIGN_TOKENS__*/
 * { box-sizing: border-box; }
 html { min-height: 100%; }
 body {
@@ -64,7 +21,7 @@ body {
   min-height: 100%;
   background: var(--page);
   color: var(--ink);
-  font: 14px/1.48 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 14px/1.48 var(--ds-font-ui);
 }
 button, input, select { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
@@ -1437,3 +1394,7 @@ loadEndeavors();
 </body>
 </html>
 """
+
+from .design_tokens import apply as _apply_design_tokens
+
+PAGE = _apply_design_tokens(PAGE, 'history')

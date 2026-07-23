@@ -67,7 +67,11 @@ class GraphUIContractTests(unittest.TestCase):
         self.assertIn('function chooseJob(id)', page)
         self.assertIn('prefers-reduced-motion:reduce', page)
         self.assertIn('aria-live="polite"', page)
-        self.assertIn('setInterval(refresh,2000)', page)
+        # Live updates ride the trace-fed SSE channel; the interval is only
+        # a 30s safety net (the 2s full-refetch polling is gone).
+        self.assertIn('new EventSource("/admin/events/stream")', page)
+        self.assertIn('setInterval(refresh,30000)', page)
+        self.assertNotIn('setInterval(refresh,2000)', page)
 
     def test_graph_workspace_contains_intrinsic_size_and_reveals_runtime_focus(self) -> None:
         page = graph_ui.PAGE
