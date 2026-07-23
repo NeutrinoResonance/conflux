@@ -128,6 +128,13 @@ class Supervision:
     max_repairs: int = 2
     max_output_tokens: int = 16384  # executor completion budget; reasoning
     # models can burn 8k on thought alone and return an EMPTY answer
+    # Streaming supervised turns surface live supervisor progress instead of
+    # blind keepalives: "comments" (default) emits SSE comment lines — every
+    # OpenAI-compatible client ignores them, so message content is untouched;
+    # "content" emits visible "[llm-super] …" delta lines (SPEC §7.2 in-band
+    # notices — opt-in because they become part of the assistant message);
+    # "off" restores plain keepalives.
+    stream_status: str = "comments"
     confirm_new_sessions: bool = True  # ingress gate: first message of an
     # unknown conversation gets a no-model-call warning; continuing confirms
     budget_usd_per_task: float = 0.50

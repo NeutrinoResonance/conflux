@@ -17,6 +17,7 @@ import sys
 import time
 import uuid
 from contextlib import asynccontextmanager
+from typing import Any, Mapping
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
@@ -407,6 +408,66 @@ def _sse(text: str, model: str):
     return StreamingResponse(gen(), media_type="text/event-stream")
 
 
+def _status_line(event: Mapping[str, Any]) -> str | None:
+    """One human-readable supervisor progress line per meaningful event.
+
+    Returns None for kinds that are noise at client granularity. Lines are
+    short and self-contained — they may surface inside a terminal client.
+    """
+    kind = str(event.get("kind") or "")
+    data = event.get("data") or {}
+    if not isinstance(data, Mapping):
+        data = {}
+    model = event.get("model") or ""
+    if kind == "contract":
+        return "contract extracted"
+    if kind == "difficulty_route":
+        return f"routed as {data.get('difficulty', 'routine')}"
+    if kind == "plan":
+        units = data.get("units")
+        return f"planned {units} units" if units else "task planned"
+    if kind == "execute":
+        return f"executing on {model}" if model else "executing"
+    if kind == "execute_code":
+        return "running generated code in the sandbox"
+    if kind == "verify":
+        score = data.get("score")
+        try:
+            return (f"verified {float(score):.2f} by {model}"
+                    if score is not None else f"verifying with {model}")
+        except (TypeError, ValueError):
+            return f"verifying with {model}"
+    if kind == "verify_error":
+        return "verifier unavailable; failing over"
+    if kind == "executor_error":
+        return "provider error; failing over"
+    if kind == "executor_fallback":
+        return f"failing over to {model}" if model else "failing over"
+    if kind == "referee":
+        strategy = data.get("strategy")
+        return f"referee chose {strategy}" if strategy else "referee engaged"
+    if kind == "synthesis":
+        return "synthesizing unit results"
+    if kind == "ensemble_start":
+        return f"launching {data.get('n', '')} candidates".replace("  ", " ")
+    if kind == "ensemble_candidate":
+        return f"candidate from {model}" if model else "candidate ready"
+    if kind == "ensemble_winner":
+        return f"selected {model}" if model else "candidate selected"
+    if kind == "unit_done":
+        return "unit complete"
+    if kind == "wave_start":
+        return "starting parallel unit wave"
+    if kind == "breakpoint":
+        return "breakpoint hit — paused"
+    if kind == "fm_event":
+        fm = event.get("fm_id")
+        return f"monitor flagged {fm}" if fm else None
+    if kind == "budget_stop":
+        return "budget cap reached — checkpointed"
+    return None
+
+
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
     body = await request.json()
@@ -603,22 +664,70 @@ async def chat_completions(request: Request):
     )
 
     async def gen():
+        # Live supervisor progress: subscribe to this session's trace events
+        # on the write path and surface each meaningful stage as a status
+        # line, instead of leaving the client silent between keepalives.
+        status_mode = getattr(cfg.supervision, "stream_status", "comments")
+        status_queue: asyncio.Queue = asyncio.Queue(maxsize=200)
+        loop = asyncio.get_running_loop()
+        trace_obj = state.get("trace")
+
+        def on_event(event: dict) -> None:
+            if event.get("session") != session:
+                return
+            def push() -> None:
+                try:
+                    status_queue.put_nowait(event)
+                except asyncio.QueueFull:
+                    pass
+            loop.call_soon_threadsafe(push)
+
+        subscribed = (status_mode != "off"
+                      and hasattr(trace_obj, "add_listener"))
+        if subscribed:
+            trace_obj.add_listener(on_event)
+
+        def status_payloads() -> list[str]:
+            out = []
+            while True:
+                try:
+                    event = status_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    return out
+                line = _status_line(event)
+                if not line:
+                    continue
+                if status_mode == "content":
+                    out.append(chunk({"content": f"[llm-super] {line}\n"}))
+                else:
+                    out.append(f": [llm-super] {line}\n\n")
+
         task = asyncio.create_task(state["orch"].run_turn(session, messages))
         start = time.monotonic()
+        last_signal = time.monotonic()
         report = None
         yield chunk({"role": "assistant"})
-        while True:
-            done, _ = await asyncio.wait({task}, timeout=15.0)
-            if done:
-                break
-            if time.monotonic() - start > timeout:
-                task.cancel()
-                yield chunk({"content": f"[llm-super] turn exceeded the "
-                             f"{timeout:.0f}s wall-clock limit and was stopped"})
-                yield chunk({}, "stop")
-                yield "data: [DONE]\n\n"
-                return
-            yield ": keepalive\n\n"
+        try:
+            while True:
+                done, _ = await asyncio.wait({task}, timeout=1.0)
+                for payload in status_payloads():
+                    last_signal = time.monotonic()
+                    yield payload
+                if done:
+                    break
+                if time.monotonic() - start > timeout:
+                    task.cancel()
+                    yield chunk({"content": f"[llm-super] turn exceeded the "
+                                 f"{timeout:.0f}s wall-clock limit and was stopped"})
+                    yield chunk({}, "stop")
+                    yield "data: [DONE]\n\n"
+                    return
+                if time.monotonic() - last_signal >= 15.0:
+                    last_signal = time.monotonic()
+                    yield ": keepalive\n\n"
+        finally:
+            if subscribed:
+                trace_obj.remove_listener(on_event)
         try:
             report = task.result()
             text = render(report)
