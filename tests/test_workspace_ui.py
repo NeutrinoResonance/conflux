@@ -232,5 +232,25 @@ class WorkspaceUIContractTests(unittest.TestCase):
             self.assertIn('href="/workspace">Workspace</a>', page)
 
 
+    def test_thread_view_is_the_default_with_graph_as_a_toggle(self) -> None:
+        page = workspace_ui.PAGE
+        self.assertIn('id="transcript"', page)
+        self.assertIn('id="viewThread"', page)
+        self.assertIn('id="viewGraph"', page)
+        self.assertIn('id="viewport" hidden', page)
+        self.assertIn(',view:"thread"};', page)
+        self.assertIn("function renderTranscript()", page)
+        self.assertIn("function transmissionMarkup(", page)
+        self.assertIn("function threadTraceMarkup(", page)
+        self.assertIn("data-thread-node", page)
+        self.assertIn("data-thread-workflow-node", page)
+        self.assertIn("OPERATOR", page)
+        self.assertIn("LLM—SUPER", page)
+        # thread transcript renders full markdown, not the truncated preview
+        self.assertIn("copyText?rich(copyText)", page)
+        # live updates re-render the transcript alongside the graph
+        self.assertIn("renderGraph();wireNodeDrag();renderTranscript();", page)
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
