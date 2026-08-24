@@ -94,7 +94,7 @@ button {
   cursor: pointer;
 }
 button:hover { border-color: var(--accent); }
-button.primary { background: var(--accent); border-color: var(--accent); color: white; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--ds-accent-ink); }
 button.quiet { border-color: transparent; background: transparent; color: var(--ink-2); }
 button:disabled { cursor: default; opacity: .5; }
 .shell {

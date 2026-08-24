@@ -23,7 +23,7 @@ h1 { font-size: 18px; margin: 0 0 2px; }
 .sub { color: var(--muted); font-size: 12px; margin-bottom: 16px; }
 .livedot { display: inline-block; width: 8px; height: 8px; 
   background: var(--muted); vertical-align: baseline; }
-.livedot.on { background: var(--ok, #2e9e44); }
+.livedot.on { background: var(--ok, #4c7a33); }
 .topnav { display: flex; gap: 4px; margin: 8px 0 14px; }
 .topnav a { color: var(--ink-2); text-decoration: none; font-size: 12px;
   padding: 4px 9px;  }
@@ -52,8 +52,8 @@ button {
   font: inherit; padding: 5px 14px;  cursor: pointer;
   border: 1px solid var(--baseline); background: var(--surface); color: var(--ink);
 }
-button.primary { background: var(--seq); border-color: var(--seq); color: #fff; }
-button.danger  { background: var(--critical); border-color: var(--critical); color: #fff; }
+button.primary { background: var(--seq); border-color: var(--seq); color: var(--ds-accent-ink); }
+button.danger  { background: var(--critical); border-color: var(--critical); color: var(--ds-accent-ink); }
 .badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px;
          padding: 1px 8px;  border: 1px solid var(--border);
          color: var(--ink-2); background: var(--surface); white-space: nowrap; }
@@ -283,8 +283,8 @@ tr:last-child td { border-bottom: none; }
 .gnode .gaccent { fill: var(--task-hue, var(--grid)); }
 .gnode text { fill: var(--ink); font-size: 11.5px; font-weight: 600; }
 .gnode text.gsub { fill: var(--ink-2); font-size: 10px; font-weight: 400; }
-.gnode.ok .gbox { stroke: var(--ok, #3fb950); }
-.gnode.err .gbox { stroke: var(--crit, #f85149); }
+.gnode.ok .gbox { stroke: var(--ok, #4c7a33); }
+.gnode.err .gbox { stroke: var(--crit, #a1493a); }
 .gnode.cancelled { opacity: .38; }
 .gnode.cancelled .gbox { stroke-dasharray: 4 3; }
 .gnode.pending { opacity: .55; }
@@ -298,7 +298,7 @@ tr:last-child td { border-bottom: none; }
                  to   { opacity: 1; transform: none; } }
 .gedge { fill: none; stroke: var(--grid); stroke-width: 1.4;
   transition: stroke .4s; }
-.gedge.ok { stroke: var(--ok, #3fb950); stroke-opacity: .65; }
+.gedge.ok { stroke: var(--ok, #4c7a33); stroke-opacity: .65; }
 .gedge.active { stroke: var(--seq); stroke-dasharray: 6 5;
   animation: gflow 1s linear infinite; }
 @keyframes gflow { to { stroke-dashoffset: -11; } }
