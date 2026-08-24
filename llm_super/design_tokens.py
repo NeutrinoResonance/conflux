@@ -7,68 +7,78 @@ defined here as aliases of the canonical ``--ds-*`` tokens — so light/dark
 values, type stacks, and status colors are changed in exactly one place and
 the four dashboards stop drifting apart.
 
-Rules (history-ui-redesign §10): neutral surfaces; one accent; status is
-icon + text + color with red reserved for unrecovered errors, amber for
-warnings/recovered, green for proven success; monospace only for IDs,
-commands, paths, hashes, and raw payloads.
+Design language ("codec console", after the conversation-tree mockup):
+warm-charcoal surfaces, one moss-green accent, sand for warnings, clay for
+errors, water/violet as auxiliary hues. Geometry is strictly rectilinear —
+no rounded corners, no pills, no chevron arrowheads; squares and straight
+lines only. Chrome and labels are monospace; long-form message prose uses
+the ``font-prose`` sans stack.
 
-Workspace note: the workspace is deliberately a dark terminal-style surface
-and still contains hardcoded dark hexes, so it pins the dark token values
-instead of following the OS theme. Migrating it to theme-following is the
-remaining step; its palette already comes from this file.
+Rules (history-ui-redesign §10, adapted): neutral surfaces; one accent;
+status is icon + text + color with clay reserved for unrecovered errors,
+sand for warnings/recovered, moss for proven success; prose sans only for
+rendered message bodies.
+
+Workspace note: the workspace is deliberately a dark terminal-style surface,
+so it pins the dark token values instead of following the OS theme.
 """
 
 from __future__ import annotations
 
 # Canonical token values. Keys become `--ds-<key>` custom properties.
 LIGHT: dict[str, str] = {
-    "page": "#f6f6f2",
-    "surface": "#fdfdfc",
-    "surface-2": "#f0f1ed",
-    "ink": "#151613",
-    "ink-2": "#565952",
-    "muted": "#7b7e76",
-    "line": "#d9dbd3",
-    "line-2": "#c8cbc1",
-    "accent": "#225fba",
-    "accent-soft": "#e8f0fc",
-    "ok": "#18723a",
-    "ok-soft": "#e7f5eb",
-    "warn": "#8a5a00",
-    "warn-soft": "#fff2d1",
-    "err": "#a62d2d",
-    "err-soft": "#fae9e7",
-    "violet": "#7653d6",
-    "cyan": "#0e7d97",
-    "unknown": "#62655e",
-    "shadow": "0 12px 40px rgba(26, 31, 23, .08)",
-    "font-ui": ("Inter, ui-sans-serif, system-ui, -apple-system, "
-                "'Segoe UI', sans-serif"),
-    "font-mono": "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+    "page": "#e9e9e3",
+    "surface": "#f4f4ef",
+    "surface-2": "#dedfd7",
+    "ink": "#1b1d19",
+    "ink-2": "#4c4f48",
+    "muted": "#70746e",
+    "line": "#c6c8bf",
+    "line-2": "#adb0a5",
+    "accent": "#5c7a35",
+    "accent-ink": "#f4f6ee",
+    "accent-soft": "#e3ead2",
+    "ok": "#4c7a33",
+    "ok-soft": "#e2ecd6",
+    "warn": "#96702f",
+    "warn-soft": "#f0e6cf",
+    "err": "#a1493a",
+    "err-soft": "#f2ddd7",
+    "violet": "#6b5a91",
+    "cyan": "#3f7a75",
+    "unknown": "#70746e",
+    "shadow": "0 10px 30px rgba(27, 29, 25, .10)",
+    "font-ui": ("ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "
+                "'Liberation Mono', monospace"),
+    "font-mono": ("ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "
+                  "'Liberation Mono', monospace"),
+    "font-prose": ("ui-sans-serif, system-ui, -apple-system, "
+                   "'Helvetica Neue', Arial, sans-serif"),
 }
 
 DARK: dict[str, str] = {
     **LIGHT,
-    "page": "#111310",
-    "surface": "#191c18",
-    "surface-2": "#222620",
-    "ink": "#f3f5ef",
-    "ink-2": "#c4c8bd",
-    "muted": "#94998e",
-    "line": "#343931",
-    "line-2": "#484e44",
-    "accent": "#81aef0",
-    "accent-soft": "#192c49",
-    "ok": "#72ce8d",
-    "ok-soft": "#173421",
-    "warn": "#e3b557",
-    "warn-soft": "#3d3014",
-    "err": "#f08780",
-    "err-soft": "#421f1c",
-    "violet": "#a98afb",
-    "cyan": "#55d5e8",
+    "page": "#08090a",
+    "surface": "#17191c",
+    "surface-2": "#1d2024",
+    "ink": "#e4e4df",
+    "ink-2": "#a1a29e",
+    "muted": "#696c6d",
+    "line": "#26292c",
+    "line-2": "#34383b",
+    "accent": "#a9c878",
+    "accent-ink": "#151a0e",
+    "accent-soft": "#222a1c",
+    "ok": "#91aa6b",
+    "ok-soft": "#1d2418",
+    "warn": "#c4a474",
+    "warn-soft": "#2a241a",
+    "err": "#c47f70",
+    "err-soft": "#2a1d1a",
+    "violet": "#988ab5",
+    "cyan": "#73a6a1",
     "unknown": "#9a9e94",
-    "shadow": "0 18px 50px rgba(0, 0, 0, .28)",
+    "shadow": "0 14px 40px rgba(0, 0, 0, .5)",
 }
 
 # Legacy variable names per app, defined in terms of the canonical tokens.
