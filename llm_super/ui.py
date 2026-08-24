@@ -554,7 +554,7 @@ function fmBadge(id) { return `<span class="badge fm" title="${esc(fmTitle(id))}
 function hueFor(id) {
   let h = 0;
   for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) % 360;
-  return `hsl(${h} 60% 52%)`;
+  return `hsl(${h} 24% 55%)`;
 }
 
 // New records carry three deliberately different summary layers.  Keep the
