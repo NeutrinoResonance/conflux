@@ -238,7 +238,7 @@ class WorkspaceUIContractTests(unittest.TestCase):
         self.assertIn('id="viewThread"', page)
         self.assertIn('id="viewGraph"', page)
         self.assertIn('id="viewport" hidden', page)
-        self.assertIn(',view:"thread"};', page)
+        self.assertIn(',view:"thread",threadTraceOpen:{}', page)
         self.assertIn("function renderTranscript()", page)
         self.assertIn("function transmissionMarkup(", page)
         self.assertIn("function threadTraceMarkup(", page)
@@ -250,6 +250,15 @@ class WorkspaceUIContractTests(unittest.TestCase):
         self.assertIn("copyText?rich(copyText)", page)
         # live updates re-render the transcript alongside the graph
         self.assertIn("renderGraph();wireNodeDrag();renderTranscript();", page)
+        # the trace is an execution trace: observed stages, inline recorded IO
+        self.assertIn("Execution trace ·", page)
+        self.assertIn("function threadStageDetail(", page)
+        self.assertIn("Input — what this stage received", page)
+        self.assertIn("Output — what it produced", page)
+        self.assertIn("data-thread-trace-idle", page)
+        self.assertIn("data-trace-open-run", page)
+        self.assertIn('if(status==="idle"&&!showIdle)return"";', page)
+        self.assertIn("if(open)loadWorkflowExecution(instance);", page)
 
 
 if __name__ == "__main__":  # pragma: no cover
