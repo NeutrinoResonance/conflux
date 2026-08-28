@@ -2,6 +2,8 @@
 name = "llm-super"
 version = "0.1.0"
 description = "Ensemble supervisor for open-source LLMs: taxonomy-driven monitors, cross-model verification, human-interruptible orchestration"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.110",
