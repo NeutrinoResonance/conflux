@@ -137,6 +137,14 @@ class Supervision:
     stream_status: str = "comments"
     confirm_new_sessions: bool = True  # ingress gate: first message of an
     # unknown conversation gets a no-model-call warning; continuing confirms
+    # Legacy stateful /v1/chat/completions mode. OFF by default: the compat
+    # endpoint is a stateless "one supervised turn as a model" adapter —
+    # per-request session identity (or the explicit conversation header),
+    # no first-message-hash identity, no alias/!attach, no new-conversation
+    # gate, no in-band !commands, no transcript-diff edit bookkeeping.
+    # ON restores the old behavior for clients that depend on it; the
+    # workspace UI is unaffected either way.
+    stateful_chat_endpoint: bool = False
     budget_usd_per_task: float = 0.50
     trailer: bool = True
     turn_timeout_s: float = 1800.0

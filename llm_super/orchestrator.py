@@ -21,6 +21,8 @@ import asyncio
 import re
 
 from . import contract as contract_mod
+from . import flow_match
+from . import flow_synthesis
 from . import planner
 from . import referee
 from . import reqlog
@@ -270,6 +272,38 @@ class Orchestrator:
             tokens_out=result.tokens_out, cost_usd=result.cost_usd,
         )
         return title
+
+    def _declared_flow_catalog(self) -> list[dict]:
+        return [
+            {"id": flow.id, "label": flow.label, "description": flow.description}
+            for flow in self.flow_runtime.registry.flows.values()
+        ]
+
+    async def select_workspace_flow(self, task_text: str) -> dict:
+        """Match a prompt to one declared flow.
+
+        A plain utility-model completion with the deterministic keyword gate
+        as fallback — this call routes between vetted graphs and can never
+        author one, execute tools, or fail the turn (callers keep their
+        heuristic choice when it returns the same or errors).
+        """
+        flows = self._declared_flow_catalog()
+        choice = await flow_match.model_match(
+            self.client, self.cfg, task_text, flows
+        )
+        return choice or flow_match.heuristic_match(task_text, flows)
+
+    async def synthesize_workspace_flow(self, task_text: str) -> dict:
+        """Synthesize a per-message workflow graph from a prompt.
+
+        The model only proposes; the deterministic FlowSpec validator (node
+        types, agent references, capability clamps, loop budgets,
+        reachability, terminals) decides whether the graph is usable.
+        Raises ValueError when no valid graph can be produced.
+        """
+        return await flow_synthesis.synthesize(
+            self.client, self.cfg, task_text, self.flow_runtime.registry
+        )
 
     # ---------- durable executor call (fallback chain) ----------
 
@@ -782,7 +816,8 @@ class Orchestrator:
 
     # ---------- agentic (tool-carrying) turn ----------
 
-    async def run_tool_turn(self, session: str, body: dict) -> dict:
+    async def run_tool_turn(self, session: str, body: dict, *,
+                            stateless: bool = False) -> dict:
         """Supervision for agent clients (Hermes, OpenCode, …), whose
         requests carry tool definitions. Every proposed tool call crosses the
         durable action governor before it is released.  The governor may
@@ -801,7 +836,8 @@ class Orchestrator:
             self.trace.record(session, task_id, kind, **kw)
 
         reqlog.set_context(self.trace, session, task_id)
-        self._note_edit(session, messages, log)
+        if not stateless:
+            self._note_edit(session, messages, log)
         self.trace.record_exchange(session, task_id, "client_request", None, body)
         log("agent_turn", model=chain[0].name, task_preview=task_text[:200],
             n_messages=len(messages))
@@ -1163,6 +1199,7 @@ class Orchestrator:
         *,
         options: TurnOptions | None = None,
         event_hook: Callable[[str, dict[str, Any]], None] | None = None,
+        stateless: bool = False,
     ) -> TurnReport:
         task_id = uuid.uuid4().hex[:8]
         options = (options or TurnOptions()).normalized()
@@ -1190,7 +1227,8 @@ class Orchestrator:
                     pass
 
         reqlog.set_context(self.trace, session, task_id)
-        self._note_edit(session, messages, log)
+        if not stateless:
+            self._note_edit(session, messages, log)
         self.trace.record_exchange(session, task_id, "client_request", None,
                                    {"messages": messages})
         log("turn_start", model=executor_name, prompt_chars=len(task_text),
@@ -1199,13 +1237,15 @@ class Orchestrator:
                                  and not self.control.forced_executor) else "static")
 
         # 0. Cross-turn monitors over the reconstructed session trajectory
-        # (advisory: they observe the DRIVING agent's behavior across turns)
+        # (advisory: they observe the DRIVING agent's behavior across turns).
+        # A stateless turn has no trajectory to reconstruct: skip the reads.
         session_notes: list[str] = []
-        for ev in run_session_monitors(
-                self.history.recent_turns(session), task_text, len(messages)):
-            log("fm_event", fm_id=ev.fm_id, confidence=ev.confidence,
-                evidence=ev.evidence, scope="session")
-            session_notes.append(f"{ev.fm_id}: {ev.feedback}")
+        if not stateless:
+            for ev in run_session_monitors(
+                    self.history.recent_turns(session), task_text, len(messages)):
+                log("fm_event", fm_id=ev.fm_id, confidence=ev.confidence,
+                    evidence=ev.evidence, scope="session")
+                session_notes.append(f"{ev.fm_id}: {ev.feedback}")
 
         # 1. Contract extraction + difficulty classification, one utility
         # call (user-toggleable: !checklist on|off|skip)

@@ -31,7 +31,7 @@ def _config(*, budget: float = 0.50) -> Config:
         default_executor="executor", utility="executor", verifier_pool=[],
         supervision=Supervision(
             confirm_new_sessions=True, budget_usd_per_task=budget,
-            turn_timeout_s=10,
+            turn_timeout_s=10, stateful_chat_endpoint=True,
         ),
         execution=Execution(backend="off"),
         learned_routing=False,
@@ -66,14 +66,15 @@ class _ProxyOrchestrator:
     def __init__(self):
         self.calls = 0
 
-    async def run_tool_turn(self, session: str, body: dict) -> dict:
+    async def run_tool_turn(self, session: str, body: dict, **_kw) -> dict:
         self.calls += 1
         return _response(tool_calls=[{
             "id": "call-1", "type": "function",
             "function": {"name": "terminal", "arguments": "{}"},
         }])
 
-    async def run_turn(self, session: str, messages: list[dict]):  # pragma: no cover
+    async def run_turn(self, session: str, messages: list[dict],
+                       **_kw):  # pragma: no cover
         raise AssertionError("plain supervised path was not expected")
 
 

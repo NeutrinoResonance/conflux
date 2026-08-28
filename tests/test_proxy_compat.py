@@ -19,7 +19,8 @@ def _config() -> Config:
         providers={"test": Provider(
             "test", "https://provider.test/v1", "env:TEST_KEY")},
         models={"direct": model}, default_executor="direct", utility="direct",
-        verifier_pool=[], supervision=Supervision(confirm_new_sessions=True),
+        verifier_pool=[], supervision=Supervision(confirm_new_sessions=True,
+                                                  stateful_chat_endpoint=True),
         execution=Execution(backend="off"), learned_routing=False,
     )
 
@@ -152,7 +153,8 @@ class _SupervisedOrchestrator:
         self.tokens_out = tokens_out
         self.calls = 0
 
-    async def run_turn(self, session: str, messages: list[dict]) -> TurnReport:
+    async def run_turn(self, session: str, messages: list[dict],
+                       **_kw) -> TurnReport:
         self.calls += 1
         return TurnReport(
             text="supervised answer", task_id="task-1", executor="direct",

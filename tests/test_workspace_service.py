@@ -291,6 +291,144 @@ class WorkspaceServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.store.node(second["assistant"]["node_id"])["status"], "complete")
         self.assertEqual(self.orchestrator.calls, [])
 
+    async def test_auto_flow_finalizes_heuristic_when_no_selector_exists(self) -> None:
+        result = self.service.send(
+            self.conversation["session"], "Summarize this paragraph"
+        )
+        decision = result["pair"]["assistant"]["config"]["flow_decision"]
+        self.assertEqual(decision["mode"], "auto")
+        self.assertEqual(decision["status"], "pending_model_match")
+        self.assertEqual(decision["flow_id"], "supervised_tool_turn")
+
+        await self._await_job(result["job"]["job_id"])
+
+        assistant = self.store.node(result["pair"]["assistant"]["node_id"])
+        final = assistant["config"]["flow_decision"]
+        self.assertEqual(final["status"], "final")
+        self.assertEqual(final["method"], "heuristic")
+        workflow = self.store.workflow(assistant["workflow_instance_id"])
+        self.assertEqual(workflow["flow_id"], "supervised_tool_turn")
+
+    async def test_send_time_model_match_retargets_the_instance(self) -> None:
+        async def select(task_text: str) -> dict:
+            return {"flow_id": "durable_locked_job", "method": "model",
+                    "reason": "the prompt asks for a long-running job"}
+        self.orchestrator.select_workspace_flow = select
+
+        result = self.service.send(
+            self.conversation["session"], "Please build the report"
+        )
+        await self._await_job(result["job"]["job_id"])
+
+        assistant = self.store.node(result["pair"]["assistant"]["node_id"])
+        decision = assistant["config"]["flow_decision"]
+        self.assertEqual(decision["status"], "final")
+        self.assertEqual(decision["method"], "model")
+        self.assertEqual(decision["flow_id"], "durable_locked_job")
+        workflow = self.store.workflow(assistant["workflow_instance_id"])
+        self.assertEqual(workflow["flow_id"], "durable_locked_job")
+        self.assertEqual(assistant["status"], "complete")
+
+    async def test_manual_flow_selection_is_final_and_never_refined(self) -> None:
+        async def select(task_text: str) -> dict:  # pragma: no cover - must not run
+            raise AssertionError("manual selection must not consult the matcher")
+        self.orchestrator.select_workspace_flow = select
+
+        result = self.service.send(
+            self.conversation["session"], "Run this as a locked job",
+            flow_id="durable_locked_job",
+        )
+        decision = result["pair"]["assistant"]["config"]["flow_decision"]
+        self.assertEqual(decision, {
+            "mode": "manual", "status": "final",
+            "flow_id": "durable_locked_job", "method": "manual",
+            "reason": "flow selected in the composer",
+        })
+        self.assertEqual(result["pair"]["workflow"]["flow_id"], "durable_locked_job")
+        await self._await_job(result["job"]["job_id"])
+        assistant = self.store.node(result["pair"]["assistant"]["node_id"])
+        self.assertEqual(assistant["status"], "complete")
+
+    _SYNTHESIZED = {
+        "id": "synthesized_test", "version": 1, "label": "Bespoke route",
+        "entry": "ingress",
+        "nodes": [
+            {"id": "ingress", "label": "Intake", "type": "ingress"},
+            {"id": "work", "label": "Work", "type": "agent"},
+            {"id": "check", "label": "Check", "type": "verifier"},
+            {"id": "completed", "label": "Done", "type": "terminal"},
+        ],
+        "edges": [
+            {"source": "ingress", "target": "work"},
+            {"source": "work", "target": "check"},
+            {"source": "check", "target": "completed"},
+        ],
+    }
+
+    async def test_synthesize_mode_installs_the_generated_graph_before_running(self) -> None:
+        prompts = []
+
+        async def synthesize(task_text: str) -> dict:
+            prompts.append(task_text)
+            return dict(self._SYNTHESIZED)
+        self.orchestrator.synthesize_workspace_flow = synthesize
+
+        result = self.service.send(
+            self.conversation["session"], "Design a bespoke review pipeline",
+            flow_id="synthesize",
+        )
+        self.assertEqual(
+            result["pair"]["assistant"]["config"]["flow_decision"]["status"],
+            "pending_synthesis",
+        )
+        await self._await_job(result["job"]["job_id"])
+
+        assistant = self.store.node(result["pair"]["assistant"]["node_id"])
+        decision = assistant["config"]["flow_decision"]
+        self.assertEqual(decision["method"], "synthesized")
+        self.assertEqual(decision["flow_id"], "synthesized_test")
+        workflow = self.store.workflow(assistant["workflow_instance_id"])
+        self.assertEqual(workflow["flow_id"], "synthesized_test")
+        self.assertTrue(workflow["graph"]["synthesized"])
+        self.assertEqual(prompts, ["Design a bespoke review pipeline"])
+        self.assertEqual(assistant["status"], "complete")
+
+    async def test_failed_synthesis_degrades_to_the_default_flow(self) -> None:
+        async def synthesize(task_text: str) -> dict:
+            raise ValueError("the synthesis model returned no JSON graph")
+        self.orchestrator.synthesize_workspace_flow = synthesize
+
+        result = self.service.send(
+            self.conversation["session"], "Design something", flow_id="synthesize"
+        )
+        await self._await_job(result["job"]["job_id"])
+
+        assistant = self.store.node(result["pair"]["assistant"]["node_id"])
+        decision = assistant["config"]["flow_decision"]
+        self.assertEqual(decision["method"], "synthesis_failed")
+        self.assertIn("no JSON graph", decision["error"])
+        workflow = self.store.workflow(assistant["workflow_instance_id"])
+        self.assertEqual(workflow["flow_id"], "supervised_tool_turn")
+        self.assertEqual(assistant["status"], "complete")
+
+    async def test_on_demand_synthesis_command_replaces_a_settled_message_graph(self) -> None:
+        async def synthesize(task_text: str) -> dict:
+            return dict(self._SYNTHESIZED)
+        self.orchestrator.synthesize_workspace_flow = synthesize
+
+        pair = self.store.create_message_pair(
+            self.conversation["session"], "Existing message",
+            completed_output="done",
+        )
+        applied = await self.service.synthesize_instance(
+            pair["workflow"]["instance_id"], "make a graph for this"
+        )
+        self.assertEqual(applied["flow_id"], "synthesized_test")
+        owner = self.store.node(pair["assistant"]["node_id"])
+        self.assertEqual(
+            owner["config"]["flow_decision"]["method"], "synthesized"
+        )
+
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

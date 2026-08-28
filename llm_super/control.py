@@ -20,6 +20,21 @@ PAUSED_BOUNDARY_NOTICE = (
     "action was released. Send !resume, then resend the request to continue."
 )
 
+# Stateless-endpoint counterparts: control lives in the workspace UI, so the
+# recovery instructions must not point at retired in-band commands.
+PAUSED_NOTICE_STATELESS = (
+    "[llm-super] supervisor is paused; no model was called. "
+    "Resume from the workspace UI (/workspace), then resend the request."
+)
+
+IN_BAND_RETIRED_NOTICE = (
+    "[llm-super] in-band !commands are retired on this endpoint; no model "
+    "was called and nothing changed. Control (pause/resume, routing, "
+    "budgets, approvals) lives in the workspace UI at /workspace. To "
+    "restore the legacy in-band command mode, set "
+    "supervision.stateful_chat_endpoint: true in models.yaml."
+)
+
 
 @dataclass
 class ControlState:

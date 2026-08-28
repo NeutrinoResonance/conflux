@@ -25,7 +25,8 @@ def _config(stream_status: str = "comments") -> Config:
         models={"direct": model}, default_executor="direct", utility="direct",
         verifier_pool=[],
         supervision=Supervision(stream_status=stream_status,
-                                confirm_new_sessions=False),
+                                confirm_new_sessions=False,
+                                stateful_chat_endpoint=True),
         execution=Execution(backend="off", locked_backend=None),
     )
 
@@ -62,7 +63,8 @@ class _StagedOrchestrator:
         self.trace = trace
         self.session = session
 
-    async def run_turn(self, session: str, messages: list[dict]) -> TurnReport:
+    async def run_turn(self, session: str, messages: list[dict],
+                       **_kw) -> TurnReport:
         self.trace.record(self.session, "t1", "contract")
         self.trace.record(self.session, "t1", "execute", model="direct")
         self.trace.record(self.session, "t1", "verify", model="judge",
@@ -131,7 +133,7 @@ class StreamStatusTests(unittest.IsolatedAsyncioTestCase):
         self._arm("comments")
 
         class _NoisyOrchestrator(_StagedOrchestrator):
-            async def run_turn(self, session, messages):
+            async def run_turn(self, session, messages, **_kw):
                 self.trace.record("other-session", "tX", "execute",
                                   model="direct")
                 return await super().run_turn(session, messages)

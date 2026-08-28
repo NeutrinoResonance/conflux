@@ -405,6 +405,7 @@ class ConversationGraphStore:
     def create_message_pair(self, session: str, content: str, *,
                             parent_id: str | None = None,
                             flow_id: str = "supervised_tool_turn",
+                            flow_decision: Mapping[str, Any] | None = None,
                             completed_output: str | None = None,
                             task_id: str | None = None) -> dict[str, Any]:
         conversation = self.conversation(session)
@@ -434,7 +435,10 @@ class ConversationGraphStore:
                 kind="message", role="assistant", label="Assistant",
                 status="complete" if completed_output is not None else "queued",
                 input_text=content, output_text=completed_output or "",
-                config={"input_inherited": True, "task_id": task_id or ""},
+                config={
+                    "input_inherited": True, "task_id": task_id or "",
+                    **({"flow_decision": dict(flow_decision)} if flow_decision else {}),
+                },
             )
             self._insert_edge(endeavor_id, session, user_id, assistant_id,
                               label="responds")
@@ -532,6 +536,71 @@ class ConversationGraphStore:
         cols = [column[0] for column in cur.description]
         return [dict(zip(cols, row)) for row in cur.fetchall()]
 
+    def add_edge(self, session: str, source_id: str, target_id: str, *,
+                 kind: str = "feeds", label: str = "feeds") -> dict[str, Any]:
+        """Wire one node's output into another as an explicit input.
+
+        Only ``feeds`` edges may be user-created: structural lineage stays
+        owned by the message endpoints.  The wire is a real dependency, so
+        the target and its dependents are invalidated for recalculation.
+        """
+        conversation = self.conversation(session)
+        if kind != "feeds":
+            raise ValueError("only explicit 'feeds' wires can be added directly")
+        source = self.node(source_id)
+        target = self.node(target_id)
+        if source["session"] != session or target["session"] != session:
+            raise ValueError("both nodes must belong to this conversation")
+        if source["node_id"] == target["node_id"]:
+            raise ValueError("a node cannot feed itself")
+        if source["node_id"] in self.descendants(target["node_id"]):
+            raise ValueError("this wire would create a dependency cycle")
+        duplicate = self._conn.execute(
+            "SELECT 1 FROM workspace_edges WHERE source_id=? AND target_id=?",
+            (source["node_id"], target["node_id"]),
+        ).fetchone()
+        if duplicate:
+            raise ValueError("these nodes are already connected")
+        with self._lock:
+            edge_id = self._insert_edge(
+                conversation["endeavor_id"], session, source["node_id"],
+                target["node_id"], kind="feeds",
+                label=label.strip() or "feeds",
+            )
+            self._conn.commit()
+        if target["role"] == "assistant" and target["status"] not in {"running", "queued"}:
+            self.set_node_status(target["node_id"], "stale")
+        self.invalidate_descendants(target["node_id"])
+        return {
+            "edge_id": edge_id, "session": session,
+            "source_id": source["node_id"], "target_id": target["node_id"],
+            "kind": "feeds", "label": label.strip() or "feeds",
+        }
+
+    def delete_edge(self, edge_id: str) -> dict[str, Any]:
+        edge_id = _clean_id(edge_id, "edge id")
+        row = self._conn.execute(
+            "SELECT edge_id,session,source_id,target_id,kind FROM workspace_edges WHERE edge_id=?",
+            (edge_id,),
+        ).fetchone()
+        if not row:
+            raise KeyError(edge_id)
+        if row[4] != "feeds":
+            raise ValueError("only explicit 'feeds' wires can be removed")
+        with self._lock:
+            self._conn.execute(
+                "DELETE FROM workspace_edges WHERE edge_id=?", (edge_id,)
+            )
+            self._conn.commit()
+        target = self.node(row[3])
+        if target["role"] == "assistant" and target["status"] not in {"running", "queued"}:
+            self.set_node_status(target["node_id"], "stale")
+        self.invalidate_descendants(target["node_id"])
+        return {
+            "deleted": edge_id, "session": row[1],
+            "source_id": row[2], "target_id": row[3],
+        }
+
     def descendants(self, node_id: str) -> list[str]:
         node_id = _clean_id(node_id, "node id")
         rows = self._conn.execute(
@@ -548,21 +617,49 @@ class ConversationGraphStore:
         ).fetchall()
         return [str(row[0]) for row in rows]
 
-    def ancestors(self, node_id: str) -> list[str]:
+    def ancestors(self, node_id: str,
+                  *, exclude_kinds: tuple[str, ...] = ()) -> list[str]:
         node_id = _clean_id(node_id, "node id")
+        kind_filter = ""
+        if exclude_kinds:
+            placeholders = ",".join("?" for _ in exclude_kinds)
+            kind_filter = f" AND kind NOT IN ({placeholders})"
         rows = self._conn.execute(
-            """WITH RECURSIVE upstream(node_id,depth) AS (
-                   SELECT source_id,1 FROM workspace_edges WHERE target_id=?
+            f"""WITH RECURSIVE upstream(node_id,depth) AS (
+                   SELECT source_id,1 FROM workspace_edges
+                    WHERE target_id=?{kind_filter}
                    UNION
                    SELECT edge.source_id,upstream.depth+1
                      FROM workspace_edges edge JOIN upstream
                        ON edge.target_id=upstream.node_id
-                    WHERE upstream.depth < 500
+                    WHERE upstream.depth < 500{kind_filter.replace('kind', 'edge.kind')}
                ) SELECT node_id,MAX(depth) AS depth FROM upstream
                   GROUP BY node_id ORDER BY depth DESC,node_id""",
-            (node_id,),
+            (node_id, *exclude_kinds, *exclude_kinds),
         ).fetchall()
         return [str(row[0]) for row in rows]
+
+    def lineage_ancestors(self, node_id: str) -> list[str]:
+        """Prompt lineage: everything upstream via structural edges only.
+
+        A ``feeds`` edge is a selective, non-lineage input — its source is
+        injected explicitly and must never pull that source's own ancestry
+        into the prompt.
+        """
+        return self.ancestors(node_id, exclude_kinds=("feeds",))
+
+    def feeds_sources(self, node_id: str) -> list[dict[str, Any]]:
+        """Direct explicit-input wires into one node."""
+        node_id = _clean_id(node_id, "node id")
+        cur = self._conn.execute(
+            """SELECT edge_id,source_id,label FROM workspace_edges
+                WHERE target_id=? AND kind='feeds' ORDER BY created_at,edge_id""",
+            (node_id,),
+        )
+        return [
+            {"edge_id": row[0], "source_id": row[1], "label": row[2]}
+            for row in cur.fetchall()
+        ]
 
     def invalidate_descendants(self, node_id: str) -> list[str]:
         descendants = self.descendants(node_id)
@@ -681,7 +778,7 @@ class ConversationGraphStore:
         node = self.node(assistant_node_id)
         if node["role"] != "assistant":
             raise ValueError("prompt messages are only defined for assistant nodes")
-        ids = self.ancestors(assistant_node_id)
+        ids = self.lineage_ancestors(assistant_node_id)
         nodes = sorted((self.node(value) for value in ids), key=lambda item: item["ordinal"])
         messages: list[dict[str, str]] = []
         for item in nodes:
@@ -698,6 +795,37 @@ class ConversationGraphStore:
                 messages[-1] = {"role": "user", "content": node["input_text"]}
             else:
                 messages.append({"role": "user", "content": node["input_text"]})
+        # Explicitly wired inputs: the wired node's output enters the prompt
+        # even though (and only because) it is outside the lineage.  Wires
+        # into the paired user message count as wires into this turn.
+        edges = self.feeds_sources(assistant_node_id)
+        if node["parent_id"]:
+            edges += self.feeds_sources(node["parent_id"])
+        lineage = set(ids)
+        feeds: list[dict[str, str]] = []
+        seen_sources: set[str] = set()
+        for edge in edges:
+            source_id = edge["source_id"]
+            if source_id in seen_sources or source_id in lineage:
+                continue
+            seen_sources.add(source_id)
+            source = self.node(source_id)
+            text = source["output_text"] or source["input_text"]
+            if text:
+                feeds.append({
+                    "role": "system",
+                    "content": (
+                        f"Explicitly wired input from \"{source['label']}\" "
+                        f"({source_id}):\n{text}"
+                    ),
+                })
+        if feeds:
+            insert_at = len(messages)
+            for index in range(len(messages) - 1, -1, -1):
+                if messages[index]["role"] == "user":
+                    insert_at = index
+                    break
+            messages[insert_at:insert_at] = feeds
         return messages
 
     def graph(self, session: str) -> dict[str, Any]:
@@ -758,6 +886,52 @@ class ConversationGraphStore:
         if commit:
             self._conn.commit()
         return instance_id
+
+    def retarget_workflow(self, instance_id: str, flow_id: str) -> dict[str, Any]:
+        """Point one message's workflow instance at a different declared flow.
+
+        Used when send-time flow matching refines the pre-send prediction.
+        Only registered flows (or their global overrides) are reachable here;
+        arbitrary graphs go through ``apply_synthesized_workflow``.
+        """
+        current = self.workflow(instance_id)
+        if current["flow_id"] == flow_id:
+            return current
+        graph = self._base_workflow_graph(flow_id)
+        flow = self.registry.flows.get(flow_id)
+        version = flow.version if flow else int(graph.get("version", 1))
+        with self._lock:
+            self._conn.execute(
+                """UPDATE workspace_workflows SET flow_id=?,base_version=?,
+                   revision=revision+1,graph_json=?,active_node=NULL,
+                   status='idle',updated_at=? WHERE instance_id=?""",
+                (flow_id, version, _json(graph), _now(), instance_id),
+            )
+            self._conn.commit()
+        return self.workflow(instance_id)
+
+    def apply_synthesized_workflow(self, instance_id: str,
+                                   graph: Mapping[str, Any]) -> dict[str, Any]:
+        """Install a validated synthesized graph as this instance's route.
+
+        The synthesized graph lives only in this message's instance row; the
+        declared registry is never modified.
+        """
+        current = self.workflow(instance_id)
+        clean = self.validate_workflow_graph(graph)
+        clean["synthesized"] = True
+        flow_id = _clean_id(str(graph.get("id") or "synthesized"), "flow id")
+        version = int(graph.get("version", 1) or 1)
+        with self._lock:
+            self._conn.execute(
+                """UPDATE workspace_workflows SET flow_id=?,base_version=?,
+                   revision=?,graph_json=?,active_node=NULL,status='idle',
+                   updated_at=? WHERE instance_id=?""",
+                (flow_id, version, int(current["revision"]) + 1, _json(clean),
+                 _now(), instance_id),
+            )
+            self._conn.commit()
+        return self.workflow(instance_id)
 
     def workflow(self, instance_id: str) -> dict[str, Any]:
         instance_id = _clean_id(instance_id, "workflow instance id")

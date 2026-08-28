@@ -195,6 +195,90 @@ class ConversationGraphStoreTests(unittest.TestCase):
         self.assertEqual(messages[-1]["content"], "Review the graph")
         self.assertEqual(pair["user"]["parent_id"], context["node_id"])
 
+    def test_feeds_edge_wires_output_without_inheriting_lineage(self) -> None:
+        session = self.conversation["session"]
+        first = self.store.create_message_pair(
+            session, "Draft the intro", completed_output="The intro text"
+        )
+        branch_a = self.store.create_message_pair(
+            session, "Expand section A",
+            parent_id=first["assistant"]["node_id"],
+            completed_output="Section A analysis",
+        )
+        branch_b = self.store.create_message_pair(
+            session, "Expand section B",
+            parent_id=first["assistant"]["node_id"],
+            completed_output="Section B analysis",
+        )
+        source = branch_a["assistant"]["node_id"]
+        target = branch_b["assistant"]["node_id"]
+
+        edge = self.store.add_edge(session, source, target)
+        self.assertEqual(edge["kind"], "feeds")
+        # The wire is a real dependency: the target is marked for recalculation.
+        self.assertEqual(self.store.node(target)["status"], "stale")
+
+        messages = self.store.prompt_messages(target)
+        user_turns = [m["content"] for m in messages if m["role"] == "user"]
+        self.assertEqual(user_turns, ["Draft the intro", "Expand section B"])
+        wired = [m for m in messages if m["role"] == "system"
+                 and "Section A analysis" in m["content"]]
+        self.assertEqual(len(wired), 1)
+        self.assertIn("Explicitly wired input", wired[0]["content"])
+        # Wired context sits immediately before the user turn it informs.
+        self.assertEqual(messages.index(wired[0]) + 1,
+                         messages.index({"role": "user",
+                                         "content": "Expand section B"}))
+        # The wire's own lineage never leaks into the prompt.
+        self.assertNotIn("Expand section A", [m["content"] for m in messages])
+
+        with self.assertRaises(ValueError):
+            self.store.add_edge(session, source, target)
+        with self.assertRaises(ValueError):
+            self.store.add_edge(session, target, source)
+
+        self.store.delete_edge(edge["edge_id"])
+        messages = self.store.prompt_messages(target)
+        self.assertNotIn("Section A analysis",
+                         " ".join(m["content"] for m in messages))
+        structural = next(
+            e for e in self.store.edges(session) if e["kind"] != "feeds"
+        )
+        with self.assertRaises(ValueError):
+            self.store.delete_edge(structural["edge_id"])
+
+    def test_retarget_and_synthesized_graphs_stay_instance_local(self) -> None:
+        session = self.conversation["session"]
+        pair = self.store.create_message_pair(
+            session, "Keep the job running", completed_output="ok"
+        )
+        instance = pair["workflow"]["instance_id"]
+        retargeted = self.store.retarget_workflow(instance, "durable_locked_job")
+        self.assertEqual(retargeted["flow_id"], "durable_locked_job")
+        self.assertEqual(retargeted["graph"]["entry"], "job_request")
+
+        synthesized = {
+            "id": "synthesized_local", "version": 1, "label": "Bespoke",
+            "entry": "ingress",
+            "nodes": [
+                {"id": "ingress", "label": "Intake", "type": "ingress"},
+                {"id": "work", "label": "Work", "type": "agent"},
+                {"id": "completed", "label": "Done", "type": "terminal"},
+            ],
+            "edges": [
+                {"source": "ingress", "target": "work"},
+                {"source": "work", "target": "completed"},
+            ],
+        }
+        applied = self.store.apply_synthesized_workflow(instance, synthesized)
+        self.assertEqual(applied["flow_id"], "synthesized_local")
+        self.assertTrue(applied["graph"]["synthesized"])
+        # The registry-backed default is untouched for the next message.
+        other = self.store.create_message_pair(
+            session, "Another question", completed_output="ok"
+        )
+        self.assertEqual(other["workflow"]["flow_id"], "supervised_tool_turn")
+
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

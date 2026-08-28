@@ -7,7 +7,9 @@ from collections import defaultdict
 from collections.abc import Mapping
 from typing import Any
 
+from . import flow_match
 from .conversation_graph import ConversationGraphStore
+from .flow_match import DEFAULT_FLOW_ID
 from .orchestrator import Orchestrator, TurnOptions
 
 
@@ -82,10 +84,43 @@ class WorkspaceService:
 
         task.add_done_callback(done)
 
+    def _declared_flows(self) -> list[dict[str, Any]]:
+        return [
+            {"id": flow.id, "label": flow.label, "description": flow.description}
+            for flow in self.store.registry.flows.values()
+        ]
+
     def send(self, session: str, content: str, *, parent_id: str | None = None,
-             flow_id: str = "supervised_tool_turn") -> dict[str, Any]:
+             flow_id: str = "auto") -> dict[str, Any]:
+        """Queue a message pair, resolving which graph runs it.
+
+        ``auto`` picks the deterministic heuristic match immediately (so the
+        instance the UI shows is real) and defers the model-based refinement
+        to execution start; ``synthesize`` runs on the default flow's shape
+        until the synthesized graph replaces it at execution start; an
+        explicit flow id is final.
+        """
+        requested = str(flow_id or "auto").strip() or "auto"
+        if requested == "synthesize":
+            base_flow = DEFAULT_FLOW_ID
+            decision: dict[str, Any] = {
+                "mode": "synthesize", "status": "pending_synthesis",
+                "flow_id": base_flow,
+                "reason": "a bespoke graph will be synthesized from this prompt",
+            }
+        elif requested == "auto":
+            match = flow_match.heuristic_match(content, self._declared_flows())
+            base_flow = match["flow_id"]
+            decision = {"mode": "auto", "status": "pending_model_match", **match}
+        else:
+            base_flow = requested
+            decision = {
+                "mode": "manual", "status": "final", "flow_id": requested,
+                "method": "manual", "reason": "flow selected in the composer",
+            }
         pair = self.store.create_message_pair(
-            session, content, parent_id=parent_id, flow_id=flow_id
+            session, content, parent_id=parent_id, flow_id=base_flow,
+            flow_decision=decision,
         )
         assistant = pair["assistant"]
         job = self.store.create_job(session, assistant["node_id"], "message")
@@ -277,6 +312,94 @@ class WorkspaceService:
             and str(item.get("task") or "") == task_id
         ]
 
+    async def _resolve_flow_decision(self, node: dict[str, Any]) -> None:
+        """Finish a deferred send-time flow choice before the first model call.
+
+        The pre-send preview is a prediction; this is the decision.  Every
+        failure degrades to the graph the message already carries — routing
+        and synthesis must never fail a turn on their own.
+        """
+        decision = dict((node.get("config") or {}).get("flow_decision") or {})
+        status = decision.get("status")
+        if status not in {"pending_synthesis", "pending_model_match"}:
+            return
+        instance_id = node.get("workflow_instance_id")
+        if not instance_id:
+            return
+        task_text = str(node.get("input_text") or "")
+        if status == "pending_synthesis":
+            synthesizer = getattr(self.orchestrator, "synthesize_workspace_flow", None)
+            if not callable(synthesizer):
+                decision.update(status="final", method="synthesis_unavailable")
+            else:
+                try:
+                    graph = await synthesizer(task_text)
+                    applied = self.store.apply_synthesized_workflow(instance_id, graph)
+                    decision.update(
+                        status="final", method="synthesized",
+                        flow_id=applied["flow_id"],
+                        reason="graph synthesized from this prompt",
+                    )
+                except Exception as exc:
+                    decision.update(
+                        status="final", method="synthesis_failed",
+                        error=str(exc)[:500],
+                        reason="synthesis failed; the declared default flow ran instead",
+                    )
+        else:
+            selector = getattr(self.orchestrator, "select_workspace_flow", None)
+            if not callable(selector):
+                decision.update(status="final", method=decision.get("method") or "heuristic")
+            else:
+                try:
+                    choice = dict(await selector(task_text) or {})
+                    flow_id = str(choice.get("flow_id") or "")
+                    if flow_id and flow_id in self.store.registry.flows:
+                        self.store.retarget_workflow(instance_id, flow_id)
+                        decision.update(
+                            status="final", flow_id=flow_id,
+                            method=str(choice.get("method") or "model"),
+                            reason=str(choice.get("reason") or ""),
+                        )
+                    else:
+                        decision.update(status="final",
+                                        method=decision.get("method") or "heuristic")
+                except Exception as exc:
+                    decision.update(
+                        status="final",
+                        method=decision.get("method") or "heuristic",
+                        error=str(exc)[:500],
+                    )
+        self.store.set_node_status(
+            node["node_id"], node["status"],
+            config_patch={"flow_decision": decision},
+        )
+
+    async def synthesize_instance(self, instance_id: str,
+                                  prompt: str = "") -> dict[str, Any]:
+        """Explicit command: synthesize a graph and install it on one message."""
+        workflow = self.store.workflow(instance_id)
+        owner = self.store.node(workflow["owner_node_id"])
+        if owner["status"] in {"running", "queued"}:
+            raise ValueError("pause the message before replacing its workflow")
+        synthesizer = getattr(self.orchestrator, "synthesize_workspace_flow", None)
+        if not callable(synthesizer):
+            raise ValueError("flow synthesis is not available on this server")
+        task_text = str(prompt or "").strip() or str(owner.get("input_text") or "")
+        if not task_text.strip():
+            raise ValueError("a synthesis prompt is required")
+        graph = await synthesizer(task_text)
+        applied = self.store.apply_synthesized_workflow(instance_id, graph)
+        self.store.set_node_status(
+            owner["node_id"], owner["status"],
+            config_patch={"flow_decision": {
+                "mode": "synthesize", "status": "final", "method": "synthesized",
+                "flow_id": applied["flow_id"], "prompt": task_text[:500],
+                "reason": "graph synthesized on demand",
+            }},
+        )
+        return applied
+
     async def _execute_assistant(self, node_id: str, job_id: str | None) -> str:
         node = self.store.node(node_id)
         if node["role"] != "assistant":
@@ -284,6 +407,8 @@ class WorkspaceService:
         instance_id = node.get("workflow_instance_id")
         if not instance_id:
             raise ValueError("assistant message has no workflow instance")
+        await self._resolve_flow_decision(node)
+        node = self.store.node(node_id)
         workflow = self.store.workflow(instance_id)
         plan = self.store.workflow_plan(instance_id)
         entry = workflow["graph"].get("entry")
@@ -312,9 +437,13 @@ class WorkspaceService:
              if message.get("role") == "user"), ""
         )
 
-        ancestor_nodes = [
-            self.store.node(value) for value in self.store.ancestors(node_id)
-        ]
+        # Store reads come from the prompt lineage plus directly wired feeds
+        # — a feeds edge never pulls its source's own ancestry along.
+        ancestor_ids = list(self.store.lineage_ancestors(node_id))
+        for edge in self.store.feeds_sources(node_id):
+            if edge["source_id"] not in ancestor_ids:
+                ancestor_ids.append(edge["source_id"])
+        ancestor_nodes = [self.store.node(value) for value in ancestor_ids]
         graph_store_reads = [
             {
                 "id": item["node_id"], "type": "store_read",

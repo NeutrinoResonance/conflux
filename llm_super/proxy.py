@@ -25,6 +25,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from . import graph_ui, history_ui, ui, workspace_ui
 
 from . import balance as balance_mod
+from . import flow_match
 from . import export as export_mod
 from . import summary_jobs, verifier_calibration
 from . import report as report_mod
@@ -32,7 +33,9 @@ from . import retention
 from .checkpoint import Checkpoints
 from .config import load
 from .conversation_graph import ConversationGraphStore
-from .control import PAUSED_NOTICE, ControlState, gate_warning, handle
+from .control import (IN_BAND_RETIRED_NOTICE, PAUSED_NOTICE,
+                      PAUSED_NOTICE_STATELESS, ControlState, gate_warning,
+                      handle)
 from .durable_jobs import DurableJobStore
 from .endeavors import EndeavorLedger
 from .execution_backends import ExecutionBoundaryError
@@ -476,29 +479,53 @@ async def chat_completions(request: Request):
     stream = bool(body.get("stream", False))
     cfg, control = state["cfg"], state["control"]
 
-    # A client thread may be !attach-ed onto another conversation: resolve
-    # the content-derived id through the alias table before anything
-    # session-scoped runs. Explicit conversation IDs (validated header/body
-    # field) take precedence over the first-user-message hash.
-    raw_session, explicit_session = _resolve_conversation(
-        request, body, messages)
-    session = state["library"].resolve_alias(raw_session)
+    # Endpoint statefulness is an operator choice (supervision.
+    # stateful_chat_endpoint, default OFF). The default treats each request
+    # as one supervised turn: explicit conversation IDs still give
+    # continuity, everything else gets a fresh per-request session — no
+    # first-message-hash identity, no alias hop, no in-band commands, no
+    # new-conversation gate, no transcript-diff bookkeeping.
+    stateful = cfg.supervision.stateful_chat_endpoint
+    if stateful:
+        # A client thread may be !attach-ed onto another conversation:
+        # resolve the content-derived id through the alias table before
+        # anything session-scoped runs. Explicit conversation IDs
+        # (validated header/body field) take precedence over the hash.
+        raw_session, explicit_session = _resolve_conversation(
+            request, body, messages)
+        session = state["library"].resolve_alias(raw_session)
+    else:
+        explicit = _explicit_id(
+            request, body, "x-llm-super-conversation", "conversation_id")
+        explicit_session = explicit is not None
+        raw_session = session = (
+            explicit if explicit is not None
+            else f"oneshot_{uuid.uuid4().hex[:16]}"
+        )
     explicit_endeavor = _explicit_id(
         request, body, "x-llm-super-endeavor", "endeavor_id")
     if explicit_endeavor is not None and state.get("endeavor_ledger"):
         state["endeavor_ledger"].set_explicit_endeavor(
             session, explicit_endeavor)
 
-    # In-band control commands short-circuit everything.
-    reply = handle(_last_user_text(messages), control, list(cfg.models),
-                   checkpoints=state["checkpoints"],
-                   session=session,
-                   history=state["history"],
-                   library=state["library"], raw_session=raw_session,
-                   execution_backend_lock=cfg.execution.locked_backend)
-    if reply is not None:
-        state["trace"].record(session, "-", "control", command=_last_user_text(messages))
-        return _sse(reply, model_name) if stream else JSONResponse(_completion_body(reply, model_name))
+    if stateful:
+        # In-band control commands short-circuit everything.
+        reply = handle(_last_user_text(messages), control, list(cfg.models),
+                       checkpoints=state["checkpoints"],
+                       session=session,
+                       history=state["history"],
+                       library=state["library"], raw_session=raw_session,
+                       execution_backend_lock=cfg.execution.locked_backend)
+        if reply is not None:
+            state["trace"].record(session, "-", "control", command=_last_user_text(messages))
+            return _sse(reply, model_name) if stream else JSONResponse(_completion_body(reply, model_name))
+    elif _last_user_text(messages).lstrip().startswith("!"):
+        # Retired command channel: never spend a model call on it, never
+        # mutate control state from it, and say where control went.
+        state["trace"].record(session, "-", "control_retired",
+                              command=_last_user_text(messages)[:120])
+        return (_sse(IN_BAND_RETIRED_NOTICE, model_name) if stream
+                else JSONResponse(_completion_body(IN_BAND_RETIRED_NOTICE, model_name)))
 
     # Pause is a no-spend ingress gate for every virtual-super request,
     # including agentic tool turns.  Explicit registry-model passthrough is
@@ -510,16 +537,19 @@ async def chat_completions(request: Request):
             agentic=bool(body.get("tools") or body.get("tool_choice")),
             preview=_last_user_text(messages)[:150],
         )
-        return _sse(PAUSED_NOTICE, model_name) if stream else JSONResponse(
-            _completion_body(PAUSED_NOTICE, model_name)
+        paused_notice = PAUSED_NOTICE if stateful else PAUSED_NOTICE_STATELESS
+        return _sse(paused_notice, model_name) if stream else JSONResponse(
+            _completion_body(paused_notice, model_name)
         )
 
     # New-conversation gate (SPEC §7): in "dumb command mode" an unknown
     # conversation's first non-command message returns a warning WITHOUT
     # calling any model; continuing (or resending) confirms. Commands above
     # always work ungated; explicit passthrough model names are exempt.
-    gate_on = (control.gate_enabled if control.gate_enabled is not None
-               else cfg.supervision.confirm_new_sessions)
+    # Stateless mode has no inferred conversations to fork, so no gate.
+    gate_on = stateful and (
+        control.gate_enabled if control.gate_enabled is not None
+        else cfg.supervision.confirm_new_sessions)
     # An explicit conversation ID is already a deliberate identity choice —
     # the gate exists to catch accidental hash-forked sessions, so explicit
     # sessions are exempt (like explicit registry-model passthrough).
@@ -535,7 +565,10 @@ async def chat_completions(request: Request):
         return _sse(warn, model_name) if stream else JSONResponse(
             _completion_body(warn, model_name))
 
-    state["library"].touch_session(session, _last_user_text(messages))
+    # Minted one-shot sessions stay out of the conversation library — they
+    # are forensic identities, not navigable conversations.
+    if stateful or explicit_session:
+        state["library"].touch_session(session, _last_user_text(messages))
 
     # Pass-through mode for registry model names. Default max_tokens matches
     # the supervised executor path (8192): reasoning models can burn 4096
@@ -607,7 +640,8 @@ async def chat_completions(request: Request):
     if body.get("tools") or body.get("tool_choice"):
         try:
             data = await asyncio.wait_for(
-                state["orch"].run_tool_turn(session, body),
+                state["orch"].run_tool_turn(session, body,
+                                            stateless=not stateful),
                 cfg.supervision.turn_timeout_s)
         except ProviderError as e:
             return JSONResponse({"error": {"message": str(e)}}, status_code=502)
@@ -635,7 +669,8 @@ async def chat_completions(request: Request):
     if not stream:
         try:
             report = await asyncio.wait_for(
-                state["orch"].run_turn(session, messages), timeout)
+                state["orch"].run_turn(session, messages,
+                                       stateless=not stateful), timeout)
         except asyncio.TimeoutError:
             state["trace"].record(session, "-", "turn_timeout", timeout_s=timeout)
             return JSONResponse(_completion_body(
@@ -702,7 +737,8 @@ async def chat_completions(request: Request):
                 else:
                     out.append(f": [llm-super] {line}\n\n")
 
-        task = asyncio.create_task(state["orch"].run_turn(session, messages))
+        task = asyncio.create_task(
+            state["orch"].run_turn(session, messages, stateless=not stateful))
         start = time.monotonic()
         last_signal = time.monotonic()
         report = None
@@ -1351,10 +1387,90 @@ async def admin_workspace_send_message(session: str, request: Request):
         return state["workspace_service"].send(
             session, str(body.get("content") or ""),
             parent_id=body.get("parent_id"),
-            flow_id=str(body.get("flow_id") or "supervised_tool_turn"),
+            flow_id=str(body.get("flow_id") or "auto"),
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="conversation or workflow not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/admin/workspace/conversations/{session}/flow_preview")
+async def admin_workspace_flow_preview(session: str, request: Request):
+    """Pre-send route prediction for the composer.
+
+    Deterministic and cheap on purpose: this is called as the user types.
+    The model-based refinement happens once, at execution start.
+    """
+    body = await request.json()
+    store: ConversationGraphStore = state["workspace_store"]
+    try:
+        store.conversation(session)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="conversation not found") from exc
+    requested = str(body.get("flow_id") or "auto").strip() or "auto"
+    if requested == "synthesize":
+        return {
+            "mode": "synthesize", "flow_id": None, "method": "synthesis",
+            "reason": "a bespoke graph will be synthesized from this prompt at send time",
+        }
+    if requested != "auto":
+        if requested not in store.registry.flows:
+            raise HTTPException(status_code=400, detail="unknown flow id")
+        return {
+            "mode": "manual", "flow_id": requested, "method": "manual",
+            "reason": "this declared route will run exactly as shown",
+        }
+    flows = [
+        {"id": flow.id, "label": flow.label, "description": flow.description}
+        for flow in store.registry.flows.values()
+    ]
+    match = flow_match.heuristic_match(str(body.get("content") or ""), flows)
+    return {
+        **match, "mode": "auto",
+        "note": "predicted from your prompt; the model-based match at send time makes the final call",
+    }
+
+
+@app.post("/admin/workspace/workflows/{instance_id}/synthesize")
+async def admin_workspace_synthesize_workflow(instance_id: str, request: Request):
+    """Synthesize a graph from a prompt and install it on one message."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    try:
+        return await state["workspace_service"].synthesize_instance(
+            instance_id, str(body.get("prompt") or "")
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="workflow instance not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/admin/workspace/conversations/{session}/edges")
+async def admin_workspace_add_edge(session: str, request: Request):
+    body = await request.json()
+    try:
+        return state["workspace_store"].add_edge(
+            session, str(body.get("source_id") or ""),
+            str(body.get("target_id") or ""),
+            kind=str(body.get("kind") or "feeds"),
+            label=str(body.get("label") or "feeds"),
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="conversation or node not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/admin/workspace/edges/{edge_id}")
+async def admin_workspace_delete_edge(edge_id: str):
+    try:
+        return state["workspace_store"].delete_edge(edge_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="edge not found") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

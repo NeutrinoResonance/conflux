@@ -361,6 +361,74 @@ class WorkspaceRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(service.resumed, [pair["assistant"]["node_id"]])
         self.assertEqual(self.runtime.resumed[0][0], "run-pending")
 
+    async def test_flow_preview_predicts_the_route_before_send(self) -> None:
+        endeavor = self.store.create_endeavor("Routing")
+        conversation = self.store.create_conversation(endeavor["id"], "Preview")
+        session = conversation["session"]
+
+        auto = await proxy.admin_workspace_flow_preview(
+            session, _Request({"content": "Summarize this file", "flow_id": "auto"})
+        )
+        self.assertEqual(auto["mode"], "auto")
+        self.assertEqual(auto["flow_id"], "supervised_tool_turn")
+        self.assertEqual(auto["method"], "heuristic")
+
+        durable = await proxy.admin_workspace_flow_preview(
+            session, _Request({"content": "keep the long-running job running overnight"})
+        )
+        self.assertEqual(durable["flow_id"], "durable_locked_job")
+
+        manual = await proxy.admin_workspace_flow_preview(
+            session, _Request({"content": "x", "flow_id": "durable_locked_job"})
+        )
+        self.assertEqual(manual["mode"], "manual")
+
+        synthesize = await proxy.admin_workspace_flow_preview(
+            session, _Request({"content": "x", "flow_id": "synthesize"})
+        )
+        self.assertEqual(synthesize["mode"], "synthesize")
+        self.assertIsNone(synthesize["flow_id"])
+
+        with self.assertRaises(proxy.HTTPException):
+            await proxy.admin_workspace_flow_preview(
+                session, _Request({"content": "x", "flow_id": "not_a_flow"})
+            )
+
+    async def test_feeds_edges_can_be_wired_and_removed_over_the_api(self) -> None:
+        endeavor = self.store.create_endeavor("Wiring")
+        conversation = self.store.create_conversation(endeavor["id"], "Wires")
+        session = conversation["session"]
+        first = self.store.create_message_pair(
+            session, "First", completed_output="One"
+        )
+        second = self.store.create_message_pair(
+            session, "Second", parent_id=first["assistant"]["node_id"],
+            completed_output="Two",
+        )
+        third = self.store.create_message_pair(
+            session, "Third", parent_id=first["assistant"]["node_id"],
+            completed_output="Three",
+        )
+
+        edge = await proxy.admin_workspace_add_edge(session, _Request({
+            "source_id": second["assistant"]["node_id"],
+            "target_id": third["assistant"]["node_id"],
+        }))
+        self.assertEqual(edge["kind"], "feeds")
+        kinds = {e["kind"] for e in self.store.edges(session)}
+        self.assertIn("feeds", kinds)
+
+        with self.assertRaises(proxy.HTTPException):
+            await proxy.admin_workspace_add_edge(session, _Request({
+                "source_id": third["assistant"]["node_id"],
+                "target_id": second["assistant"]["node_id"],
+            }))
+
+        removed = await proxy.admin_workspace_delete_edge(edge["edge_id"])
+        self.assertEqual(removed["deleted"], edge["edge_id"])
+        with self.assertRaises(proxy.HTTPException):
+            await proxy.admin_workspace_delete_edge(edge["edge_id"])
+
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
