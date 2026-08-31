@@ -1,0 +1,590 @@
+#+TITLE: Conflux — text workspace mockup
+#+SUBTITLE: One conversation, with every workflow instance embedded beneath the message that caused it
+#+STARTUP: showall indent
+#+TODO: QUEUED(q) RUNNING(r) WAITING(a) | PASS(p) WARN(w) FAIL(f) SUPERSEDED(s)
+#+TAGS: user(u) assistant(a) trace(t) deterministic(d) model(m) sandbox(s) approval(x) cache(k)
+#+OPTIONS: toc:nil num:nil ^:nil
+
+#+begin_comment
+Interaction model
+
+- TAB on any heading cycles: collapsed → children → subtree.
+- Shift-TAB cycles the entire document.
+- The ordinary transcript is readable without opening a trace.
+- Every assistant message owns the exact workflow instance that produced it.
+- Links in a route strip jump to node details; C-c C-o opens them.
+- Edit a node's INPUT or OUTPUT, then invoke the product's Recompute command.
+  Only dependent descendants become STALE; unrelated branches and checkpoints remain.
+- Model-generated checks are proposals. The graph fires the pinned check set
+  deterministically; programs and tests then produce recorded evidence.
+#+end_comment
+
+* Conflux workspace                                            :workspace:
+:PROPERTIES:
+:WORKSPACE_ID: ws_demo_01
+:REMOTE_EXECUTION: locked-container
+:EVENT_STREAM: live
+:END:
+
+** Endeavor: ship a safe cache-key migration                     :endeavor:
+:PROPERTIES:
+:ID:       endeavor-cache-migration
+:STATE:    active
+:CREATED:  [2026-08-17 Sun 01:42]
+:END:
+
+Goal: update a repository without allowing an overly broad command to reach the
+requestor. Preserve a complete, editable account of how the answer was produced.
+
+*** Conversation: migrate =cache.mode= safely                   :conversation:
+:PROPERTIES:
+:ID:             conv-7e91
+:GRAPH:          governed-command-super-response@v7
+:GRAPH_RUN_MODE: required
+:CONTEXT_EPOCH:  18
+:END:
+
+Status: =COMPLETE= · 3 messages · 1 graph run · 14 nodes · 1 repair · $0.041 · 18.7 s
+
+**** USER 001 · 01:42:08                                        :user:
+:PROPERTIES:
+:ID:         msg-001
+:MESSAGE_ID: msg-001
+:EDITABLE:   true
+:END:
+
+Replace the deprecated =cache.mode= key with =kv_cache.mode= in the TypeScript
+source and tests. Give me a command I can run, but do not modify generated files,
+dependencies, or anything outside this repository.
+
+**** ASSISTANT 002 · VERIFIED SUPER-RESPONSE                     :assistant:
+:PROPERTIES:
+:ID:               msg-002
+:MESSAGE_ID:       msg-002
+:WORKFLOW_RUN_ID:  run-c2f9
+:VERDICT:          approved-with-repair
+:SCORE:            0.96
+:EDITABLE:         true
+:END:
+
+Use this from the repository root:
+
+#+begin_src sh
+rg -l -0 --glob '*.ts' --glob 'src/**' --glob 'tests/**' \
+  'cache\.mode' src tests \
+  | xargs -0 perl -pi -e 's/\bcache\.mode\b/kv_cache.mode/g'
+#+end_src
+
+Then verify the exact effect:
+
+#+begin_src sh
+git diff --check &&
+test -z "$(rg -l 'cache\.mode' src tests --glob '*.ts')" &&
+pnpm test --filter cache &&
+git diff --name-only -- src tests
+#+end_src
+
+The first proposed command was rejected because it traversed the whole tree and
+modified generated output. The repaired command changed 12 tracked TypeScript
+files under =src/= and =tests/= in the sandbox; the targeted tests passed. Nothing
+has been executed in your real repository.
+
+***** PASS Trace · governed-command-super-response@v7 · 14/14 nodes :trace:
+:PROPERTIES:
+:VISIBILITY: folded
+:CUSTOM_ID:  trace-run-c2f9
+:RUN_ID:      run-c2f9
+:GRAPH_ID:    governed-command-super-response
+:GRAPH_VERSION: 7
+:TRIGGER:     every-assistant-message
+:STARTED:     [2026-08-17 Sun 01:42:08]
+:FINISHED:    [2026-08-17 Sun 01:42:27]
+:TOKENS:      42781
+:COST:        0.041
+:END:
+
+Route used:
+
+[[#n01-intake][01 Intake]]
+→ [[#n02-contract][02 Contract]]
+→ {[[#n03-exec-a][03A Executor A]] ∥ [[#n04-exec-b][03B Executor B]] ∥ [[#n05-exec-c][03C Executor C]]}
+→ [[#n06-check-author][04 Check author]]
+→ [[#n07-aggregate][05 Aggregate]]
+→ [[#n08-risk-gate][06 Risk gate]]
+→ [[#n09-sandbox-1][07 Sandbox #1]]
+⇢ [[#n10-repair][08 Repair]]
+→ [[#n11-sandbox-2][09 Sandbox #2]]
+→ [[#n12-handoff][10 Forced handoff]]
+→ [[#n13-final-verify][11 Final verifier]]
+→ [[#n14-publish][12 Publish]]
+
+| node | kind | model / engine | state | time | cost | cache |
+|------+------|----------------+-------+------+------+-------|
+| [[#n01-intake][01]] | ingress | deterministic | PASS | 8 ms | — | epoch 18 |
+| [[#n02-contract][02]] | contract | deterministic + gemma-4-31b | PASS | 0.8 s | $0.001 | replay |
+| [[#n03-exec-a][03A]] | candidate | qwen-3.7-plus | PASS | 3.1 s | $0.009 | hit 91% |
+| [[#n04-exec-b][03B]] | candidate | deepseek-v4-pro | PASS | 4.0 s | $0.011 | hit 88% |
+| [[#n05-exec-c][03C]] | candidate | gemma-4-31b | PASS | 2.4 s | $0.004 | hit 86% |
+| [[#n06-check-author][04]] | check author | qwen-3.7-plus-go | PASS | 1.9 s | $0.003 | translated |
+| [[#n07-aggregate][05]] | synthesis | kimi-k2.6 | PASS | 2.1 s | $0.005 | text replay |
+| [[#n08-risk-gate][06]] | policy | deterministic | FAIL → repair | 14 ms | — | — |
+| [[#n09-sandbox-1][07]] | execution | locked sandbox | FAIL | 1.4 s | $0.002 | snapshot A |
+| [[#n10-repair][08]] | repair | deepseek-v4-pro | PASS | 1.2 s | $0.003 | hit 83% |
+| [[#n11-sandbox-2][09]] | execution | locked sandbox | PASS | 1.1 s | $0.002 | snapshot B |
+| [[#n12-handoff][10]] | transform | qwen → kimi | PASS | 0.4 s | $0.001 | denied; text |
+| [[#n13-final-verify][11]] | verifier | union(3 models) | PASS | 1.2 s | $0.000 | parallel |
+| [[#n14-publish][12]] | terminal | deterministic | PASS | 5 ms | — | — |
+
+****** PASS 01 · Context intake                                  :deterministic:
+:PROPERTIES:
+:CUSTOM_ID: n01-intake
+:NODE_ID:   n01
+:NODE_TYPE: ingress
+:EDITABLE:  true
+:END:
+
+******* INPUT
+
+- message: [[id:msg-001][USER 001]]
+- repository snapshot: =repo@2c7810a=
+- policy bundle: =command-safety@sha256:93c…=
+- declared user constraints: repository only; tracked TypeScript source/tests;
+  exclude generated output and dependencies; propose, do not execute for user
+
+******* OUTPUT
+
+Normalized task contract input, prompt hash =7d19…=, context epoch =18=.
+
+****** PASS 02 · Contract compiler                              :deterministic:model:
+:PROPERTIES:
+:CUSTOM_ID: n02-contract
+:NODE_ID:   n02
+:NODE_TYPE: contract
+:MODEL:     gemma-4-31b
+:INVALIDATES: n03 n04 n05 n06 n07 n08 n09 n10 n11 n12 n13 n14
+:EDITABLE:  true
+:END:
+
+******* INPUT
+
+#+begin_quote
+Convert the request into explicit success conditions, prohibitions, evidence
+requirements, and an approval boundary. Do not solve the task.
+#+end_quote
+
+******* OUTPUT
+
+- success: every exact =cache.mode= reference in allowed =*.ts= files is migrated
+- forbidden: writes outside =src/**= and =tests/**=; generated/vendor/binary files
+- evidence: before/after match counts, changed-file allowlist, diff check, targeted tests
+- authority: sandbox execution allowed; real-repository execution not allowed
+
+****** PASS 03 · Candidate fan-out [3/3]                              :model:
+:PROPERTIES:
+:VISIBILITY: children
+:NODE_GROUP: candidates
+:EXECUTION:  parallel
+:AGGREGATION_REQUIRED: true
+:END:
+
+******* PASS 03A · Executor A — precise shell path
+:PROPERTIES:
+:CUSTOM_ID: n03-exec-a
+:NODE_ID:   n03
+:MODEL:     qwen-3.7-plus
+:SEED:      48112
+:TEMPERATURE: 0
+:EDITABLE:  true
+:END:
+
+******** INPUT
+
+Task contract + repository file manifest + tool schema.
+
+******** OUTPUT
+
+Proposed a null-delimited =rg | xargs | perl= edit restricted to =src= and =tests=,
+followed by match, diff, and test checks.
+
+******* PASS 03B · Executor B — broad discovery path
+:PROPERTIES:
+:CUSTOM_ID: n04-exec-b
+:NODE_ID:   n04
+:MODEL:     deepseek-v4-pro
+:SEED:      48112
+:TEMPERATURE: 0
+:EDITABLE:  true
+:END:
+
+******** INPUT
+
+Same immutable contract and snapshot as 03A. No sibling output visible.
+
+******** OUTPUT
+
+#+begin_src sh
+find . -type f -not -path './.git/*' \
+  -exec sed -i 's/cache\.mode/kv_cache.mode/g' {} +
+#+end_src
+
+Useful intent, but scope is not justified. Marked =candidate only=.
+
+******* PASS 03C · Executor C — AST-aware path
+:PROPERTIES:
+:CUSTOM_ID: n05-exec-c
+:NODE_ID:   n05
+:MODEL:     gemma-4-31b
+:SEED:      48112
+:TEMPERATURE: 0
+:EDITABLE:  true
+:END:
+
+******** INPUT
+
+Same immutable contract and snapshot as 03A. No sibling output visible.
+
+******** OUTPUT
+
+Suggested a TypeScript codemod. Highest semantic precision, but unnecessary setup
+for an exact property-path replacement in this repository.
+
+****** PASS 04 · Dynamic check author                                :model:
+:PROPERTIES:
+:CUSTOM_ID: n06-check-author
+:NODE_ID:   n06
+:MODEL:     qwen-3.7-plus-go
+:HANDOFF_FROM: n03 n04 n05
+:CHECKSET_STATUS: proposed
+:EDITABLE:  true
+:END:
+
+******* CACHE TRANSFER GATE                                           :cache:
+
+| condition | observed | result |
+|-----------+----------+--------|
+| registered translator | =qwen-3.7-plus → qwen-3.7-plus-go@t19= | PASS |
+| prompt-prefix hash | =b319…= on both sides | PASS |
+| layer map | R²-selected; minimum held-out R² =0.93= | PASS |
+| calibration policy | 64 × 1,024-token sequences; stride 4 | PASS |
+| held-out quality | perplexity delta =+0.7%=; limit =+2%= | PASS |
+| translated depth | k=2 accepted; k=4 rejected by latency rule | PASS |
+| sensitive-cache policy | no protected spans | PASS |
+
+Decision: =ENABLE=. Transfer is an optimization only; the exact text artifact and
+hash remain the authoritative handoff.
+
+******* INPUT
+
+All three candidate commands, the contract, and declared sandbox capabilities.
+
+******* OUTPUT · proposed checks
+
+1. Resolve every candidate path before permitting a write.
+2. Reject paths outside the repository and outside =src/**= or =tests/**=.
+3. Count pre-edit matches and require post-edit count =0=.
+4. Compare changed files against the resolved allowlist.
+5. Run =git diff --check= and the cache-targeted test suite.
+6. Record stdout, stderr, exit status, file hashes, and filesystem diff.
+
+The model created this list; it does not become deterministic evidence until the
+next node pins it to executable predicates.
+
+****** PASS 05 · Candidate aggregator                                :model:
+:PROPERTIES:
+:CUSTOM_ID: n07-aggregate
+:NODE_ID:   n07
+:MODEL:     kimi-k2.6
+:INPUT_CARDINALITY: 3
+:MUST_CITE_INPUTS: true
+:EDITABLE:  true
+:END:
+
+******* FORCED INPUT SET
+
+- =candidate/n03@sha256:71a…=
+- =candidate/n04@sha256:a04…=
+- =candidate/n05@sha256:d91…=
+- =checks/n06@sha256:f83…=
+
+The node cannot omit or silently summarize an input. Missing hashes block execution.
+
+******* OUTPUT
+
+Selected 03B's simple replacement strategy, but initially retained its overly
+broad traversal. Combined it with 03A's verification plan. Confidence =0.74=.
+
+****** FAIL 06 · Deterministic risk gate                         :deterministic:
+:PROPERTIES:
+:CUSTOM_ID: n08-risk-gate
+:NODE_ID:   n08
+:ENGINE:    command-policy@sha256:93c…
+:ON_FAIL:   n10
+:EDITABLE:  false
+:END:
+
+| predicate | result | evidence |
+|-----------+--------+----------|
+| command parses without shell ambiguity | PASS | AST =ast-1802= |
+| every possible write target is statically bounded | FAIL | root traversal =.= |
+| generated/vendor paths structurally excluded | FAIL | only =.git= excluded |
+| platform behavior declared | FAIL | =sed -i= variant unspecified |
+| destructive primitive denied | PASS | no delete/device/network primitive |
+| real execution authority absent | PASS | sandbox capability only |
+
+Decision event =de-006=: sandbox may inspect the candidate, but the command cannot
+be published or executed outside the disposable snapshot.
+
+****** FAIL 07 · Sandbox trial #1                                  :sandbox:
+:PROPERTIES:
+:CUSTOM_ID: n09-sandbox-1
+:NODE_ID:   n09
+:SNAPSHOT:  snap-A@2c7810a
+:NETWORK:   denied
+:FILESYSTEM: disposable-copy
+:END:
+
+******* COMMAND
+
+#+begin_src sh
+find . -type f -not -path './.git/*' \
+  -exec sed -i 's/cache\.mode/kv_cache.mode/g' {} +
+#+end_src
+
+******* OBSERVED EFFECTS
+
+| measure | observed | allowed | result |
+|---------+----------+---------+--------|
+| files opened for write | 1,842 | ≤ 12 | FAIL |
+| tracked files changed | 12 | 12 | PASS |
+| generated files changed | 405 | 0 | FAIL |
+| dependency files opened | 61 | 0 | FAIL |
+| command exit | 0 | 0 | PASS |
+| targeted tests | not run | required | FAIL |
+
+Note: exit status =0= did not imply suitability.
+
+****** PASS 08 · Bounded repair loop · attempt 1/2                     :model:
+:PROPERTIES:
+:CUSTOM_ID: n10-repair
+:NODE_ID:   n10
+:MODEL:     deepseek-v4-pro
+:TRIGGERED_BY: de-006 n09
+:MAX_ATTEMPTS: 2
+:EDITABLE:  true
+:END:
+
+******* INPUT
+
+Original contract + rejected command + exact failed predicates + sandbox diff.
+
+******* OUTPUT
+
+#+begin_src sh
+rg -l -0 --glob '*.ts' --glob 'src/**' --glob 'tests/**' \
+  'cache\.mode' src tests \
+  | xargs -0 perl -pi -e 's/\bcache\.mode\b/kv_cache.mode/g'
+#+end_src
+
+Repair explanation: enumerate only matching TypeScript files below the two allowed
+roots; preserve paths containing whitespace; avoid platform-specific =sed -i=.
+
+****** PASS 09 · Sandbox trial #2                                  :sandbox:
+:PROPERTIES:
+:CUSTOM_ID: n11-sandbox-2
+:NODE_ID:   n11
+:SNAPSHOT:  snap-B@2c7810a
+:NETWORK:   denied
+:FILESYSTEM: disposable-copy
+:CHECKSET:  checks/n06-pinned@sha256:2aa…
+:END:
+
+******* PINNED CHECK RESULTS                                      :deterministic:
+
+| predicate | result | evidence |
+|-----------+--------+----------|
+| pre-edit exact matches = 19 | PASS | =matches.before= |
+| post-edit exact matches = 0 | PASS | =matches.after= |
+| changed files ⊆ resolved allowlist | PASS | 12/12 |
+| path roots | PASS | =src/= 8; =tests/= 4 |
+| generated/vendor writes | PASS | 0 |
+| binary changes | PASS | 0 |
+| =git diff --check= | PASS | exit 0 |
+| targeted cache tests | PASS | 38/38 |
+| filesystem diff hash recorded | PASS | =sha256:80e…= |
+
+******* RAW EFFECT LOG
+:PROPERTIES:
+:VISIBILITY: folded
+:END:
+
+#+begin_example
+execve: rg ...                                  exit=0
+execve: xargs -0 perl ...                       exit=0
+write:  src/runtime/cache-config.ts             4 replacements
+write:  src/runtime/cache-policy.ts             2 replacements
+...                                             10 more tracked files
+execve: pnpm test --filter cache                exit=0
+summary: files_changed=12 replacements=19 tests=38/38
+#+end_example
+
+****** PASS 10 · Forced cross-model handoff                      :model:cache:
+:PROPERTIES:
+:CUSTOM_ID: n12-handoff
+:NODE_ID:   n12
+:FROM_MODEL: deepseek-v4-pro
+:TO_MODEL: kimi-k2.6
+:MANDATORY_INPUT: true
+:OMISSION_POLICY: block
+:EDITABLE:  false
+:END:
+
+******* CACHE TRANSFER GATE
+
+| condition | observed | result |
+|-----------+----------+--------|
+| registered pair-specific translator | none | FAIL |
+| architecture compatibility | unproven | FAIL |
+| held-out perplexity retention | no evidence | FAIL |
+
+Decision: =DISABLE=. Force-feed canonical text, command AST, check results, and
+sandbox evidence. Reconstruct the target model's cache normally. Correctness wins
+over the optional latency optimization.
+
+******* HANDOFF MANIFEST
+
+- required: contract, repaired command, pinned check set, trial #2 evidence
+- presentation rule: distinguish observed facts from model inference
+- forbidden: claim that the real repository was modified
+- acceptance: recipient must echo all four artifact hashes before synthesis
+
+****** PASS 11 · Independent final verification                        :model:
+:PROPERTIES:
+:CUSTOM_ID: n13-final-verify
+:NODE_ID:   n13
+:STRATEGY:  union
+:MODELS:    qwen-3.7-plus-go, gemma-4-31b, policy-engine
+:QUORUM:    3/3
+:EDITABLE:  true
+:END:
+
+| verifier | independent claim | result |
+|----------+-------------------+--------|
+| policy engine | every pinned predicate passed on trial #2 | PASS |
+| qwen-3.7-plus-go | command matches stated scope and evidence | PASS |
+| gemma-4-31b | final wording does not overclaim execution | PASS |
+
+Overall task grade =PASS=. Soundness checks are claims with their own evidence,
+not a substitute for the recorded sandbox result.
+
+****** PASS 12 · Publish gate                                    :deterministic:
+:PROPERTIES:
+:CUSTOM_ID: n14-publish
+:NODE_ID:   n14
+:REQUIRES:  n11=PASS n13=PASS
+:PUBLISHED_MESSAGE: msg-002
+:END:
+
+Published [[id:msg-002][ASSISTANT 002]]. Approval state =safe-to-offer=; execution state
+=not-run-on-user-repository=.
+
+***** Decision events                                                  :trace:
+:PROPERTIES:
+:VISIBILITY: folded
+:END:
+
+| time | event | actor | result | why |
+|------+-------+-------+--------+-----|
+| 01:42:08.112 | graph_triggered | runtime | required | assistant turn requested |
+| 01:42:12.404 | candidate_selected | n07 | n04+verification | simplest plausible edit |
+| 01:42:12.419 | policy_rejected | n08 | de-006 | possible write set unbounded |
+| 01:42:13.881 | sandbox_failed | n09 | effect mismatch | 405 generated writes |
+| 01:42:15.107 | repair_started | runtime | attempt 1 | bounded recovery edge |
+| 01:42:17.011 | sandbox_passed | n11 | checks 8/8 | effect set within contract |
+| 01:42:17.019 | kv_transfer_denied | n12 | text replay | no qualified translator |
+| 01:42:26.795 | quorum_reached | n13 | 3/3 | final response releasable |
+
+**** USER EDIT 003 · surgical steering                              :user:
+:PROPERTIES:
+:MESSAGE_ID: msg-003
+:EDIT_TARGET: msg-001
+:EDITABLE:   true
+:END:
+
+Constraint correction: do not change tests. Only change =src/runtime/**= and
+tell me which test would fail until I update it separately.
+
+***** Reconciliation preview · not yet executed                       :trace:
+:PROPERTIES:
+:VISIBILITY: folded
+:BASE_RUN: run-c2f9
+:NEW_CONTEXT_EPOCH: 19
+:END:
+
+| prior node | disposition | reason |
+|------------+-------------+--------|
+| 01 intake | reuse structure; new value | user constraint changed |
+| 02 contract | recompute | success/forbidden sets changed |
+| 03A–03C candidates | stale | depend on contract |
+| 04 checks | stale | allowed paths and postconditions changed |
+| 05–12 downstream | stale | descendants of changed contract |
+| repository manifest | reuse | same snapshot =2c7810a= |
+| trial evidence | retain as historical | belongs to epoch 18; never silently rewritten |
+
+Actions: =[r] recompute descendants= · =[f] fork conversation= · =[u] undo edit=
+
+*** Active graph definition snapshot                                  :graph:
+:PROPERTIES:
+:VISIBILITY: folded
+:GRAPH_ID: governed-command-super-response
+:VERSION: 7
+:END:
+
+This is the reusable definition. The detailed tree above is an immutable observed
+instance. Editing this section creates graph version 8; it does not rewrite run
+=run-c2f9=.
+
+**** Required path
+
+1. context intake
+2. contract compiler
+3. parallel candidate fan-out (N=3)
+4. dynamic check author
+5. aggregation
+6. deterministic risk gate
+7. sandbox effect trial
+8. conditional bounded repair (maximum 2 attempts)
+9. forced cross-model handoff
+10. independent final verification (quorum 3/3)
+11. publish gate
+
+**** Global triggers
+
+| trigger | action |
+|---------+--------|
+| every assistant message | instantiate required graph |
+| every material command/artifact | run pinned contract and effect checks |
+| repeated equivalent failure | request independent critic |
+| upstream edit or contradiction | invalidate and reconcile affected descendants |
+| stalled branches or accumulated anomalies | synthesize global state |
+| ordinary success with no trigger | continue without extra model calls |
+| cache epoch threshold crossed | create a new versioned context snapshot |
+
+**** Graph invariants
+
+- No terminal answer without a recorded path through all required gates.
+- No model may mark its own command safe.
+- “Fires deterministically” and “returns a deterministic verdict” are separate
+  claims; all model judgments remain labeled as model judgments.
+- Cache transfer is never an authority or correctness mechanism.
+- An edited upstream artifact invalidates only its dependent descendants.
+- Historical runs and evidence remain immutable and addressable.
+- Every aggregation output retains links to all contributing artifacts.
+
+* Archived conversations                                               :archive:
+:PROPERTIES:
+:VISIBILITY: folded
+:END:
+
+** Conversation: explain a compiler error · COMPLETE
+** Conversation: compare three implementation plans · COMPLETE
+** Conversation: investigate a flaky test · INTERRUPTED

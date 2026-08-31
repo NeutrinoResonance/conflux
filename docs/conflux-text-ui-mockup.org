@@ -1,0 +1,443 @@
+#+TITLE: Conflux conversation mockup
+#+STARTUP: showall indent
+#+TODO: QUEUED RUNNING WAITING | PASS WARN FAIL SUPERSEDED
+#+TAGS: user(u) assistant(a) trace(t) model(m) deterministic(d) sandbox(s) cache(k)
+#+OPTIONS: toc:nil num:nil
+
+* Conversation — cancelled jobs sometimes become “completed”
+:PROPERTIES:
+:CONVERSATION_ID: conv_74a2
+:ENDEAVOR: Durable job runner reliability
+:AGENT_GRAPH: governed-code-change@v8
+:REPOSITORY: acme/job-runner@4c18d7a
+:END:
+
+** USER · 9:14 AM                                                   :user:
+
+I have a race in our job runner that I cannot make happen reliably.
+
+A user cancels a running job, the API returns 200, and the row briefly says
+=cancelled=. A few milliseconds later it sometimes changes to =completed= and the
+result gets published anyway.
+
+The cancellation code uses a conditional update, but completion does not:
+
+#+begin_src typescript
+// cancel.ts
+await db.query(`
+  UPDATE jobs
+     SET state = 'cancelled', cancelled_at = now()
+   WHERE id = $1 AND state IN ('queued', 'running')
+`, [jobId]);
+
+// complete.ts
+await db.query(`
+  UPDATE jobs
+     SET state = 'completed', result = $2
+   WHERE id = $1
+`, [jobId, result]);
+#+end_src
+
+Please diagnose it first. Do not change anything yet.
+
+** ASSISTANT · 9:15 AM — diagnosis verified                       :assistant:
+
+The completion update is overwriting a successful cancellation.
+
+The cancellation statement protects itself from invalid starting states, but the
+completion statement accepts every state. This ordering produces the bug:
+
+1. Worker begins its completion path.
+2. The API changes =running → cancelled= and returns 200.
+3. The worker's unconditional update changes =cancelled → completed=.
+4. The publisher sees =completed= and emits the result.
+
+I reproduced that sequence 31 times in 1,000 forced interleavings against the
+repository snapshot. I would fix it by making completion a compare-and-set from
+=running= and treating a zero-row update as “completion lost the race.” No files
+have been changed.
+
+*** Trace · diagnosis graph · 7 nodes · 4.8 s · $0.012              :trace:
+:PROPERTIES:
+:VISIBILITY: folded
+:RUN_ID: run_001
+:END:
+
+**** PASS 01 · Contract                                        :deterministic:
+
+Diagnosis and evidence only. Repository writes forbidden; disposable sandbox
+execution allowed.
+
+**** PASS 02 · Independent diagnoses [3/3]                           :model:
+
+***** qwen-3.7-plus
+
+Found an unconditional last-writer-wins transition in =complete.ts=.
+
+***** deepseek-v4-pro
+
+Checked duplicate delivery, stale cache, and publisher ordering. Only the SQL
+update explains the observed persisted =cancelled → completed= transition.
+
+***** gemma-4-31b
+
+Constructed the transaction interleaving and proposed conditional completion plus
+explicit zero-row handling.
+
+**** PASS 03 · Aggregator                                             :model:
+
+All three diagnoses were mandatory inputs. The shared race hypothesis won; the
+alternative-hypothesis checks were retained.
+
+**** PASS 04 · KV-transfer gate                                       :cache:
+
+| handoff | decision | reason |
+|---------+----------+--------|
+| qwen-3.7-plus → qwen-3.7-plus-go | enable | validated translator; held-out perplexity delta +0.6% |
+| deepseek-v4-pro → kimi-k2.6 | disable | no qualified pair; canonical text replayed |
+
+**** PASS 05 · Reproduction-test author                               :model:
+
+Generated a barrier-controlled interleaving test with no timing sleeps.
+
+**** PASS 06 · Locked sandbox                                      :sandbox:
+
+| forced interleavings | invalid transitions | retained writes | network |
+|----------------------+---------------------+-----------------+---------|
+| 1,000 | 31 | 0 | denied |
+
+**** PASS 07 · Claim verifier                                  :deterministic:
+
+Response may claim reproduction and diagnosis. It may not claim a fix.
+
+** USER · 9:17 AM                                                   :user:
+
+Good. Prove it with a deterministic regression test first, then fix it.
+
+Constraints:
+
+- no schema migration;
+- no public API change;
+- do not touch the UI or publisher;
+- run the smallest relevant test before the full job-runner suite.
+
+You can edit and test in the locked sandbox. Do not deploy anything.
+
+** ASSISTANT · 9:19 AM — fixed and tested                           :assistant:
+
+Fixed in the sandbox.
+
+The regression test pauses completion immediately before its write, commits the
+cancellation, and then releases completion. It failed before the patch and passed
+after it.
+
+Completion now succeeds only while the row is still =running=:
+
+#+begin_src sql
+UPDATE jobs
+   SET state = 'completed', result = $2, completed_at = now()
+ WHERE id = $1 AND state = 'running'
+RETURNING id
+#+end_src
+
+When the query returns no row, the worker records =completion_superseded= and
+returns before publishing.
+
+Changed only:
+
+- =src/jobs/complete.ts=
+- =tests/jobs/cancel-complete-race.test.ts=
+
+Verification:
+
+- Regression test before patch: failed 20/20
+- Regression test after patch: passed 20/20
+- Job-runner suite: 184/184 passed
+- Type check: passed
+- Schema, exported API, UI, and publisher diffs: none
+
+Nothing was deployed.
+
+*** Trace · governed edit · 11 nodes · 21.3 s · $0.038              :trace:
+:PROPERTIES:
+:VISIBILITY: folded
+:RUN_ID: run_002
+:PARENT_RUN: run_001
+:END:
+
+**** PASS 01 · Executable contract                             :deterministic:
+
+| requirement | check |
+|-------------+-------|
+| test fails before fix | run against clean snapshot; require nonzero exit |
+| smallest test first | assert trace order |
+| no schema/API/UI/publisher change | fingerprints and path allowlist |
+| no deploy | deployment capability absent |
+
+**** FAIL 02 · First generated regression test                       :model:
+
+Rejected because it used =setTimeout(5)= and could pass without forcing the race.
+
+**** PASS 03 · Test repair                                           :model:
+
+Replaced timing with barriers: pause write → cancel and confirm → release write →
+assert cancelled state and zero publish events.
+
+**** PASS 04 · Pre-fix sandbox                                    :sandbox:
+
+#+begin_example
+expected: state="cancelled", publish events=0
+observed: state="completed", publish events=1
+result: FAIL (20/20 runs)
+#+end_example
+
+This required failure proves that the test detects the original bug.
+
+**** PASS 05 · Patch candidates [3/3]                               :model:
+
+| candidate | decision |
+|-----------+----------|
+| conditional update with =RETURNING id= | selected |
+| transaction-wide advisory lock | rejected: unnecessary contention |
+| re-read state before unconditional update | rejected: retains TOCTOU race |
+
+**** PASS 06 · Forced output handoff                                :model:
+
+The selected patch, rejected alternatives, failing-test evidence, and contract
+were force-fed to the implementation model. Missing artifact hashes block it.
+
+**** FAIL 07 · First implementation review                          :model:
+
+The first patch guarded the update but still called =publishResult()= after a
+zero-row result: completion was prevented; the side effect was not.
+
+**** PASS 08 · Repair loop · attempt 1/2                             :model:
+
+Added zero-row handling and an early return. No second repair was needed.
+
+**** PASS 09 · Post-fix sandbox                                   :sandbox:
+
+| check | result |
+|-------+--------|
+| deterministic regression test | PASS 20/20 |
+| regression executed before suite | PASS |
+| full job-runner suite | PASS 184/184 |
+| type check | PASS |
+| changed paths | PASS: exactly 2 allowed files |
+| schema/API/UI/publisher diff | PASS: none |
+| deployment calls | PASS: 0 |
+
+**** PASS 10 · Effect verifier                                :deterministic:
+
+Recorded commands, exit statuses, changed paths, before/after hashes, test events,
+and filesystem diff. Exit status alone was not treated as proof.
+
+**** PASS 11 · Final verifier union · 3/3                            :model:
+
+The response may say “fixed in the sandbox” and “not deployed.”
+
+** USER · 9:21 AM                                                   :user:
+
+Show me the exact patch. Also give me the safest command to apply it to my branch.
+I want to see whether any proposed command was rejected and why.
+
+** ASSISTANT · 9:22 AM — patch ready                               :assistant:
+
+Save the patch below as =cancel-completion-race.patch=, then run:
+
+#+begin_src sh
+git apply --check cancel-completion-race.patch &&
+git apply --3way cancel-completion-race.patch
+#+end_src
+
+Verify it with:
+
+#+begin_src sh
+pnpm test tests/jobs/cancel-complete-race.test.ts &&
+pnpm test --filter job-runner &&
+git diff --check
+#+end_src
+
+#+begin_src diff
+diff --git a/src/jobs/complete.ts b/src/jobs/complete.ts
+--- a/src/jobs/complete.ts
++++ b/src/jobs/complete.ts
+@@ -41,7 +41,14 @@ export async function completeJob(jobId, result) {
+-  await db.query(`UPDATE jobs SET state='completed', result=$2 WHERE id=$1`,
++  const completed = await db.query(`
++    UPDATE jobs SET state='completed', result=$2, completed_at=now()
++     WHERE id=$1 AND state='running'
++     RETURNING id
++  `,
+     [jobId, result]);
++  if (completed.rowCount === 0) {
++    metrics.increment('completion_superseded');
++    return;
++  }
+   await publishResult(jobId, result);
+ }
+#+end_src
+
+The patch file also contains the new barrier-controlled regression test.
+
+One generated alternative was rejected:
+
+#+begin_src sh
+perl -pi -e "s/WHERE id=\$1/WHERE id=\$1 AND state='running'/" \
+  src/jobs/complete.ts
+#+end_src
+
+That replacement was not uniquely anchored and did not add zero-row handling or
+the regression test. Its shell exit status was 0, but its behavioral check failed.
+No command was run on your branch.
+
+*** Trace · patch authorization · 7 nodes · 8.1 s · $0.015          :trace:
+:PROPERTIES:
+:VISIBILITY: folded
+:RUN_ID: run_003
+:PARENT_RUN: run_002
+:END:
+
+**** PASS 01 · Artifact request classifier
+
+User requested an inspectable patch and local command, not external execution.
+
+**** PASS 02 · Patch exporter                                 :deterministic:
+
+Exported only sandbox-approved diffs and bound them to snapshot =4c18d7a=.
+
+**** FAIL 03 · Generated edit command
+
+| check | result |
+|-------+--------|
+| exact write set bounded | PASS |
+| replacement uniquely anchored | FAIL |
+| implements approved behavior | FAIL |
+| includes regression test | FAIL |
+
+**** PASS 04 · Command repair
+
+Replaced source rewriting with =git apply=: the reviewed patch is applied directly
+instead of being imperfectly reconstructed by a command.
+
+**** PASS 05 · Dry-run effect analysis                             :sandbox:
+
+| effect | result |
+|--------+--------|
+| =git apply --check= | exit 0 |
+| changed files | exactly 2 |
+| unexpected or binary files | 0 |
+| conflicts | 0 |
+
+**** PASS 06 · Independent command critic                           :model:
+
+Kept =--check= before =--3way=. Rejected automatic commit or push because neither
+was requested.
+
+**** PASS 07 · Publish gate                                  :deterministic:
+
+Response must show the rejected command and state that the user's branch was not
+modified.
+
+** USER · 9:24 AM                                                   :user:
+
+Wait—there is an exception. A manual retry increments =retry_generation=. A worker
+from generation 2 is allowed to finish even if a stale generation-1 cancellation
+arrives afterward. Does your patch break that?
+
+** ASSISTANT · 9:25 AM — correction applied                        :assistant:
+
+Yes. The previous patch would incorrectly block that valid generation-2
+completion because it looked only at =state='running'=.
+
+I revised the guard so completion must match the worker's captured generation and
+the current row generation:
+
+#+begin_src sql
+UPDATE jobs
+   SET state = 'completed', result = $3, completed_at = now()
+ WHERE id = $1
+   AND state = 'running'
+   AND retry_generation = $2
+RETURNING id
+#+end_src
+
+The original cancellation-race test still passes. A new test proves that a
+generation-2 worker can complete after a stale generation-1 cancellation attempt.
+
+Updated sandbox results:
+
+- Cancellation race: passed 20/20
+- Retry-generation regression: passed 20/20
+- Full job-runner suite: 186/186
+- Public declaration diff: unchanged
+- Schema diff: none
+
+The patch in my previous message is now =SUPERSEDED= and should not be applied.
+
+*** Trace · correction and selective recompute · 9 nodes · 13.6 s · $0.022 :trace:
+:PROPERTIES:
+:VISIBILITY: folded
+:RUN_ID: run_004
+:PARENT_RUN: run_003
+:CONTEXT_EPOCH: 19
+:END:
+
+**** PASS 01 · Constraint reconciliation                        :deterministic:
+
+The retry-generation rule contradicts the earlier assumption that every
+cancellation dominates every later completion.
+
+**** PASS 02 · Dependency invalidation                         :deterministic:
+
+| prior artifact | disposition |
+|----------------+-------------|
+| repository manifest | reused |
+| original reproduction | retained as historical evidence |
+| contract | recomputed |
+| prior patch and apply command | SUPERSEDED and blocked |
+| post-fix evidence | stale; rerun required |
+
+**** PASS 03 · Semantics review [3/3]                                :model:
+
+All reviewers required generation equality. One also caught that the worker must
+capture its generation when work begins, not re-read it before completion.
+
+**** PASS 04 · Test expansion                                         :model:
+
+Added a barrier test for stale generation 1 cancellation versus generation 2
+completion. Timing sleeps remained prohibited.
+
+**** PASS 05 · KV-transfer gate                                       :cache:
+
+Transfer was disabled even for a compatible model pair because the previous cache
+epoch contained the invalid contract. Corrected context was replayed into epoch 19.
+
+**** PASS 06 · Revised implementation                                 :model:
+
+Recomputed only nodes dependent on the changed semantic contract.
+
+**** PASS 07 · Locked sandbox                                      :sandbox:
+
+| check | result |
+|-------+--------|
+| original cancellation test | PASS 20/20 |
+| retry-generation test | PASS 20/20 |
+| full job-runner suite | PASS 186/186 |
+| allowed paths and schema/API checks | PASS |
+
+**** PASS 08 · Supersession guard                              :deterministic:
+
+Exporting =run_003.patch= now returns =blocked: descendant of superseded contract=.
+
+**** PASS 09 · Final verifier union · 3/3                            :model:
+
+The response admits the earlier error, gives the corrected condition, reports
+fresh evidence, and warns against applying the stale patch.
+
+*** Composer
+:PROPERTIES:
+:VISIBILITY: folded
+:END:
+
+Ask, direct, or continue this conversation…

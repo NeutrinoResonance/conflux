@@ -42,4 +42,6 @@ instance bills for its disk only (~$0.04/GB-month standard PD); restart with
 
 - The NetBSD ARM64 endeavor worker (n2-standard-8), already stopped before
   this session; its retained disk is part of that endeavor's documented
-  evidence (see the 2026-07-18 NetBSD reports). Left untouched.
+  evidence (see the 2026-07-18 NetBSD reports). It also holds the 2026-07-19
+  OP-TEE driver artifacts at `~/netbsd-src/sys/dev/optee/optee.c` and
+  `~/llmsuper-netbsd-optee/optee-driver-proof.log`. Left untouched.
