@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import unittest
 
-from llm_super.config import Config, Execution, Model, Provider, Supervision
-from llm_super.control import ControlState
-from llm_super.orchestrator import Budget, Orchestrator, TurnOptions
-from llm_super.providers import ChatResult
-from llm_super.verifier import VerifyReport
+from conflux.config import Config, Execution, Model, Provider, Supervision
+from conflux.control import ControlState
+from conflux.orchestrator import Budget, Orchestrator, TurnOptions
+from conflux.providers import ChatResult
+from conflux.verifier import VerifyReport
 
 
 class _History:

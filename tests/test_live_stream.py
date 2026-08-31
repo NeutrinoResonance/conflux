@@ -8,8 +8,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from llm_super import proxy
-from llm_super.trace import Trace
+from conflux import proxy
+from conflux.trace import Trace
 
 
 class _StubRequest:

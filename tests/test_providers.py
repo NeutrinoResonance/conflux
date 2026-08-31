@@ -6,11 +6,11 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from llm_super.config import Config, Execution, Model, Provider, Supervision
-from llm_super.control import ControlState
-from llm_super.keys import KeyResolutionError
-from llm_super.orchestrator import Orchestrator
-from llm_super.providers import Client, ProviderError, chat_chain
+from conflux.config import Config, Execution, Model, Provider, Supervision
+from conflux.control import ControlState
+from conflux.keys import KeyResolutionError
+from conflux.orchestrator import Orchestrator
+from conflux.providers import Client, ProviderError, chat_chain
 
 
 def _model(name: str, provider: str, model_id: str,
@@ -105,9 +105,9 @@ class ProviderCompatibilityTests(unittest.IsolatedAsyncioTestCase):
             "stream": True,
             "stream_options": {"include_usage": True},
         }
-        with patch("llm_super.providers.resolve", return_value="token"), \
-                patch("llm_super.providers.try_refresh", return_value=True) as refresh, \
-                patch("llm_super.providers.asyncio.sleep", new_callable=AsyncMock) as sleep:
+        with patch("conflux.providers.resolve", return_value="token"), \
+                patch("conflux.providers.try_refresh", return_value=True) as refresh, \
+                patch("conflux.providers.asyncio.sleep", new_callable=AsyncMock) as sleep:
             result = await client.raw_chat(client.cfg.model("primary"), original)
 
         self.assertEqual(len(sent), 3)
@@ -157,7 +157,7 @@ class ProviderCompatibilityTests(unittest.IsolatedAsyncioTestCase):
             "messages": [{"role": "user", "content": "use a tool"}],
             "tools": [{"type": "function", "function": {"name": "shell"}}],
         }
-        with patch("llm_super.providers.resolve", side_effect=resolve_key):
+        with patch("conflux.providers.resolve", side_effect=resolve_key):
             result = await orchestrator.run_tool_turn("session", body)
 
         self.assertEqual(seen_hosts, ["fallback.test"])
@@ -184,7 +184,7 @@ class ProviderCompatibilityTests(unittest.IsolatedAsyncioTestCase):
                 raise KeyResolutionError("primary credential missing")
             return "fallback-token"
 
-        with patch("llm_super.providers.resolve", side_effect=resolve_key):
+        with patch("conflux.providers.resolve", side_effect=resolve_key):
             result, model = await chat_chain(
                 client, client.cfg, "primary",
                 [{"role": "user", "content": "hello"}],
@@ -198,8 +198,8 @@ class ProviderCompatibilityTests(unittest.IsolatedAsyncioTestCase):
             return httpx.Response(403, json={"error": "blocked"})
 
         client = await self._client(handler)
-        with patch("llm_super.providers.resolve", return_value="token"), \
-                patch("llm_super.providers.try_refresh", return_value=False):
+        with patch("conflux.providers.resolve", return_value="token"), \
+                patch("conflux.providers.try_refresh", return_value=False):
             with self.assertRaises(ProviderError) as raised:
                 await client.raw_chat(client.cfg.model("primary"), {
                     "messages": [{"role": "user", "content": "hello"}],

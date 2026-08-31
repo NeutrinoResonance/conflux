@@ -10,7 +10,7 @@ PAGE = r"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>History · llm-super</title>
+<title>History · conflux</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛰️</text></svg>">
 <style>
 /*__DESIGN_TOKENS__*/
@@ -465,7 +465,7 @@ dialog::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(2px); }
 </head>
 <body>
 <header class="topbar">
-  <a class="brand" href="/">llm-super</a>
+  <a class="brand" href="/">conflux</a>
   <nav class="nav" aria-label="Primary">
     <a href="/workspace">Workspace</a>
     <a href="/">Live</a>

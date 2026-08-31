@@ -6,7 +6,7 @@ import unittest
 
 from fastapi import HTTPException
 
-from llm_super import proxy
+from conflux import proxy
 
 
 class _Request:
@@ -26,7 +26,7 @@ class ConversationResolutionTests(unittest.TestCase):
 
     def test_header_wins_over_hash(self) -> None:
         session, explicit = proxy._resolve_conversation(
-            _Request({"x-llm-super-conversation": "conv-42"}), {}, MESSAGES)
+            _Request({"x-conflux-conversation": "conv-42"}), {}, MESSAGES)
         self.assertEqual(session, "conv-42")
         self.assertTrue(explicit)
 
@@ -38,7 +38,7 @@ class ConversationResolutionTests(unittest.TestCase):
 
     def test_header_beats_body(self) -> None:
         session, _ = proxy._resolve_conversation(
-            _Request({"x-llm-super-conversation": "from-header"}),
+            _Request({"x-conflux-conversation": "from-header"}),
             {"conversation_id": "from-body"}, MESSAGES)
         self.assertEqual(session, "from-header")
 
@@ -58,9 +58,9 @@ class ConversationResolutionTests(unittest.TestCase):
     def test_explicit_id_is_stable_across_first_message_edits(self) -> None:
         edited = [{"role": "user", "content": "hello EDITED"}]
         a, _ = proxy._resolve_conversation(
-            _Request({"x-llm-super-conversation": "conv-42"}), {}, MESSAGES)
+            _Request({"x-conflux-conversation": "conv-42"}), {}, MESSAGES)
         b, _ = proxy._resolve_conversation(
-            _Request({"x-llm-super-conversation": "conv-42"}), {}, edited)
+            _Request({"x-conflux-conversation": "conv-42"}), {}, edited)
         self.assertEqual(a, b)
         # ... unlike the hash fallback, which forks:
         self.assertNotEqual(proxy._session_id(MESSAGES),
@@ -68,15 +68,15 @@ class ConversationResolutionTests(unittest.TestCase):
 
     def test_endeavor_id_validated_same_way(self) -> None:
         self.assertEqual(
-            proxy._explicit_id(_Request({"x-llm-super-endeavor": "goal-7"}),
-                               {}, "x-llm-super-endeavor", "endeavor_id"),
+            proxy._explicit_id(_Request({"x-conflux-endeavor": "goal-7"}),
+                               {}, "x-conflux-endeavor", "endeavor_id"),
             "goal-7")
         self.assertIsNone(
-            proxy._explicit_id(_Request(), {}, "x-llm-super-endeavor",
+            proxy._explicit_id(_Request(), {}, "x-conflux-endeavor",
                                "endeavor_id"))
         with self.assertRaises(HTTPException):
             proxy._explicit_id(_Request(), {"endeavor_id": "bad id"},
-                               "x-llm-super-endeavor", "endeavor_id")
+                               "x-conflux-endeavor", "endeavor_id")
 
 
 if __name__ == "__main__":

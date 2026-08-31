@@ -4,7 +4,7 @@ import sqlite3
 from types import SimpleNamespace
 import unittest
 
-from llm_super.export import library_message_summaries, library_step_summaries
+from conflux.export import library_message_summaries, library_step_summaries
 
 
 class ExportedMessageSummariesTest(unittest.TestCase):

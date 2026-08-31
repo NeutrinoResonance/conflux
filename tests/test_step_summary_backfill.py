@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from llm_super import step_summary_backfill as summaries
+from conflux import step_summary_backfill as summaries
 
 
 class StepSummaryBackfillTest(unittest.TestCase):
@@ -202,7 +202,7 @@ class StepSummaryBackfillTest(unittest.TestCase):
         conn.close()
         self.assertEqual(version, "step-summary-v2")
 
-    @mock.patch("llm_super.step_summary_backfill.subprocess.run")
+    @mock.patch("conflux.step_summary_backfill.subprocess.run")
     def test_claude_invocation_is_haiku_structured_tool_free_and_safe(self, run) -> None:
         identifier = "a" * 64
         run.return_value = subprocess.CompletedProcess(

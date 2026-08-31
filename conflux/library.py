@@ -26,7 +26,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "kdf_params": {"n": 16, "r": 8, "p": 1},  # scrypt: n=log2(N)
     "public_key": "",             # recipient key (X25519 base64 or RSA PEM) — publickey mode
     "destination": "dir",         # dir | command
-    "directory": "~/llm-super-exports",
+    "directory": "~/conflux-exports",
     "command": "",                # e.g. "gcloud storage cp {file} gs://bucket/"
     "include_upstream": True,     # include full provider exchanges (large)
 }

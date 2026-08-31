@@ -5,7 +5,7 @@ PAGE = r'''<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Workspace · llm-super</title>
+<title>Workspace · conflux</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23eef2f8'/%3E%3Cpath d='M9 14h5l-2-3 7 5h4l-3 5-4-3h-5z' fill='%230c0f14'/%3E%3C/svg%3E">
 <style>
 /*__DESIGN_TOKENS__*/
@@ -112,7 +112,7 @@ PAGE = r'''<!doctype html>
 <body>
 <div class="app">
   <header class="topbar">
-    <div class="brand"><span class="brand-mark">⌁</span><span>llm-super</span></div>
+    <div class="brand"><span class="brand-mark">⌁</span><span>conflux</span></div>
     <nav class="topnav" aria-label="Primary">
       <a href="/workspace" aria-current="page">Workspace</a><a href="/">Live</a><a href="/history">History</a><a href="/graphs">Agent Graphs</a>
     </nav>
@@ -171,7 +171,7 @@ PAGE = r'''<!doctype html>
 const $=s=>document.querySelector(s), esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const state={endeavors:[],unassigned:[],graph:null,models:[],flows:[],agents:[],selected:null,zoom:.8,panX:40,panY:25,panning:null,serial:0,poll:null,modalAction:null,expandedWorkflows:{},workflowExecutions:{},activeWorkflowOverlay:null,overlayZ:30,composerSession:null,executionLock:null,creatingEndeavor:false,creatingConversation:false,sending:false,view:"thread",threadTraceOpen:{},threadTraceShowIdle:{},composerFlow:"auto",flowPrediction:null,flowPredictionTimer:null,flowPreviewOpen:false};
 try{if(localStorage.getItem("workspaceView")==="graph")state.view="graph"}catch{}
-async function api(url,opts={}){let response;try{response=await fetch(url,{headers:{"Content-Type":"application/json",...(opts.headers||{})},...opts})}catch(error){$("#syncState").textContent="disconnected";throw new Error("Workspace API is unavailable. This page may be connected to a stopped or expired server; reopen the active llm-super URL and try again.")}let data={};try{data=await response.json()}catch{}if(!response.ok)throw new Error(data.detail||data.error||`Request failed (${response.status})`);return data}
+async function api(url,opts={}){let response;try{response=await fetch(url,{headers:{"Content-Type":"application/json",...(opts.headers||{})},...opts})}catch(error){$("#syncState").textContent="disconnected";throw new Error("Workspace API is unavailable. This page may be connected to a stopped or expired server; reopen the active conflux URL and try again.")}let data={};try{data=await response.json()}catch{}if(!response.ok)throw new Error(data.detail||data.error||`Request failed (${response.status})`);return data}
 function toast(message,error=false){const el=$("#toast");el.textContent=message;el.className="toast show"+(error?" error":"");clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.className="toast",3200)}
 function short(text,n=90){text=String(text||"").replace(/\s+/g," ").trim();return text.length>n?text.slice(0,n-1)+"…":text}
 function timeLabel(ts){if(!ts)return "";return new Date(ts*1000).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})}
@@ -316,7 +316,7 @@ function renderWorkflowOverlays(){
 }
 function applyView(){const thread=state.view==="thread";$("#transcript").hidden=!thread;$("#viewport").hidden=thread;document.querySelector(".workspace").classList.toggle("view-thread",thread);$("#viewThread").setAttribute("aria-pressed",String(thread));$("#viewGraph").setAttribute("aria-pressed",String(!thread))}
 function setView(view){state.view=view;try{localStorage.setItem("workspaceView",view)}catch{}applyView();if(view==="graph"){renderGraph();wireNodeDrag();requestAnimationFrame(fit)}else renderTranscript()}
-function threadRole(node){return node.kind==="context"?"CONTEXT":node.kind==="store_read"?"STORE READ":node.kind==="store_write"?"STORE WRITE":node.kind==="checkpoint"?"CHECKPOINT":node.role==="user"?"OPERATOR":"LLM—SUPER"}
+function threadRole(node){return node.kind==="context"?"CONTEXT":node.kind==="store_read"?"STORE READ":node.kind==="store_write"?"STORE WRITE":node.kind==="checkpoint"?"CHECKPOINT":node.role==="user"?"OPERATOR":"CONFLUX"}
 function threadTraceKey(instance,id){return instance+">"+id}
 function threadStageStatus(workflow,execution,item){const observed=new Set(execution.observed_nodes||[]),current=execution.current_node||workflow.active_node;return item.id===current?(workflow.status==="awaiting_approval"||workflow.status==="awaiting_input"?"waiting":workflow.status==="failed"?"failed":"current"):observed.has(item.id)||item.runtime_status==="complete"?"observed":"idle"}
 function threadStageDetail(workflow,item,execution){const record=state.workflowExecutions[workflow.instance_id];if(record?.loading)return'<div class="trace-detail-note">Loading the recorded execution for this stage…</div>';if(record?.error)return`<div class="trace-detail-note">${esc(record.error)}</div>`;const steps=(execution?.model_steps||[]).filter(step=>step.node_id===item.id),events=[...(execution?.runtime_events||[]),...(execution?.trace_events||[])].filter(event=>event.node_id===item.id),agent=agentFor(item.agent);const intro=`<div class="trace-detail-note"><b>${esc(item.label)}</b> — ${esc(item.description||agent?.description||"declared workflow stage")} · identity: ${esc(agent?.label||item.agent||"deterministic / system")}</div>`;const io=steps.map(step=>`<div class="trace-io"><div class="trace-io-head"><b>${esc(step.model)}</b><span>${esc(step.kind)}</span><span>${step.tokens_in+step.tokens_out} tokens</span><span>$${Number(step.cost_usd||0).toFixed(5)}</span></div><div class="trace-io-grid"><label>Input — what this stage received<pre>${esc(JSON.stringify(step.input,null,2))}</pre></label><label>Output — what it produced<pre>${esc(JSON.stringify(step.output,null,2))}</pre></label></div></div>`).join("");const eventRows=events.map(event=>`<div class="trace-event"><b>${esc(event.summary||event.kind)}</b><span>${esc(event.kind)} · ${esc(event.status||"recorded")}${event.model?` · ${esc(event.model)}`:""}</span></div>`).join("");const empty=!steps.length&&!events.length?'<div class="trace-detail-note">Nothing was recorded at this stage in this run — it is deterministic, or the run never reached it.</div>':"";return intro+io+eventRows+empty+`<div class="trace-detail-actions"><button type="button" class="quiet-btn" data-trace-open-run="${esc(workflow.instance_id)}">Inspect full run ↗</button><span>This stage is also selected in the node terminal below, where its definition is editable.</span></div>`}

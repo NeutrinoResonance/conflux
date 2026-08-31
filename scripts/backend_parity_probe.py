@@ -26,18 +26,18 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from llm_super.durable_jobs import (  # noqa: E402
+from conflux.durable_jobs import (  # noqa: E402
     DockerAuthorizedTarget,
     DockerJobBackend,
     DurableJobStore,
     GCEAuthorizedTarget,
     GCEJobBackend,
 )
-from llm_super.execution_backends import ExecutionBackendLock  # noqa: E402
+from conflux.execution_backends import ExecutionBackendLock  # noqa: E402
 
 WORKLOAD = r"""
 set -e
-cd "$LLM_SUPER_ARTIFACT_DIR"
+cd "$CONFLUX_ARTIFACT_DIR"
 cat > orders.csv <<'CSV'
 date,item,price,quantity
 2026-07-20,widget,2.50,4
@@ -72,7 +72,7 @@ def run_probe(backend, label_prefix: str) -> dict:
                     "target": dict(backend.target_descriptor)}
 
     start = backend.start(
-        WORKLOAD, cwd="/tmp/llm-super-agent", timeout_s=300,
+        WORKLOAD, cwd="/tmp/conflux-agent", timeout_s=300,
         label=f"{label_prefix} parity workload",
         context={"session": "parity-probe", "task": "daily revenue summary"},
     )
@@ -119,7 +119,7 @@ def run_probe(backend, label_prefix: str) -> dict:
     # Second job: exercise ownership-exact cancellation semantics.
     second = backend.start(
         "echo cancel-me; sleep 120",
-        cwd="/tmp/llm-super-agent", timeout_s=300,
+        cwd="/tmp/conflux-agent", timeout_s=300,
         label=f"{label_prefix} cancellation probe",
         context={"session": "parity-probe", "task": "cancellation"},
     )

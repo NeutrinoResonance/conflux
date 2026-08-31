@@ -5,10 +5,10 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from llm_super import graph_ui, history_ui, proxy, ui
-from llm_super.durable_jobs import DurableJobStore
-from llm_super.flows import FlowRegistry, SQLiteFlowRuntime
-from llm_super.governance import (
+from conflux import graph_ui, history_ui, proxy, ui
+from conflux.durable_jobs import DurableJobStore
+from conflux.flows import FlowRegistry, SQLiteFlowRuntime
+from conflux.governance import (
     ActionStore,
     ActionVerdict,
     ToolManifest,
@@ -190,8 +190,8 @@ class GraphAdminRouteTests(unittest.IsolatedAsyncioTestCase):
         self.job_store.create(
             job_id=job_id, backend="gce", boundary_fingerprint="a" * 64,
             target={"vm": "one", "zone": "us-central1-a"}, context={},
-            label="route job", command="sleep 1", cwd="/tmp/llm-super-agent",
-            timeout_s=30, remote_dir=f"/tmp/llm-super-agent/.jobs/{job_id}",
+            label="route job", command="sleep 1", cwd="/tmp/conflux-agent",
+            timeout_s=30, remote_dir=f"/tmp/conflux-agent/.jobs/{job_id}",
         )
         self.job_store.observe(
             job_id, {"state": "running", "pid": 77, "owned": True},

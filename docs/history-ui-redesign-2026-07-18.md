@@ -31,7 +31,7 @@ not block the first useful endeavor detail paint.
 ### Sonnet message-summary backfill and recovery test
 
 The follow-up implementation was committed as `3a0d77f` before generated data
-was written. It added `llm-super summarize-history`, the optional
+was written. It added `conflux summarize-history`, the optional
 `message_summaries` and `message_summary_sources` tables, export support, and
 History projections/renderers for objective, run, request, agent-decision,
 tool-result, provider-attempt, and folded-poll prose. Raw JSON remains available
@@ -90,23 +90,23 @@ fire-and-forget job. The exact tuning sequence was:
 
 ```bash
 # Too large: interrupted after about six minutes, zero rows committed.
-.venv/bin/llm-super summarize-history --db traces.db --model sonnet \
+.venv/bin/conflux summarize-history --db traces.db --model sonnet \
   --batch-size 120 --batch-chars 220000 --max-budget-usd 0.75
 
 # Established checkpoints: 92 summaries committed, next batch interrupted.
-.venv/bin/llm-super summarize-history --db traces.db --model sonnet \
+.venv/bin/conflux summarize-history --db traces.db --model sonnet \
   --batch-size 40 --batch-chars 80000 --max-budget-usd 0.75
 
 # Exercised recursive validation recovery: 60 more committed.
-.venv/bin/llm-super summarize-history --db traces.db --model sonnet \
+.venv/bin/conflux summarize-history --db traces.db --model sonnet \
   --batch-size 60 --batch-chars 120000 --max-budget-usd 1.0
 
 # Generated 330 more; heterogeneous 15-item groups sometimes split to 7+8.
-.venv/bin/llm-super summarize-history --db traces.db --model sonnet \
+.venv/bin/conflux summarize-history --db traces.db --model sonnet \
   --batch-size 15 --batch-chars 60000 --max-budget-usd 0.75
 
 # Reliable tail: 175 generated in 22 calls with zero validation failures.
-.venv/bin/llm-super summarize-history --db traces.db --model sonnet \
+.venv/bin/conflux summarize-history --db traces.db --model sonnet \
   --batch-size 8 --batch-chars 40000 --max-budget-usd 0.75
 ```
 
@@ -215,7 +215,7 @@ Chrome DevTools MCP was used against `http://127.0.0.1:8055/`. Its first
 connection failed because an abandoned MCP-owned Chrome held
 `~/.cache/chrome-devtools-mcp/chrome-profile`. After resolving and terminating
 only that exact MCP bridge/Chrome process tree, Chrome DevTools MCP connected.
-The llm-super listener and normal user browser were not touched.
+The Conflux listener and normal user browser were not touched.
 
 Through MCP we:
 

@@ -12,14 +12,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from llm_super import proxy
-from llm_super.checkpoint import Checkpoints
-from llm_super.config import Config, Execution, Model, Provider, Supervision
-from llm_super.control import IN_BAND_RETIRED_NOTICE, ControlState
-from llm_super.history import History
-from llm_super.library import Library
-from llm_super.orchestrator import TurnReport
-from llm_super.trace import Trace
+from conflux import proxy
+from conflux.checkpoint import Checkpoints
+from conflux.config import Config, Execution, Model, Provider, Supervision
+from conflux.control import IN_BAND_RETIRED_NOTICE, ControlState
+from conflux.history import History
+from conflux.library import Library
+from conflux.orchestrator import TurnReport
+from conflux.trace import Trace
 
 
 def _config() -> Config:
@@ -137,11 +137,11 @@ class StatelessEndpointTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_explicit_conversation_header_keeps_continuity(self) -> None:
         request = _Request(self._body(),
-                           headers={"x-llm-super-conversation": "conv-abc"})
+                           headers={"x-conflux-conversation": "conv-abc"})
         await proxy.chat_completions(request)
         await proxy.chat_completions(_Request(
             self._body("a different prompt entirely"),
-            headers={"x-llm-super-conversation": "conv-abc"}))
+            headers={"x-conflux-conversation": "conv-abc"}))
 
         self.assertEqual(self.orch.sessions, ["conv-abc", "conv-abc"])
         self.assertTrue(self.library.has_session("conv-abc"))

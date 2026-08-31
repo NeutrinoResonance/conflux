@@ -6,13 +6,13 @@ import sqlite3
 import tempfile
 import unittest
 
-from llm_super.history_view import (
+from conflux.history_view import (
     AcceptanceAnchor,
     EndeavorGrouping,
     HistoryView,
     NETBSD_ARM64_ENDEAVOR,
 )
-from llm_super.message_summaries import PROMPT_VERSION, index_sources
+from conflux.message_summaries import PROMPT_VERSION, index_sources
 
 
 def _response(*, finish: str = "stop", call_id: str | None = None,

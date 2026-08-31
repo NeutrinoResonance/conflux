@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from llm_super import keys
+from conflux import keys
 
 
 class TryRefreshTests(unittest.TestCase):

@@ -1,4 +1,4 @@
-"""Shared design tokens for every llm-super surface.
+"""Shared design tokens for every conflux surface.
 
 One palette/type definition feeds Live (`ui.py`), History (`history_ui.py`),
 Agent Graphs (`graph_ui.py`), and Workspace (`workspace_ui.py`). Each app

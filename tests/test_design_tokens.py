@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import unittest
 
-from llm_super import design_tokens, graph_ui, history_ui, ui, workspace_ui
+from conflux import design_tokens, graph_ui, history_ui, ui, workspace_ui
 
 PAGES = {
     "live": ui.PAGE,

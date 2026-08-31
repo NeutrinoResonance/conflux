@@ -6,10 +6,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from llm_super.endeavors import EndeavorLedger
-from llm_super.history_view import NETBSD_ARM64_ENDEAVOR, HistoryView
-from llm_super.library import Library
-from llm_super.trace import Trace
+from conflux.endeavors import EndeavorLedger
+from conflux.history_view import NETBSD_ARM64_ENDEAVOR, HistoryView
+from conflux.library import Library
+from conflux.trace import Trace
 
 
 def _fresh(tmp, **kw):

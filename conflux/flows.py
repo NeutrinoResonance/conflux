@@ -2,7 +2,7 @@
 
 The runtime deliberately owns graph mechanics, not product policy.  Risk
 classification, evidence interpretation, model-family selection, and OpenAI
-compatibility remain llm-super concerns.  This module gives those concerns a
+compatibility remain conflux concerns.  This module gives those concerns a
 validated, inspectable state machine and a framework-neutral event ledger.
 """
 

@@ -5,7 +5,7 @@ PAGE = r"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agent Graphs · llm-super</title>
+<title>Agent Graphs · conflux</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23111318'/%3E%3Cpath d='M8 19c3-8 13-8 16 0M10 13h12' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
 /*__DESIGN_TOKENS__*/
@@ -85,7 +85,7 @@ nav a[aria-current=page]{background:var(--blue-soft);color:var(--blue);font-weig
 <body>
 <div class="app">
 <header>
-  <div class="brand"><span class="brandmark">⌁</span><span>llm-super</span></div>
+  <div class="brand"><span class="brandmark">⌁</span><span>conflux</span></div>
   <nav aria-label="Primary"><a href="/workspace">Workspace</a><a href="/">Live</a><a href="/history">History</a><a href="/graphs" aria-current="page">Agent Graphs</a></nav>
   <div class="head-status"><span class="pulse"></span><span id="syncState">control plane live</span></div>
 </header>
@@ -131,7 +131,7 @@ nav a[aria-current=page]{background:var(--blue-soft);color:var(--blue);font-weig
 <div class="toast" id="toast"></div>
 <script>
 const $=s=>document.querySelector(s); const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const positionKey="llm-super.graph-node-positions.v1";
+const positionKey="conflux.graph-node-positions.v1";
 function loadNodePositions(){try{const value=JSON.parse(localStorage.getItem(positionKey)||"{}");return value&&typeof value==="object"?value:{}}catch{return{}}}
 const state={defs:null,flow:null,runs:[],run:null,actions:[],jobs:[],executionLock:null,selectedJob:null,selectedNode:null,selectedEdge:null,soundnessScope:"selected",endeavorBySession:{},zoom:.82,autoFit:false,mode:"definition",serial:0,pendingDecision:null,nodePositions:loadNodePositions(),rendered:null,gesture:null,graphSignature:null,ignoreClickUntil:0};
 const accent={cobalt:"#7fa050",amber:"#b3924f",violet:"#8a7aab",cyan:"#5f918c",emerald:"#55876b",rose:"#b06b5c",slate:"#7b8492"};

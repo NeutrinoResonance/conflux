@@ -11,17 +11,17 @@ import argparse
 import json
 from pathlib import Path
 
-from llm_super.conversation_graph import ConversationGraphStore
-from llm_super.flows import FlowRegistry, SQLiteFlowRuntime
-from llm_super.governance import (
+from conflux.conversation_graph import ConversationGraphStore
+from conflux.flows import FlowRegistry, SQLiteFlowRuntime
+from conflux.governance import (
     ActionStore,
     ActionVerdict,
     ToolManifest,
     assess_action,
     build_proposal,
 )
-from llm_super.library import Library
-from llm_super.trace import Trace
+from conflux.library import Library
+from conflux.trace import Trace
 
 
 def main() -> None:

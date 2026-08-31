@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from llm_super import graph_ui, history_ui, ui, workspace_ui
+from conflux import graph_ui, history_ui, ui, workspace_ui
 
 
 class WorkspaceUIContractTests(unittest.TestCase):
@@ -245,7 +245,7 @@ class WorkspaceUIContractTests(unittest.TestCase):
         self.assertIn("data-thread-node", page)
         self.assertIn("data-thread-workflow-node", page)
         self.assertIn("OPERATOR", page)
-        self.assertIn("LLM—SUPER", page)
+        self.assertIn("CONFLUX", page)
         # thread transcript renders full markdown, not the truncated preview
         self.assertIn("copyText?rich(copyText)", page)
         # live updates re-render the transcript alongside the graph

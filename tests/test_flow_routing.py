@@ -3,9 +3,9 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-from llm_super import flow_match
-from llm_super.flow_synthesis import validate_synthesized
-from llm_super.flows import FlowRegistry
+from conflux import flow_match
+from conflux.flow_synthesis import validate_synthesized
+from conflux.flows import FlowRegistry
 
 
 def _registry() -> FlowRegistry:

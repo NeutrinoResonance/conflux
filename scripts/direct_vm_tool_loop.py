@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Non-streaming llm-super client with a locked remote execution backend.
+"""Non-streaming conflux client with a locked remote execution backend.
 
 Short commands and durable job operations share one immutable GCE backend
 lock.  The Google Cloud identity and target are client inputs and are never
@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from llm_super.durable_jobs import (
+from conflux.durable_jobs import (
     COLLECT_JOB_TOOL,
     INSPECT_JOB_TOOL,
     JOB_TOOL_DEFINITIONS,
@@ -42,12 +42,12 @@ from llm_super.durable_jobs import (
     GCEAuthorizedTarget,
     GCEJobBackend,
 )
-from llm_super.execution_backends import (
+from conflux.execution_backends import (
     ExecutionBackendLock,
     ExecutionBoundaryError,
     LockedJobExecutor,
 )
-from llm_super.flows import FlowRegistry, SQLiteFlowRuntime
+from conflux.flows import FlowRegistry, SQLiteFlowRuntime
 
 
 TOOL_NAME = "run_on_authorized_gce_vm"
@@ -137,8 +137,8 @@ _SENSITIVE_FLAG = re.compile(
     r"(?:=|\s+)\S+"
 )
 _BEARER = re.compile(r"(?i)\bBearer\s+\S+")
-_GOVERNOR_CORRECTION_PREFIX = "llm-super governor correction:"
-_GOVERNOR_CORRECTION_NAME = "llm_super_governor"
+_GOVERNOR_CORRECTION_PREFIX = "conflux governor correction:"
+_GOVERNOR_CORRECTION_NAME = "conflux_governor"
 
 
 def _is_governor_correction(message: Mapping[str, Any]) -> bool:
@@ -501,7 +501,7 @@ class AuthorizedContainerExecutor:
 
         payload = base64.b64encode(encoded_content).decode("ascii")
         digest = hashlib.sha256(encoded_content).hexdigest()
-        temporary_path = normalized_path + ".llm-super-write-tmp"
+        temporary_path = normalized_path + ".conflux-write-tmp"
         inner = " ".join((
             "set -e; umask 077; printf %s", shlex.quote(payload),
             "| base64 -d >", shlex.quote(temporary_path),
@@ -1015,7 +1015,7 @@ def run_tool_loop(
                 continue
             human_hold = (
                 isinstance(content, str)
-                and content.startswith("[llm-super] Human approval is required")
+                and content.startswith("[conflux] Human approval is required")
             )
             if human_hold:
                 # The synthetic notice stands in for a durably held assistant
@@ -1028,7 +1028,7 @@ def run_tool_loop(
                 return ToolLoopResult(assistant, messages, tool_steps)
             governor_blocked = (
                 isinstance(content, str)
-                and content.startswith("[llm-super] Action")
+                and content.startswith("[conflux] Action")
                 and " blocked" in content[:80]
             )
             if governor_blocked:
@@ -1151,7 +1151,7 @@ def run_tool_loop(
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Drive llm-super with one fixed-target remote-exec tool."
+        description="Drive conflux with one fixed-target remote-exec tool."
     )
     parser.add_argument("task", nargs="?", help="task text; reads stdin when omitted")
     parser.add_argument(
@@ -1195,7 +1195,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--job-db",
-        default=os.environ.get("LLM_SUPER_JOB_DB", "traces.db"),
+        default=os.environ.get("CONFLUX_JOB_DB", "traces.db"),
         help="SQLite control-plane ledger shared with the graph UI",
     )
     parser.add_argument(
@@ -1231,7 +1231,7 @@ def main(argv: list[str] | None = None) -> int:
             boundary = ExecutionBackendLock("docker", docker_target.descriptor)
             client = ChatCompletionsClient(
                 args.endpoint,
-                api_key=os.environ.get("LLM_SUPER_API_KEY"),
+                api_key=os.environ.get("CONFLUX_API_KEY"),
                 timeout_s=args.api_timeout_seconds,
             )
             job_store = DurableJobStore(args.job_db)
@@ -1277,7 +1277,7 @@ def main(argv: list[str] | None = None) -> int:
         target = AuthorizedVM(args.vm, args.project, args.account, args.zone)
         client = ChatCompletionsClient(
             args.endpoint,
-            api_key=os.environ.get("LLM_SUPER_API_KEY"),
+            api_key=os.environ.get("CONFLUX_API_KEY"),
             timeout_s=args.api_timeout_seconds,
         )
         job_target = GCEAuthorizedTarget(

@@ -5,16 +5,16 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from llm_super.checkpoint import Checkpoints
-from llm_super.config import Config, Execution, Model, Provider, Supervision
-from llm_super.control import PAUSED_BOUNDARY_NOTICE, PAUSED_NOTICE, ControlState
-from llm_super.history import History
-from llm_super.library import Library
-from llm_super.orchestrator import Orchestrator
-from llm_super import proxy
-from llm_super.providers import ChatResult
-from llm_super.trace import Trace
-from llm_super.verifier import VerifyReport
+from conflux.checkpoint import Checkpoints
+from conflux.config import Config, Execution, Model, Provider, Supervision
+from conflux.control import PAUSED_BOUNDARY_NOTICE, PAUSED_NOTICE, ControlState
+from conflux.history import History
+from conflux.library import Library
+from conflux.orchestrator import Orchestrator
+from conflux import proxy
+from conflux.providers import ChatResult
+from conflux.trace import Trace
+from conflux.verifier import VerifyReport
 
 
 def _config(*, budget: float = 0.50) -> Config:

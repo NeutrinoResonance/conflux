@@ -4,8 +4,8 @@ import sqlite3
 import unittest
 from pathlib import Path
 
-from llm_super.conversation_graph import ConversationGraphStore
-from llm_super.flows import FlowRegistry
+from conflux.conversation_graph import ConversationGraphStore
+from conflux.flows import FlowRegistry
 
 
 class ConversationGraphStoreTests(unittest.TestCase):

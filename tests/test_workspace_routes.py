@@ -5,11 +5,11 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from llm_super import proxy, workspace_ui
-from llm_super.conversation_graph import ConversationGraphStore
-from llm_super.flows import FlowRegistry
-from llm_super.library import Library
-from llm_super.trace import Trace
+from conflux import proxy, workspace_ui
+from conflux.conversation_graph import ConversationGraphStore
+from conflux.flows import FlowRegistry
+from conflux.library import Library
+from conflux.trace import Trace
 
 
 class _Request:

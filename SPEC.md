@@ -1,4 +1,4 @@
-# llm-super — Specification
+# Conflux — Specification
 
 **An ensemble supervisor for open-source LLMs.** Routes agentic coding work
 across an ensemble of OSS models (DeepSeek, GLM, Kimi, Qwen, and small models
@@ -92,7 +92,7 @@ internals as a client-agnostic **orchestration core** with two frontends:
 
 ```
                          ┌────────────────────────────┐
-   OSS client            │  llm-super                 │
+   OSS client            │  Conflux                 │
  (OpenCode, Aider, …)    │                            │
    │  OpenAI protocol    │  ┌──────────┐  ┌─────────┐ │     ┌─ DeepSeek
    └────────────────────►│  │ Ingress  │─►│ Orchestr│─┼────►├─ GLM / Kimi
@@ -288,7 +288,7 @@ count) and runs advisory monitors over it at each turn start:
   below threshold across turns. Advisory only, per the paper's modest
   success/fail correlation gap.
 
-These surface as `[llm-super] cross-turn:` trailer lines and trace events —
+These surface as `[Conflux] cross-turn:` trailer lines and trace events —
 never as automatic repairs, because the misbehaving party is the *driving*
 agent, and correcting it is the user's call (SPEC's intervention principle).
 
@@ -606,7 +606,7 @@ turn arrives.
 5. **M4 — Learning routing** *(implemented)*: repair outcomes accumulate in
    a repairs table (model × failure mode × strategy × success) and bias the
    referee's switch-model choice toward families that have actually fixed
-   the observed failure modes; efficiency report (`llm-super report`,
+   the observed failure modes; efficiency report (`conflux report`,
    `/admin/report`, dashboard Efficiency panel) — spend by role, repair vs
    first-pass share, supervision-overhead KPI vs the §8 targets, daily
    repair-share trend; in-turn monitors: FM-2.6 reasoning–action gap
@@ -633,10 +633,10 @@ into a single `.llmx` container:
 - Delete is enabled for sessions and projects (deleting a project reparents
   its sessions to Default).
 - Surfaces: dashboard sidebar + settings panel, `/admin/export`, and
-  `llm-super export --session|--project [--passphrase]`.
+  `conflux export --session|--project [--passphrase]`.
 - **Retention** (`retention.py`): independent age limits for message
   payloads / trace events / turn history (0 = keep forever); auto-pruned
-  hourly by the server, plus a dashboard "Prune now" and `llm-super prune`.
+  hourly by the server, plus a dashboard "Prune now" and `conflux prune`.
   Session/project metadata is never pruned (old conversations still list;
   export before payload expiry). File space is reclaimed live: the db uses
   `auto_vacuum=INCREMENTAL` (migrated automatically at server startup, or by

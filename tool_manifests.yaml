@@ -1,4 +1,4 @@
-# Local capability manifests. Request-side MCP annotations and x-llm-super
+# Local capability manifests. Request-side MCP annotations and x-conflux
 # fields are treated as untrusted hints and cannot grant capabilities.
 #
 # Add entries only for tool identities whose implementation/provenance you
@@ -35,9 +35,9 @@ manifests:
     # exact, one-shot operator decision on this disposable pinned VM.
     reviewable_blocks: true
     allowed_targets:
-      - /tmp/llm-super-agent
-      - /tmp/llm-super-agent/**
-      - /tmp/llm-super-src/scripts/phoenix_ledger_fixture.py
+      - /tmp/conflux-agent
+      - /tmp/conflux-agent/**
+      - /tmp/conflux-src/scripts/phoenix_ledger_fixture.py
     timeout_s: 120
     max_output_chars: 100000
     concurrency: 1
@@ -93,8 +93,8 @@ manifests:
     shell_command: true
     reviewable_blocks: true
     allowed_targets:
-      - /tmp/llm-super-agent
-      - /tmp/llm-super-agent/**
+      - /tmp/conflux-agent
+      - /tmp/conflux-agent/**
     timeout_s: 120
     max_output_chars: 100000
     concurrency: 1

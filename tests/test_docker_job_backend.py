@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from llm_super.durable_jobs import (
+from conflux.durable_jobs import (
     DockerAuthorizedTarget,
     DockerJobBackend,
     DurableJobStore,
@@ -16,13 +16,13 @@ from llm_super.durable_jobs import (
     GCEJobBackend,
     docker_exec_argv,
 )
-from llm_super.execution_backends import (
+from conflux.execution_backends import (
     ExecutionBackendLock,
     ExecutionBoundaryError,
     LockedJobExecutor,
 )
 
-TARGET = DockerAuthorizedTarget("llm-super-agent")
+TARGET = DockerAuthorizedTarget("conflux-agent")
 
 
 class _QueuedRunner:
@@ -51,7 +51,7 @@ def _backend(tmp: str, runner: _QueuedRunner) -> DockerJobBackend:
 class DockerTransportTests(unittest.TestCase):
     def test_argv_is_fixed_shape_docker_exec(self) -> None:
         argv = docker_exec_argv(TARGET, "echo hi")
-        self.assertEqual(argv[:4], ["docker", "exec", "llm-super-agent",
+        self.assertEqual(argv[:4], ["docker", "exec", "conflux-agent",
                                     "/bin/sh"])
         self.assertEqual(argv[4], "-c")
         self.assertIn("echo hi", argv[5])
@@ -79,17 +79,17 @@ class DockerBackendProtocolTests(unittest.TestCase):
             }])
             backend = _backend(tmp, runner)
             result = backend.start(
-                "sleep 5", cwd="/tmp/llm-super-agent", timeout_s=60,
+                "sleep 5", cwd="/tmp/conflux-agent", timeout_s=60,
                 label="docker smoke", context={"session": "s", "task": "t"},
             )
             self.assertTrue(result["ok"])
             self.assertEqual(result["execution"]["backend"], "docker")
             self.assertEqual(result["execution"]["target"],
-                             {"container": "llm-super-agent"})
+                             {"container": "conflux-agent"})
             self.assertEqual(runner.calls[0][:2], ["docker", "exec"])
             stored = backend.store.get("job_" + "0" * 24)
             self.assertEqual(stored["backend"], "docker")
-            self.assertEqual(stored["target"], {"container": "llm-super-agent"})
+            self.assertEqual(stored["target"], {"container": "conflux-agent"})
 
     def test_watch_enforces_exact_persisted_cursors(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -99,7 +99,7 @@ class DockerBackendProtocolTests(unittest.TestCase):
                  "stdout_cursor": 0, "stderr_cursor": 0},
             ])
             backend = _backend(tmp, runner)
-            backend.start("sleep 5", cwd="/tmp/llm-super-agent", timeout_s=60,
+            backend.start("sleep 5", cwd="/tmp/conflux-agent", timeout_s=60,
                           label="cursors", context={})
             with self.assertRaises(ExecutionBoundaryError):
                 backend.watch("job_" + "0" * 24, stdout_cursor=5,
@@ -119,7 +119,7 @@ class DockerBackendProtocolTests(unittest.TestCase):
             gce = GCEJobBackend(
                 gce_target, store, boundary_fingerprint=gce_lock.fingerprint,
                 runner=gce_runner, job_id_factory=lambda: "job_" + "1" * 24)
-            gce.start("sleep 1", cwd="/tmp/llm-super-agent", timeout_s=60,
+            gce.start("sleep 1", cwd="/tmp/conflux-agent", timeout_s=60,
                       label="gce job", context={})
             docker_lock = ExecutionBackendLock("docker", TARGET.descriptor)
             docker = DockerJobBackend(

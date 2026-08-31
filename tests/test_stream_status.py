@@ -7,11 +7,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from llm_super import proxy
-from llm_super.config import Config, Execution, Model, Provider, Supervision
-from llm_super.control import ControlState
-from llm_super.orchestrator import TurnReport
-from llm_super.trace import Trace
+from conflux import proxy
+from conflux.config import Config, Execution, Model, Provider, Supervision
+from conflux.control import ControlState
+from conflux.orchestrator import TurnReport
+from conflux.trace import Trace
 
 
 def _config(stream_status: str = "comments") -> Config:
@@ -109,10 +109,10 @@ class StreamStatusTests(unittest.IsolatedAsyncioTestCase):
     async def test_comment_mode_streams_progress_without_touching_content(self) -> None:
         self._arm("comments")
         text = await self._stream_text()
-        self.assertIn(": [llm-super] executing on direct\n\n", text)
-        self.assertIn(": [llm-super] verified 0.91 by judge\n\n", text)
+        self.assertIn(": [conflux] executing on direct\n\n", text)
+        self.assertIn(": [conflux] verified 0.91 by judge\n\n", text)
         # Status must not leak into message content deltas.
-        self.assertNotIn('"content": "[llm-super]', text)
+        self.assertNotIn('"content": "[conflux]', text)
         self.assertIn("final answer", text)
         # Subscription must not outlive the stream.
         self.assertEqual(self.trace._listeners, [])
@@ -120,13 +120,13 @@ class StreamStatusTests(unittest.IsolatedAsyncioTestCase):
     async def test_content_mode_emits_visible_delimited_lines(self) -> None:
         self._arm("content")
         text = await self._stream_text()
-        self.assertIn("[llm-super] executing on direct", text)
-        self.assertNotIn(": [llm-super] executing", text)
+        self.assertIn("[conflux] executing on direct", text)
+        self.assertNotIn(": [conflux] executing", text)
 
     async def test_off_mode_streams_no_status(self) -> None:
         self._arm("off")
         text = await self._stream_text()
-        self.assertNotIn("[llm-super] executing", text)
+        self.assertNotIn("[conflux] executing", text)
         self.assertIn("final answer", text)
 
     async def test_status_lines_are_session_scoped(self) -> None:
@@ -140,7 +140,7 @@ class StreamStatusTests(unittest.IsolatedAsyncioTestCase):
 
         proxy.state["orch"] = _NoisyOrchestrator(self.trace, self.session)
         text = await self._stream_text()
-        self.assertEqual(text.count(": [llm-super] executing on direct"), 1)
+        self.assertEqual(text.count(": [conflux] executing on direct"), 1)
 
     def test_status_line_vocabulary(self) -> None:
         cases = {

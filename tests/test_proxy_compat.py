@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 import unittest
 
-from llm_super import proxy
-from llm_super.config import Config, Execution, Model, Provider, Supervision
-from llm_super.control import ControlState
-from llm_super.orchestrator import TurnReport
+from conflux import proxy
+from conflux.config import Config, Execution, Model, Provider, Supervision
+from conflux.control import ControlState
+from conflux.orchestrator import TurnReport
 
 
 def _config() -> Config:

@@ -5,10 +5,10 @@ import sqlite3
 import unittest
 from pathlib import Path
 
-from llm_super.conversation_graph import ConversationGraphStore
-from llm_super.flows import FlowRegistry
-from llm_super.orchestrator import TurnReport
-from llm_super.workspace import WorkspaceService
+from conflux.conversation_graph import ConversationGraphStore
+from conflux.flows import FlowRegistry
+from conflux.orchestrator import TurnReport
+from conflux.workspace import WorkspaceService
 
 
 class _Library:
@@ -253,7 +253,7 @@ class WorkspaceServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_durable_pending_action_pauses_at_inline_human_approval(self) -> None:
         self.orchestrator.require_approval = True
         self.orchestrator.report_text = (
-            "[llm-super] Human approval is required. Review this in Agent Graphs."
+            "[conflux] Human approval is required. Review this in Agent Graphs."
         )
 
         queued = self.service.send(

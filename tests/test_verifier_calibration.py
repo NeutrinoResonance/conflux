@@ -6,11 +6,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from llm_super import verifier_calibration as cal
-from llm_super.config import (
+from conflux import verifier_calibration as cal
+from conflux.config import (
     AdminAuth, Config, Execution, Model, Provider, Supervision,
 )
-from llm_super.providers import ChatResult
+from conflux.providers import ChatResult
 
 
 def _cfg() -> Config:

@@ -6,10 +6,10 @@ import sqlite3
 import tempfile
 import unittest
 
-from llm_super.history_view import HistoryView
-from llm_super.library import Library
-from llm_super.step_summaries import derive_step_summary
-from llm_super.trace import Trace
+from conflux.history_view import HistoryView
+from conflux.library import Library
+from conflux.step_summaries import derive_step_summary
+from conflux.trace import Trace
 
 
 class StepSummaryDerivationTests(unittest.TestCase):

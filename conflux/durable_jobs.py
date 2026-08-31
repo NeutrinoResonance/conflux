@@ -67,8 +67,8 @@ JOB_TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     "command": {"type": "string", "minLength": 1, "maxLength": 32768},
                     "cwd": {
                         "type": "string",
-                        "description": "Working directory within /tmp/llm-super-agent.",
-                        "default": "/tmp/llm-super-agent",
+                        "description": "Working directory within /tmp/conflux-agent.",
+                        "default": "/tmp/conflux-agent",
                     },
                     "timeout_s": {
                         "type": "integer", "minimum": 1, "maximum": 86400,
@@ -167,8 +167,8 @@ JOB_TOOL_DEFINITIONS: list[dict[str, Any]] = [
 
 _JOB_ID = re.compile(r"^job_[a-f0-9]{24}$")
 _SELECTOR = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@+\-]*$")
-_JOB_ROOT = "/tmp/llm-super-agent/.jobs"
-_ALLOWED_CWD = "/tmp/llm-super-agent"
+_JOB_ROOT = "/tmp/conflux-agent/.jobs"
+_ALLOWED_CWD = "/tmp/conflux-agent"
 
 
 def _json(value: Any) -> str:
@@ -442,7 +442,7 @@ def status(root):
 _START_PROGRAM = r"""
 import json,os,subprocess,sys,time
 p=json.loads(PAYLOAD)
-root=p['root']; allowed='/tmp/llm-super-agent'
+root=p['root']; allowed='/tmp/conflux-agent'
 os.makedirs(allowed,mode=0o700,exist_ok=True)
 cwd=os.path.realpath(p['cwd'])
 if not (cwd==allowed or cwd.startswith(allowed+'/')): raise SystemExit('cwd escapes authorized root')
@@ -456,7 +456,7 @@ def atomic(name,value):
  t=os.path.join(root,name+'.tmp'); open(t,'w').write(str(value)); os.replace(t,os.path.join(root,name))
 atomic('started_at',time.time())
 out=open(os.path.join(root,'stdout.log'),'ab',buffering=0); err=open(os.path.join(root,'stderr.log'),'ab',buffering=0)
-env=os.environ.copy(); env['LLM_SUPER_JOB_ID']=p['job_id']; env['LLM_SUPER_JOB_DIR']=root; env['LLM_SUPER_ARTIFACT_DIR']=os.path.join(root,'artifacts')
+env=os.environ.copy(); env['CONFLUX_JOB_ID']=p['job_id']; env['CONFLUX_JOB_DIR']=root; env['CONFLUX_ARTIFACT_DIR']=os.path.join(root,'artifacts')
 child=subprocess.Popen(['/usr/bin/timeout','--signal=TERM','--kill-after=5',str(p['timeout_s'])+'s','/bin/sh',os.path.join(root,'command.sh')],cwd=p['cwd'],stdin=subprocess.DEVNULL,stdout=out,stderr=err,start_new_session=True,env=env)
 atomic('workload.pid',child.pid)
 while child.poll() is None:
@@ -689,7 +689,7 @@ class GCEJobBackend:
             raise ExecutionBoundaryError("cwd must be an absolute path")
         normalized = posixpath.normpath(cwd)
         if normalized != _ALLOWED_CWD and not normalized.startswith(_ALLOWED_CWD + "/"):
-            raise ExecutionBoundaryError("cwd is outside /tmp/llm-super-agent")
+            raise ExecutionBoundaryError("cwd is outside /tmp/conflux-agent")
         job_id = _validate_job_id(self._job_id_factory())
         remote_dir = f"{_JOB_ROOT}/{job_id}"
         self.store.create(

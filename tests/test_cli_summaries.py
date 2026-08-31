@@ -7,11 +7,11 @@ import sys
 import unittest
 from unittest import mock
 
-from llm_super import cli
+from conflux import cli
 
 
 class SummaryCliTest(unittest.TestCase):
-    @mock.patch("llm_super.message_summaries.backfill")
+    @mock.patch("conflux.message_summaries.backfill")
     def test_summarize_history_defaults_to_sonnet_and_reports_counts(self, backfill) -> None:
         def result(_path, **kwargs):
             kwargs["progress"]({
@@ -25,7 +25,7 @@ class SummaryCliTest(unittest.TestCase):
         backfill.side_effect = result
         output = io.StringIO()
         with mock.patch.object(sys, "argv", [
-            "llm-super", "summarize-history", "--db", "sample.db",
+            "conflux", "summarize-history", "--db", "sample.db",
         ]), redirect_stdout(output):
             cli.main()
 
@@ -37,11 +37,11 @@ class SummaryCliTest(unittest.TestCase):
         self.assertIn("indexed 12 placements", output.getvalue())
         self.assertIn("4/4 distinct messages", output.getvalue())
 
-    @mock.patch("llm_super.message_summaries.backfill", side_effect=KeyboardInterrupt)
+    @mock.patch("conflux.message_summaries.backfill", side_effect=KeyboardInterrupt)
     def test_interrupt_is_clean_and_keeps_conventional_exit_status(self, _backfill) -> None:
         stderr = io.StringIO()
         with mock.patch.object(sys, "argv", [
-            "llm-super", "summarize-history", "--db", "sample.db",
+            "conflux", "summarize-history", "--db", "sample.db",
         ]), redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
             cli.main()
         self.assertEqual(raised.exception.code, 130)
@@ -62,7 +62,7 @@ class SummaryCliTest(unittest.TestCase):
         })
         self.assertIn("1.2s · $0.250000 reported", split)
 
-    @mock.patch("llm_super.step_summary_backfill.backfill")
+    @mock.patch("conflux.step_summary_backfill.backfill")
     def test_summarize_steps_defaults_to_haiku_and_reports_counts(self, backfill) -> None:
         def result(_path, **kwargs):
             kwargs["progress"]({
@@ -76,7 +76,7 @@ class SummaryCliTest(unittest.TestCase):
         backfill.side_effect = result
         output = io.StringIO()
         with mock.patch.object(sys, "argv", [
-            "llm-super", "summarize-steps", "--db", "sample.db",
+            "conflux", "summarize-steps", "--db", "sample.db",
         ]), redirect_stdout(output):
             cli.main()
 

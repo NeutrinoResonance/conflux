@@ -73,7 +73,7 @@ def build_bundle(trace, library, *, session: str | None = None,
             "step_summaries": library_step_summaries(trace, sid),
         })
     return {
-        "schema": "llm-super/conversation-bundle@1",
+        "schema": "conflux/conversation-bundle@1",
         "exported_at": time.time(),
         "project_id": project_id,
         "session": session,
@@ -150,7 +150,7 @@ def _derive_key(passphrase: str, salt: bytes, kdf: str, params: dict) -> bytes:
             from argon2.low_level import Type, hash_secret_raw
         except ImportError as e:
             raise RuntimeError("argon2id KDF requires the argon2-cffi package "
-                               "(pip install 'llm-super[argon2]')") from e
+                               "(pip install 'conflux[argon2]')") from e
         return hash_secret_raw(
             pw, salt,
             time_cost=int(params.get("time_cost", 3)),
@@ -229,7 +229,7 @@ def pack(bundle: dict, settings: dict, *, passphrase: str | None = None) -> byte
             eph = x25519.X25519PrivateKey.generate()
             shared = eph.exchange(recipient)
             wrap_key = HKDF(algorithm=hashes.SHA256(), length=32, salt=None,
-                            info=b"llm-super-x25519").derive(shared)
+                            info=b"conflux-x25519").derive(shared)
             wrap_nonce = os.urandom(12)
             wrapped = AESGCM(wrap_key).encrypt(wrap_nonce, content_key, None)
             header.update(
@@ -255,7 +255,7 @@ def pack(bundle: dict, settings: dict, *, passphrase: str | None = None) -> byte
 def unpack(blob: bytes, *, passphrase: str | None = None,
            private_key: str | None = None) -> dict:
     if not blob.startswith(MAGIC):
-        raise ValueError("not an llm-super export (bad magic)")
+        raise ValueError("not an conflux export (bad magic)")
     rest = blob[len(MAGIC):]
     nl = rest.index(b"\n")
     header = json.loads(rest[:nl])
@@ -275,7 +275,7 @@ def unpack(blob: bytes, *, passphrase: str | None = None,
             shared = priv.exchange(x25519.X25519PublicKey.from_public_bytes(
                 base64.b64decode(header["ephemeral"])))
             wrap_key = HKDF(algorithm=hashes.SHA256(), length=32, salt=None,
-                            info=b"llm-super-x25519").derive(shared)
+                            info=b"conflux-x25519").derive(shared)
             content_key = AESGCM(wrap_key).decrypt(
                 base64.b64decode(header["wrap_nonce"]),
                 base64.b64decode(header["wrapped_key"]), None)
@@ -296,14 +296,14 @@ def deliver(blob: bytes, name: str, settings: dict) -> str:
     """Write the export to its configured destination; return a location string."""
     dest = settings.get("destination", "dir")
     if dest == "dir":
-        d = Path(os.path.expanduser(settings.get("directory", "~/llm-super-exports")))
+        d = Path(os.path.expanduser(settings.get("directory", "~/conflux-exports")))
         d.mkdir(parents=True, exist_ok=True)
         path = d / name
         path.write_bytes(blob)
         return str(path)
     if dest == "command":
         # Stage to a temp file, then run the user's command with {file}/{name}.
-        tmp = Path(os.path.expanduser("~/.cache/llm-super"))
+        tmp = Path(os.path.expanduser("~/.cache/conflux"))
         tmp.mkdir(parents=True, exist_ok=True)
         staged = tmp / name
         staged.write_bytes(blob)
@@ -334,7 +334,7 @@ def export(trace, library, *, session: str | None = None,
     ext = ".llmx" if settings.get("encryption") != "none" else {
         "xz": ".json.xz", "gzip": ".json.gz", "none": ".json"}[settings["compression"]]
     label = session or project_id or "export"
-    name = f"llmsuper-{label}-{stamp}{ext}"
+    name = f"conflux-{label}-{stamp}{ext}"
     location = deliver(blob, name, settings)
     return {"name": name, "bytes": len(blob), "raw_bytes": bundle_raw_size(bundle),
             "location": location, "encryption": settings.get("encryption"),

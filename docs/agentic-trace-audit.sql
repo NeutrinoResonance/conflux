@@ -1,4 +1,4 @@
--- Agentic tool-loop trace audit for llm-super's SQLite database.
+-- Agentic tool-loop trace audit for conflux's SQLite database.
 --
 -- This file is intended for the sqlite3 CLI.  The main database is opened
 -- read-only; the views/tables below live only in SQLite's temporary schema
@@ -26,7 +26,7 @@
 .mode column
 .nullvalue NULL
 
-CREATE TEMP TABLE _llmsuper_audit_config AS
+CREATE TEMP TABLE _conflux_audit_config AS
 SELECT :session AS session,
        :vm AS vm,
        :project AS project,
@@ -44,11 +44,11 @@ SELECT CASE
          ELSE 'parameters ready'
        END AS parameter_status,
        session, vm, project, account, zone, stale_seconds
-FROM _llmsuper_audit_config;
+FROM _conflux_audit_config;
 
 -- One row per traced task, including orphan event-only or exchange-only task
 -- IDs.  Control events use task='-' and are intentionally excluded.
-CREATE TEMP VIEW _llmsuper_audit_task_shape AS
+CREATE TEMP VIEW _conflux_audit_task_shape AS
 WITH task_keys AS (
     SELECT session, task FROM events WHERE task <> '-'
     UNION
@@ -115,7 +115,7 @@ SELECT s.session,
        (SELECT COUNT(DISTINCT task)
           FROM events e
          WHERE e.session = s.session AND e.task <> '-') AS traced_task_ids
-FROM sessions s, _llmsuper_audit_config c
+FROM sessions s, _conflux_audit_config c
 WHERE s.session = c.session;
 
 -- Payload completeness.  Any invalid or truncated row makes argument/output
@@ -130,7 +130,7 @@ SELECT kind,
              THEN 1 ELSE 0
            END) AS truncated_rows,
        MAX(length(payload)) AS max_payload_chars
-FROM exchanges x, _llmsuper_audit_config c
+FROM exchanges x, _conflux_audit_config c
 WHERE x.session = c.session
 GROUP BY kind
 ORDER BY kind;
@@ -140,14 +140,14 @@ SELECT COUNT(*) AS event_rows,
                 THEN 1 ELSE 0 END) AS invalid_event_data_rows,
        SUM(CASE WHEN task IS NULL OR task = '' THEN 1 ELSE 0 END)
          AS empty_task_ids
-FROM events e, _llmsuper_audit_config c
+FROM events e, _conflux_audit_config c
 WHERE e.session = c.session;
 
 -- Classify every HTTP/model task in the agentic loop.  A completed tool step
 -- has one request, upstream response, client response, agent_turn, and
 -- tool_step.  A completed final answer additionally has execute/verify/end
 -- records.  Provider errors are recorded as failures, not completed steps.
-CREATE TEMP VIEW _llmsuper_audit_task_state AS
+CREATE TEMP VIEW _conflux_audit_task_state AS
 SELECT s.*,
        CASE
          WHEN agent_turns <> 1 OR client_requests <> 1
@@ -173,11 +173,11 @@ SELECT s.*,
            THEN 'stale-unclosed'
          ELSE 'invalid-shape'
        END AS state
-FROM _llmsuper_audit_task_shape s
-JOIN _llmsuper_audit_config c USING (session);
+FROM _conflux_audit_task_shape s
+JOIN _conflux_audit_config c USING (session);
 
 SELECT state, COUNT(*) AS tasks
-FROM _llmsuper_audit_task_state
+FROM _conflux_audit_task_state
 GROUP BY state
 ORDER BY state;
 
@@ -189,14 +189,14 @@ SELECT task, state,
        agent_turns, tool_steps, executes, verifies, agent_ends,
        verify_errors, executor_errors,
        client_requests, client_responses, upstreams
-FROM _llmsuper_audit_task_state
+FROM _conflux_audit_task_state
 WHERE state NOT IN ('complete-tool-step', 'complete-final')
 ORDER BY last_ts;
 
 -- Extract all tool calls from raw client responses.  Invalid function
 -- arguments remain visible through arguments_valid instead of aborting JSON
 -- extraction.
-CREATE TEMP VIEW _llmsuper_audit_tool_calls AS
+CREATE TEMP VIEW _conflux_audit_tool_calls AS
 WITH raw_calls AS (
     SELECT x.id AS exchange_id, x.ts, x.session, x.task,
            json_extract(tc.value, '$.id') AS call_id,
@@ -217,7 +217,7 @@ FROM raw_calls;
 
 -- Tool-result messages are repeated in growing conversation prefixes.  Keep
 -- the newest copy of each call ID so the evidence queries do not over-count.
-CREATE TEMP VIEW _llmsuper_audit_tool_results AS
+CREATE TEMP VIEW _conflux_audit_tool_results AS
 WITH raw_results AS (
     SELECT x.id AS exchange_id, x.ts, x.session, x.task,
            json_extract(m.value, '$.tool_call_id') AS call_id,
@@ -250,13 +250,13 @@ WITH event_calls AS (
     GROUP BY session, task
 ), response_calls AS (
     SELECT session, task, COUNT(*) AS response_n_calls
-    FROM _llmsuper_audit_tool_calls
+    FROM _conflux_audit_tool_calls
     GROUP BY session, task
 )
 SELECT e.task, e.event_n_calls, COALESCE(r.response_n_calls, 0) AS response_n_calls
 FROM event_calls e
 LEFT JOIN response_calls r USING (session, task)
-JOIN _llmsuper_audit_config c USING (session)
+JOIN _conflux_audit_config c USING (session)
 WHERE e.event_n_calls <> COALESCE(r.response_n_calls, 0)
 ORDER BY e.task;
 
@@ -265,7 +265,7 @@ ORDER BY e.task;
 -- different selector even when the allowed one is also present.  Local sleep
 -- wrappers are reported separately: they do not move the workload off-VM,
 -- but they are poor long-running polling behavior.
-CREATE TEMP VIEW _llmsuper_audit_terminal_boundary AS
+CREATE TEMP VIEW _conflux_audit_terminal_boundary AS
 SELECT t.*,
        CASE
          WHEN command IS NOT NULL
@@ -302,8 +302,8 @@ SELECT t.*,
            THEN 'local-wait-then-ssh'
          ELSE 'other-local-prefix'
        END AS prefix_class
-FROM _llmsuper_audit_tool_calls t
-JOIN _llmsuper_audit_config c USING (session)
+FROM _conflux_audit_tool_calls t
+JOIN _conflux_audit_config c USING (session)
 WHERE t.tool_name = 'terminal';
 
 SELECT COUNT(*) AS terminal_calls,
@@ -316,7 +316,7 @@ SELECT COUNT(*) AS terminal_calls,
        SUM(prefix_class = 'local-wait-then-ssh') AS local_wait_calls,
        SUM(background <> 0) AS background_terminal_calls,
        SUM(arguments_valid = 0 OR command IS NULL) AS malformed_terminal_calls
-FROM _llmsuper_audit_terminal_boundary;
+FROM _conflux_audit_terminal_boundary;
 
 -- Zero rows is the healthy boundary result.  local-wait-then-ssh is kept in
 -- the summary above as a polling smell but is not itself a cloud-boundary
@@ -327,7 +327,7 @@ SELECT exchange_id, task, call_id, prefix_class,
        prohibited_reference,
        gcloud_invocations,
        substr(command, 1, 500) AS command_preview
-FROM _llmsuper_audit_terminal_boundary
+FROM _conflux_audit_terminal_boundary
 WHERE arguments_valid = 0 OR command IS NULL
    OR exact_target = 0
    OR selector_conflict <> 0
@@ -360,9 +360,9 @@ WITH evidence AS (
                OR lower(c.command) LIKE '%release.exit%'
                THEN 'release-status'
            END AS evidence_kind
-    FROM _llmsuper_audit_tool_calls c
-    LEFT JOIN _llmsuper_audit_tool_results r USING (session, call_id)
-    JOIN _llmsuper_audit_config cfg USING (session)
+    FROM _conflux_audit_tool_calls c
+    LEFT JOIN _conflux_audit_tool_results r USING (session, call_id)
+    JOIN _conflux_audit_config cfg USING (session)
     WHERE c.tool_name = 'terminal'
 ), ranked AS (
     SELECT *, ROW_NUMBER() OVER (
@@ -390,9 +390,9 @@ SELECT
   SUM(lower(COALESCE(r.output, '')) LIKE '%machine=evbarm%'
       AND lower(COALESCE(r.output, '')) LIKE '%arch=aarch64%')
     AS guest_arch_marker_results
-FROM _llmsuper_audit_tool_calls c
-LEFT JOIN _llmsuper_audit_tool_results r USING (session, call_id)
-JOIN _llmsuper_audit_config cfg USING (session)
+FROM _conflux_audit_tool_calls c
+LEFT JOIN _conflux_audit_tool_results r USING (session, call_id)
+JOIN _conflux_audit_config cfg USING (session)
 WHERE c.tool_name = 'terminal';
 
 -- Final supervision acceptance.  PASS requires a non-escalated agent_end
@@ -401,7 +401,7 @@ WHERE c.tool_name = 'terminal';
 -- the agent is still returning tool calls.
 WITH latest_tool AS (
     SELECT MAX(e.ts) AS ts
-    FROM events e, _llmsuper_audit_config c
+    FROM events e, _conflux_audit_config c
     WHERE e.session = c.session AND e.kind = 'tool_step'
 ), final_tasks AS (
     SELECT e.session, e.task,
@@ -415,7 +415,7 @@ WITH latest_tool AS (
            MAX(CASE WHEN e.kind = 'agent_end'
                     THEN COALESCE(json_extract(e.data, '$.escalated'), '') END)
              AS escalation
-    FROM events e, _llmsuper_audit_config c
+    FROM events e, _conflux_audit_config c
     WHERE e.session = c.session
     GROUP BY e.session, e.task
 ), response_counts AS (
@@ -436,7 +436,7 @@ WITH latest_tool AS (
 SELECT CASE WHEN EXISTS (SELECT 1 FROM accepted)
             THEN 'PASS' ELSE 'NOT COMPLETE' END AS final_supervision_status,
        (SELECT datetime(MAX(ts), 'unixepoch')
-          FROM events e, _llmsuper_audit_config c
+          FROM events e, _conflux_audit_config c
          WHERE e.session = c.session AND e.kind = 'tool_step') AS last_tool_utc,
        (SELECT datetime(MAX(end_ts), 'unixepoch') FROM final_tasks)
          AS last_agent_end_utc,

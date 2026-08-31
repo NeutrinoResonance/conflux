@@ -1,5 +1,5 @@
 [project]
-name = "llm-super"
+name = "conflux"
 version = "0.1.0"
 description = "Ensemble supervisor for open-source LLMs: taxonomy-driven monitors, cross-model verification, human-interruptible orchestration"
 license = "MIT"
@@ -17,15 +17,15 @@ dependencies = [
 argon2 = ["argon2-cffi>=23"]   # enables the Argon2id KDF option for exports
 
 [project.scripts]
-llm-super = "llm_super.cli:main"
+conflux = "conflux.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["llm_super"]
+packages = ["conflux"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"agent_flows.yaml" = "llm_super/agent_flows.yaml"
-"tool_manifests.yaml" = "llm_super/tool_manifests.yaml"
+"agent_flows.yaml" = "conflux/agent_flows.yaml"
+"tool_manifests.yaml" = "conflux/tool_manifests.yaml"

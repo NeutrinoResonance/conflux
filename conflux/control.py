@@ -10,12 +10,12 @@ from dataclasses import dataclass, field
 
 
 PAUSED_NOTICE = (
-    "[llm-super] supervisor is paused; no model was called. "
+    "[conflux] supervisor is paused; no model was called. "
     "Send !resume, then resend the request to continue."
 )
 
 PAUSED_BOUNDARY_NOTICE = (
-    "[llm-super] supervisor paused at the next execution boundary. "
+    "[conflux] supervisor paused at the next execution boundary. "
     "An in-flight model call had already started, but no newly proposed tool "
     "action was released. Send !resume, then resend the request to continue."
 )
@@ -23,12 +23,12 @@ PAUSED_BOUNDARY_NOTICE = (
 # Stateless-endpoint counterparts: control lives in the workspace UI, so the
 # recovery instructions must not point at retired in-band commands.
 PAUSED_NOTICE_STATELESS = (
-    "[llm-super] supervisor is paused; no model was called. "
+    "[conflux] supervisor is paused; no model was called. "
     "Resume from the workspace UI (/workspace), then resend the request."
 )
 
 IN_BAND_RETIRED_NOTICE = (
-    "[llm-super] in-band !commands are retired on this endpoint; no model "
+    "[conflux] in-band !commands are retired on this endpoint; no model "
     "was called and nothing changed. Control (pause/resume, routing, "
     "budgets, approvals) lives in the workspace UI at /workspace. To "
     "restore the legacy in-band command mode, set "
@@ -103,7 +103,7 @@ def gate_warning(session: str, state: ControlState, cfg=None) -> str:
     budget = (state.budget_usd if state.budget_usd is not None
               else cfg.supervision.budget_usd_per_task if cfg else 0.5)
     return (
-        "[llm-super] ⚠ new-conversation gate — NO model was called and "
+        "[conflux] ⚠ new-conversation gate — NO model was called and "
         "nothing was spent.\n\n"
         f"This request would start a NEW supervised conversation "
         f"(session {session[:12]}, strategy {strat}, budget "
@@ -117,7 +117,7 @@ def gate_warning(session: str, state: ControlState, cfg=None) -> str:
     )
 
 
-HELP = """llm-super in-band commands (never forwarded to models):
+HELP = """conflux in-band commands (never forwarded to models):
   !status              show supervisor state
   !pause / !resume     pause or resume supervised execution
   !use <model>         force a specific executor (from models.yaml)

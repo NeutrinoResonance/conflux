@@ -95,7 +95,7 @@ async def _run_cmd(cmd: list[str], timeout: float, cwd: str | None = None) -> tu
 
 async def run_local(code: str, timeout: float = 30.0) -> ExecutionResult:
     start = time.monotonic()
-    with tempfile.TemporaryDirectory(prefix="llmsuper-exec-") as d:
+    with tempfile.TemporaryDirectory(prefix="conflux-exec-") as d:
         Path(d, "snippet.py").write_text(code)
         if _wants_doctest(code):
             Path(d, "runner.py").write_text(_RUNNER)
@@ -125,7 +125,7 @@ async def run_gcloud(
     instance is deleted even on failure unless keep_instance is set.
     """
     start = time.monotonic()
-    name = f"llmsuper-{uuid.uuid4().hex[:8]}"
+    name = f"conflux-{uuid.uuid4().hex[:8]}"
     create = [
         "gcloud", "compute", "instances", "create", name,
         f"--zone={zone}", f"--machine-type={machine_type}",
@@ -144,8 +144,8 @@ async def run_gcloud(
     try:
         runner = _RUNNER if _wants_doctest(code) else None
         remote = (
-            "cat > snippet.py <<'LLMSUPER_EOF'\n" + code + "\nLLMSUPER_EOF\n"
-            + (("cat > runner.py <<'LLMSUPER_EOF'\n" + runner + "\nLLMSUPER_EOF\n") if runner else "")
+            "cat > snippet.py <<'CONFLUX_EOF'\n" + code + "\nCONFLUX_EOF\n"
+            + (("cat > runner.py <<'CONFLUX_EOF'\n" + runner + "\nCONFLUX_EOF\n") if runner else "")
             + ("python3 -I runner.py" if runner else "python3 -I snippet.py")
         )
         # SSH can take a few tries while the VM boots.

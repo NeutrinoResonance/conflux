@@ -72,7 +72,7 @@ class Execution:
             return ExecutionBackendLock(
                 "docker",
                 {"mode": "persistent-container",
-                 "container": self.docker_container or "llm-super-agent"},
+                 "container": self.docker_container or "conflux-agent"},
             )
         return ExecutionBackendLock(
             self.locked_backend,
@@ -87,10 +87,10 @@ class AdminAuth:
     """Control-plane authentication. DISABLED by default.
 
     Enabling is one setting: put a non-empty token in models.yaml
-    (``admin.token``) or export ``LLM_SUPER_ADMIN_TOKEN``. When set, every
+    (``admin.token``) or export ``CONFLUX_ADMIN_TOKEN``. When set, every
     /admin/* route — including the action-decision endpoints — requires the
-    token via ``Authorization: Bearer``, the ``X-LLM-Super-Token`` header,
-    the ``llm_super_admin`` cookie, or a one-time ``?token=`` query (which
+    token via ``Authorization: Bearer``, the ``X-Conflux-Token`` header,
+    the ``conflux_admin`` cookie, or a one-time ``?token=`` query (which
     sets the cookie for browser dashboards). When unset, the server prints
     an explicit warning that the control plane is reachable by anyone who
     can reach the port.
@@ -131,7 +131,7 @@ class Supervision:
     # Streaming supervised turns surface live supervisor progress instead of
     # blind keepalives: "comments" (default) emits SSE comment lines — every
     # OpenAI-compatible client ignores them, so message content is untouched;
-    # "content" emits visible "[llm-super] …" delta lines (SPEC §7.2 in-band
+    # "content" emits visible "[conflux] …" delta lines (SPEC §7.2 in-band
     # notices — opt-in because they become part of the assistant message);
     # "off" restores plain keepalives.
     stream_status: str = "comments"
@@ -261,7 +261,7 @@ def load(path: str | Path = "models.yaml") -> Config:
     execution = Execution(**raw.get("execution", {}))
     admin_raw = raw.get("admin", {}) or {}
     admin = AdminAuth(
-        token=os.environ.get("LLM_SUPER_ADMIN_TOKEN")
+        token=os.environ.get("CONFLUX_ADMIN_TOKEN")
         or (str(admin_raw.get("token") or "") or None),
     )
     return Config(

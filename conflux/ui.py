@@ -8,7 +8,7 @@ PAGE = r"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>llm-super control plane</title>
+<title>conflux control plane</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛰️</text></svg>">
 <style>
 /*__DESIGN_TOKENS__*/
@@ -323,7 +323,7 @@ tr:last-child td { border-bottom: none; }
 </head>
 <body>
 <main>
-  <h1>llm-super</h1>
+  <h1>conflux</h1>
   <div class="sub">live control plane — <span id="clock">…</span> · <span id="livedot" class="livedot" title="live event stream"></span> event-stream</div>
   <nav class="topnav" aria-label="Primary">
     <a href="/workspace">Workspace</a>
@@ -711,7 +711,7 @@ function mdlBlk(label, text) {
   return `<div class="cap mdl">🤖 ${label}</div><pre class="blk mdl">${text}</pre>`;
 }
 function sysBlk(label, text) {
-  return `<div class="cap">⚙ ${label} — computed by llm-super</div><pre class="blk sys">${text}</pre>`;
+  return `<div class="cap">⚙ ${label} — computed by conflux</div><pre class="blk sys">${text}</pre>`;
 }
 
 // The verifier's score math, from the criteria_detail logged per verify:
@@ -753,13 +753,13 @@ function scoreMath(d) {
     `The cross-family reviewer analyzes the answer against each criterion and ends with a ` +
     `single letter grade in &lt;score&gt; tags (A=1 … ${String.fromCharCode(64 + scale)}=${scale}; ` +
     `letters because multi-digit numbers split into several tokens on some tokenizers and ` +
-    `corrupt the read). Instead of trusting that one letter, llm-super reads the top-5 token ` +
+    `corrupt the read). Instead of trusting that one letter, conflux reads the top-5 token ` +
     `probabilities AT the letter position — the bars above, darker = higher letter — and takes ` +
     `the expectation E = Σ letter·P(letter): a continuous score that keeps the reviewer's ` +
     `uncertainty. Criteria are averaged and normalized to [0,1]; the turn passes at ` +
     `supervision.pass_threshold (default 0.70). A bar pinned at one letter with 100% means the ` +
     `reviewer had no doubt — many of those in a row is verifier saturation, worth noticing.</details>`;
-  return `<div class="cap">⚙ score math (from the verifier's logged logprobs) — computed by llm-super</div>` +
+  return `<div class="cap">⚙ score math (from the verifier's logged logprobs) — computed by conflux</div>` +
     strips + `<div class="ev" style="text-align:left;margin-top:6px">${formula}</div>` + help;
 }
 
@@ -795,7 +795,7 @@ async function loadOut(ev, task, model, nth, kind, elId) {
     let outTxt = "(empty answer)";
     try { outTxt = p.response.choices[0].message.content || "(empty answer)"; } catch (e) {}
     html = `<div class="chat-thread" aria-label="Model request and response">` +
-      chatBubble("user", lastTxt(p).slice(0, 4000), "Prompt assembled by llm-super") +
+      chatBubble("user", lastTxt(p).slice(0, 4000), "Prompt assembled by conflux") +
       chatBubble("assistant", outTxt.slice(0, 6000), `${model} response`) + `</div>`;
   }
   ioLoaded.set(elId, html);

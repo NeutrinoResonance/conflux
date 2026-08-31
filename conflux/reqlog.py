@@ -9,7 +9,7 @@ from __future__ import annotations
 from contextvars import ContextVar
 from typing import Any
 
-_ctx: ContextVar[tuple[Any, str, str] | None] = ContextVar("llmsuper_reqlog", default=None)
+_ctx: ContextVar[tuple[Any, str, str] | None] = ContextVar("conflux_reqlog", default=None)
 
 
 def set_context(trace: Any, session: str, task: str) -> None:

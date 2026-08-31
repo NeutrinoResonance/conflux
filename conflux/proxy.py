@@ -59,7 +59,7 @@ async def lifespan(app: FastAPI):
             "WARNING: control-plane authentication is DISABLED. Every /admin/* "
             "endpoint — including action approvals, routing overrides, exports, "
             "and deletion — is reachable by ANYONE who can reach this port. "
-            "Set admin.token in models.yaml or export LLM_SUPER_ADMIN_TOKEN "
+            "Set admin.token in models.yaml or export CONFLUX_ADMIN_TOKEN "
             "to enable authentication.",
             file=sys.stderr, flush=True,
         )
@@ -174,9 +174,9 @@ async def lifespan(app: FastAPI):
     await client.aclose()
 
 
-app = FastAPI(title="llm-super", lifespan=lifespan)
+app = FastAPI(title="conflux", lifespan=lifespan)
 
-_ADMIN_COOKIE = "llm_super_admin"
+_ADMIN_COOKIE = "conflux_admin"
 
 
 def _admin_token() -> str | None:
@@ -190,7 +190,7 @@ def _supplied_admin_token(request: Request) -> tuple[str | None, bool]:
     auth = request.headers.get("authorization", "")
     if auth.lower().startswith("bearer "):
         return auth[7:].strip(), False
-    header = request.headers.get("x-llm-super-token")
+    header = request.headers.get("x-conflux-token")
     if header:
         return header.strip(), False
     cookie = request.cookies.get(_ADMIN_COOKIE)
@@ -207,7 +207,7 @@ async def _admin_auth(request: Request, call_next):
     """Gate every /admin/* route (incl. action decisions) behind the token.
 
     Authentication is DISABLED unless the operator sets admin.token /
-    LLM_SUPER_ADMIN_TOKEN (the lifespan prints an explicit warning in that
+    CONFLUX_ADMIN_TOKEN (the lifespan prints an explicit warning in that
     state). A valid ?token= on any route sets the dashboard cookie so the
     browser UIs work after a single tokened visit.
     """
@@ -271,14 +271,14 @@ def _resolve_conversation(request: Request | None, body: dict,
                           messages: list[dict]) -> tuple[str, bool]:
     """Conversation identity: explicit and validated, hash as fallback.
 
-    Precedence: ``X-LLM-Super-Conversation`` header, then a
+    Precedence: ``X-Conflux-Conversation`` header, then a
     ``conversation_id`` request-body field, then the legacy
     first-user-message hash. Explicit IDs survive client prefix rewrites
     and first-message edits, which fork hash-derived conversations
     silently (forensic report §8 items 2–3).
     """
     explicit = _explicit_id(
-        request, body, "x-llm-super-conversation", "conversation_id")
+        request, body, "x-conflux-conversation", "conversation_id")
     if explicit is not None:
         return explicit, True
     return _session_id(messages), False
@@ -496,14 +496,14 @@ async def chat_completions(request: Request):
         session = state["library"].resolve_alias(raw_session)
     else:
         explicit = _explicit_id(
-            request, body, "x-llm-super-conversation", "conversation_id")
+            request, body, "x-conflux-conversation", "conversation_id")
         explicit_session = explicit is not None
         raw_session = session = (
             explicit if explicit is not None
             else f"oneshot_{uuid.uuid4().hex[:16]}"
         )
     explicit_endeavor = _explicit_id(
-        request, body, "x-llm-super-endeavor", "endeavor_id")
+        request, body, "x-conflux-endeavor", "endeavor_id")
     if explicit_endeavor is not None and state.get("endeavor_ledger"):
         state["endeavor_ledger"].set_explicit_endeavor(
             session, explicit_endeavor)
@@ -663,7 +663,7 @@ async def chat_completions(request: Request):
         if cfg.supervision.trailer:
             text += report.trailer()
         if report.escalated and not report.text:
-            text = f"[llm-super] {report.escalated}"
+            text = f"[conflux] {report.escalated}"
         return text
 
     if not stream:
@@ -674,7 +674,7 @@ async def chat_completions(request: Request):
         except asyncio.TimeoutError:
             state["trace"].record(session, "-", "turn_timeout", timeout_s=timeout)
             return JSONResponse(_completion_body(
-                f"[llm-super] turn exceeded the {timeout:.0f}s wall-clock limit "
+                f"[conflux] turn exceeded the {timeout:.0f}s wall-clock limit "
                 "and was stopped; partial work is in the trace (!status, /admin/events)",
                 model_name))
         return JSONResponse(_completion_body(
@@ -733,9 +733,9 @@ async def chat_completions(request: Request):
                 if not line:
                     continue
                 if status_mode == "content":
-                    out.append(chunk({"content": f"[llm-super] {line}\n"}))
+                    out.append(chunk({"content": f"[conflux] {line}\n"}))
                 else:
-                    out.append(f": [llm-super] {line}\n\n")
+                    out.append(f": [conflux] {line}\n\n")
 
         task = asyncio.create_task(
             state["orch"].run_turn(session, messages, stateless=not stateful))
@@ -753,7 +753,7 @@ async def chat_completions(request: Request):
                     break
                 if time.monotonic() - start > timeout:
                     task.cancel()
-                    yield chunk({"content": f"[llm-super] turn exceeded the "
+                    yield chunk({"content": f"[conflux] turn exceeded the "
                                  f"{timeout:.0f}s wall-clock limit and was stopped"})
                     yield chunk({}, "stop")
                     yield "data: [DONE]\n\n"
@@ -768,7 +768,7 @@ async def chat_completions(request: Request):
             report = task.result()
             text = render(report)
         except Exception as e:
-            text = f"[llm-super] turn failed: {e}"
+            text = f"[conflux] turn failed: {e}"
         for i in range(0, len(text), 512):
             yield chunk({"content": text[i: i + 512]})
         yield chunk({}, "stop")
@@ -788,7 +788,7 @@ async def chat_completions(request: Request):
 async def models():
     cfg = state["cfg"]
     now = int(time.time())
-    data = [{"id": "super", "object": "model", "created": now, "owned_by": "llm-super"}]
+    data = [{"id": "super", "object": "model", "created": now, "owned_by": "conflux"}]
     data += [{"id": name, "object": "model", "created": now, "owned_by": m.provider}
              for name, m in cfg.models.items()]
     return {"object": "list", "data": data}
@@ -2151,7 +2151,7 @@ async def admin_calibration():
     report = verifier_calibration.latest_report(state["trace_path"])
     if report is None:
         return {"run": None,
-                "hint": "run `llm-super calibrate` to measure verifier "
+                "hint": "run `conflux calibrate` to measure verifier "
                         "false-pass and discrimination rates"}
     return {"run": report}
 

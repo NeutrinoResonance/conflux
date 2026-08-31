@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from llm_super import step_summary_backfill, summary_jobs
+from conflux import step_summary_backfill, summary_jobs
 
 
 def _seed_step_db(path: Path) -> None:

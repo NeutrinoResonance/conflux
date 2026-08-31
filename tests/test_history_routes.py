@@ -6,9 +6,9 @@ from pathlib import Path
 
 from fastapi import HTTPException, Response
 
-from llm_super import history_ui, proxy, ui
-from llm_super.library import Library
-from llm_super.trace import Trace
+from conflux import history_ui, proxy, ui
+from conflux.library import Library
+from conflux.trace import Trace
 
 
 def _contains_forbidden_summary_key(value) -> bool:

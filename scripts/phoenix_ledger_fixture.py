@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 
-DEFAULT_ROOT = Path("/tmp/llm-super-agent/phoenix-ledger")
+DEFAULT_ROOT = Path("/tmp/conflux-agent/phoenix-ledger")
 SEED_ROWS = 250
 
 APP = r'''#!/usr/bin/env python3

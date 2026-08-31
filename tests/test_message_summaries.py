@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from llm_super import message_summaries as summaries
+from conflux import message_summaries as summaries
 
 
 class MessageSummaryTest(unittest.TestCase):
@@ -158,7 +158,7 @@ class MessageSummaryTest(unittest.TestCase):
         self.assertEqual(result["summarized"], 2)
         self.assertAlmostEqual(result["cost_usd"], 0.4)
 
-    @mock.patch("llm_super.message_summaries.subprocess.run")
+    @mock.patch("conflux.message_summaries.subprocess.run")
     def test_claude_invocation_is_sonnet_structured_tool_free_and_safe(self, run) -> None:
         identifier = "a" * 64
         run.return_value = subprocess.CompletedProcess(
@@ -193,7 +193,7 @@ class MessageSummaryTest(unittest.TestCase):
         self.assertEqual(result[0]["id"], identifier)
         self.assertEqual(meta["model"], "claude-sonnet-test")
 
-    @mock.patch("llm_super.message_summaries.subprocess.run")
+    @mock.patch("conflux.message_summaries.subprocess.run")
     def test_validation_error_retains_completed_call_usage(self, run) -> None:
         expected = "a" * 64
         run.return_value = subprocess.CompletedProcess(

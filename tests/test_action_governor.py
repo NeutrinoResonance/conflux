@@ -6,21 +6,21 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from llm_super.config import Config, Execution, Model, Provider, Supervision
-from llm_super.control import ControlState
-from llm_super.durable_jobs import JOB_TOOL_DEFINITIONS
-from llm_super.flows import FlowRegistry, SQLiteFlowRuntime
-from llm_super.governance import (
+from conflux.config import Config, Execution, Model, Provider, Supervision
+from conflux.control import ControlState
+from conflux.durable_jobs import JOB_TOOL_DEFINITIONS
+from conflux.flows import FlowRegistry, SQLiteFlowRuntime
+from conflux.governance import (
     ActionGovernor,
     ActionStore,
     ToolManifest,
     assess_action,
     build_proposal,
 )
-from llm_super.history import History
-from llm_super.orchestrator import Orchestrator, _last_user_text
-from llm_super.providers import ChatResult, ProviderError
-from llm_super.trace import Trace
+from conflux.history import History
+from conflux.orchestrator import Orchestrator, _last_user_text
+from conflux.providers import ChatResult, ProviderError
+from conflux.trace import Trace
 
 
 def _config() -> Config:
@@ -110,8 +110,8 @@ class DeterministicPolicyTests(unittest.TestCase):
     def test_named_governor_correction_does_not_replace_task_identity(self) -> None:
         self.assertEqual(_last_user_text([
             {"role": "user", "content": "original task"},
-            {"role": "user", "name": "llm_super_governor",
-             "content": "llm-super governor correction: use pipefail"},
+            {"role": "user", "name": "conflux_governor",
+             "content": "conflux governor correction: use pipefail"},
         ]), "original task")
 
     def assess(self, command: str):
@@ -185,7 +185,7 @@ class DeterministicPolicyTests(unittest.TestCase):
             "trusted": True,
             "side_effect": "write",
             "shell_command": True,
-            "allowed_targets": ["/tmp/llm-super-agent/**"],
+            "allowed_targets": ["/tmp/conflux-agent/**"],
         })
         proposal = build_proposal({
             "id": "call-job",
@@ -612,7 +612,7 @@ class DeterministicPolicyTests(unittest.TestCase):
     def test_request_side_hints_cannot_grant_trust(self) -> None:
         tool = {
             "type": "function",
-            "x-llm-super": {"trusted": True, "side_effect": "read",
+            "x-conflux": {"trusted": True, "side_effect": "read",
                             "allowed_targets": ["**"]},
             "function": {
                 "name": "destroy_everything", "parameters": {"type": "object"},
@@ -1038,7 +1038,7 @@ class GovernorProtocolTests(unittest.IsolatedAsyncioTestCase):
         orch = self.orch(client)
         first = await orch.run_tool_turn("session-probe", _body())
         probe_call = first["choices"][0]["message"]["tool_calls"][0]
-        self.assertTrue(probe_call["id"].startswith("llmsuper_probe_act_"))
+        self.assertTrue(probe_call["id"].startswith("conflux_probe_act_"))
 
         # A fresh store sees the pending action from the same SQLite database.
         reopened = sqlite3.connect(self.db, check_same_thread=False)
@@ -1228,7 +1228,7 @@ class GovernorProtocolTests(unittest.IsolatedAsyncioTestCase):
         )
 
         probe_call = probe_response["choices"][0]["message"]["tool_calls"][0]
-        self.assertTrue(probe_call["id"].startswith("llmsuper_soundness_check_"))
+        self.assertTrue(probe_call["id"].startswith("conflux_soundness_check_"))
         self.assertEqual(client.raw_calls, 1)
         self.assertEqual(orch.action_store.list()[0]["status"], "soundness_pending")
         check = orch.action_store.soundness_checks()[0]

@@ -1,4 +1,4 @@
-# llm-super: A Supervisor That Makes Cheap Open-Source Models Check Each Other's Work
+# Conflux: A Supervisor That Makes Cheap Open-Source Models Check Each Other's Work
 
 *Progress report · 2026-07-16 · repo state at commit `c606ae5`*
 
@@ -135,4 +135,4 @@ work.
 - Kwok et al., *LLM-as-a-Verifier: A General-Purpose Verification Framework*,
   arXiv:2607.05391 — continuous probability-based grading, verified
   independently here down to its tokenizer caveats.
-- Full design: `SPEC.md`. Code: `llm_super/` (~1,100 lines, Python).
+- Full design: `SPEC.md`. Code: `conflux/` (~1,100 lines, Python).

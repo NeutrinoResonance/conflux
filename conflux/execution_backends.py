@@ -144,7 +144,7 @@ class LockedJobExecutor:
         if operation == "start":
             return self.adapter.start(
                 args["command"],
-                cwd=args.get("cwd", "/tmp/llm-super-agent"),
+                cwd=args.get("cwd", "/tmp/conflux-agent"),
                 timeout_s=args.get("timeout_s", 3600),
                 label=args.get("label", "background job"),
                 context=context or {},

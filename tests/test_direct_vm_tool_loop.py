@@ -35,7 +35,7 @@ from scripts.direct_vm_tool_loop import (
 
 
 TARGET = AuthorizedVM(
-    vm="llmsuper-netbsd-arm64",
+    vm="conflux-netbsd-arm64",
     project="project96-sar",
     account="gce-operator@example.com",
     zone="us-central1-a",
@@ -119,7 +119,7 @@ class AuthorizedBoundaryTests(unittest.TestCase):
                 "gcloud",
                 "compute",
                 "ssh",
-                "llmsuper-netbsd-arm64",
+                "conflux-netbsd-arm64",
                 "--project",
                 "project96-sar",
                 "--account",
@@ -225,7 +225,7 @@ class AuthorizedBoundaryTests(unittest.TestCase):
         self.assertIn("base64 -d", remote_command)
         self.assertIn(base64.b64encode(content.encode()).decode(), remote_command)
         self.assertNotIn(content, remote_command)
-        self.assertIn("/app/gpt2.c.llm-super-write-tmp", remote_command)
+        self.assertIn("/app/gpt2.c.conflux-write-tmp", remote_command)
         self.assertEqual(result["write"]["path"], "/app/gpt2.c")
         self.assertEqual(result["write"]["bytes"], len(content.encode()))
         self.assertTrue(result["write"]["atomic_replace"])
@@ -268,7 +268,7 @@ class AuthorizedBoundaryTests(unittest.TestCase):
 class ToolLoopTests(unittest.TestCase):
     def test_human_hold_is_removed_from_resumable_protocol_checkpoint(self) -> None:
         notice = (
-            "[llm-super] Human approval is required before this action can run. "
+            "[conflux] Human approval is required before this action can run. "
             "Review pending action act_test in the operator interface."
         )
         client = _FakeClient([
@@ -302,7 +302,7 @@ class ToolLoopTests(unittest.TestCase):
 
     def test_deterministic_governor_block_is_bounded_correction_context(self) -> None:
         blocked = (
-            "[llm-super] Action blocked: a trailing command masks the meaningful "
+            "[conflux] Action blocked: a trailing command masks the meaningful "
             "process exit status"
         )
         client = _FakeClient([
@@ -329,7 +329,7 @@ class ToolLoopTests(unittest.TestCase):
             {"role": "user", "content": "recover the repository"},
         )
         self.assertEqual(retry_messages[-1]["role"], "user")
-        self.assertEqual(retry_messages[-1]["name"], "llm_super_governor")
+        self.assertEqual(retry_messages[-1]["name"], "conflux_governor")
         self.assertIn("rejection is not task completion", retry_messages[-1]["content"])
         self.assertNotIn(blocked, [
             message.get("content") for message in retry_messages
@@ -341,7 +341,7 @@ class ToolLoopTests(unittest.TestCase):
             ["recover the repository"],
         )
         self.assertFalse(any(
-            str(m.get("content") or "").startswith("llm-super governor correction:")
+            str(m.get("content") or "").startswith("conflux governor correction:")
             for m in messages_after_correction
         ))
         self.assertEqual(executor.calls[0][0], "git status --short")
@@ -351,7 +351,7 @@ class ToolLoopTests(unittest.TestCase):
         self.assertEqual(result.text, "verified")
 
     def test_governor_correction_attempts_are_bounded(self) -> None:
-        blocked = "[llm-super] Action blocked: rejected"
+        blocked = "[conflux] Action blocked: rejected"
         client = _FakeClient([
             _completion({"role": "assistant", "content": blocked}),
             _completion({"role": "assistant", "content": blocked}),
@@ -367,12 +367,12 @@ class ToolLoopTests(unittest.TestCase):
                 checkpoint=snapshots.append,
             )
         self.assertEqual(snapshots[-1][-1]["role"], "user")
-        self.assertEqual(snapshots[-1][-1]["name"], "llm_super_governor")
+        self.assertEqual(snapshots[-1][-1]["name"], "conflux_governor")
         self.assertTrue(snapshots[-1][-1]["content"].startswith(
-            "llm-super governor correction:"
+            "conflux governor correction:"
         ))
         self.assertFalse(any(
-            str(message.get("content") or "").startswith("[llm-super] Action blocked")
+            str(message.get("content") or "").startswith("[conflux] Action blocked")
             for message in snapshots[-1]
         ))
 
@@ -400,16 +400,16 @@ class ToolLoopTests(unittest.TestCase):
             and not message.get("tool_calls")
             for message in result.transcript
         ))
-        self.assertEqual(result.transcript[-2].get("name"), "llm_super_governor")
+        self.assertEqual(result.transcript[-2].get("name"), "conflux_governor")
 
     def test_resume_discards_empty_reply_after_active_correction(self) -> None:
         task = "resume corrected answer"
         initial = [
             {"role": "user", "content": task},
             {
-                "role": "user", "name": "llm_super_governor",
+                "role": "user", "name": "conflux_governor",
                 "content": (
-                    "llm-super governor correction: Answer without another "
+                    "conflux governor correction: Answer without another "
                     "tool call."
                 ),
             },
@@ -426,7 +426,7 @@ class ToolLoopTests(unittest.TestCase):
 
         self.assertEqual(result.text, "Recovered final answer")
         request_messages = client.requests[0][0]["messages"]
-        self.assertEqual(request_messages[-1].get("name"), "llm_super_governor")
+        self.assertEqual(request_messages[-1].get("name"), "conflux_governor")
         self.assertFalse(any(
             message.get("role") == "assistant"
             and message.get("content") is None
@@ -515,7 +515,7 @@ class ToolLoopTests(unittest.TestCase):
         self.assertEqual(result.text, "job started")
 
     def test_durable_only_capability_set_rejects_raw_shell_fallback(self) -> None:
-        from llm_super.durable_jobs import JOB_TOOL_DEFINITIONS
+        from conflux.durable_jobs import JOB_TOOL_DEFINITIONS
 
         client = _FakeClient([
             _completion(_tool_message("call-shell", '{"command":"ps aux"}')),

@@ -16,9 +16,9 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from llm_super import config as config_mod
-from llm_super import proxy
-from llm_super.config import AdminAuth
+from conflux import config as config_mod
+from conflux import proxy
+from conflux.config import AdminAuth
 
 
 class _FakeAdmin:
@@ -60,7 +60,7 @@ class AdminAuthMiddlewareTests(unittest.TestCase):
     def test_enabled_accepts_bearer_and_custom_header(self) -> None:
         proxy.state["cfg"] = _FakeCfg("sekrit")
         for headers in ({"Authorization": "Bearer sekrit"},
-                        {"X-LLM-Super-Token": "sekrit"}):
+                        {"X-Conflux-Token": "sekrit"}):
             response = self.client.get("/admin/status", headers=headers)
             self.assertNotEqual(response.status_code, 401, headers)
 
@@ -74,7 +74,7 @@ class AdminAuthMiddlewareTests(unittest.TestCase):
         proxy.state["cfg"] = _FakeCfg("sekrit")
         response = self.client.get("/", params={"token": "sekrit"})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.cookies.get("llm_super_admin"), "sekrit")
+        self.assertEqual(response.cookies.get("conflux_admin"), "sekrit")
         follow_up = self.client.get("/admin/status")
         self.assertNotEqual(follow_up.status_code, 401)
 
@@ -105,7 +105,7 @@ class AdminAuthConfigTests(unittest.TestCase):
     def test_default_is_disabled(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.dict(os.environ, {}, clear=False):
-                os.environ.pop("LLM_SUPER_ADMIN_TOKEN", None)
+                os.environ.pop("CONFLUX_ADMIN_TOKEN", None)
                 cfg = config_mod.load(self._write_minimal_config(tmp))
         self.assertFalse(cfg.admin.enabled)
         self.assertIsNone(cfg.admin.token)
@@ -113,7 +113,7 @@ class AdminAuthConfigTests(unittest.TestCase):
     def test_yaml_token_enables(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.dict(os.environ, {}, clear=False):
-                os.environ.pop("LLM_SUPER_ADMIN_TOKEN", None)
+                os.environ.pop("CONFLUX_ADMIN_TOKEN", None)
                 cfg = config_mod.load(self._write_minimal_config(
                     tmp, "admin:\n  token: hunter2\n"))
         self.assertTrue(cfg.admin.enabled)
@@ -122,7 +122,7 @@ class AdminAuthConfigTests(unittest.TestCase):
     def test_env_token_wins(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.dict(
-                os.environ, {"LLM_SUPER_ADMIN_TOKEN": "env-token"}
+                os.environ, {"CONFLUX_ADMIN_TOKEN": "env-token"}
             ):
                 cfg = config_mod.load(self._write_minimal_config(
                     tmp, "admin:\n  token: hunter2\n"))

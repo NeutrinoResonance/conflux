@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from llm_super import history_ui, ui
+from conflux import history_ui, ui
 
 
 class GeneratedSummaryPageContractTests(unittest.TestCase):

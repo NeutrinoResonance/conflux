@@ -8,19 +8,19 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from llm_super import sandbox
-from llm_super.durable_jobs import (
+from conflux import sandbox
+from conflux.durable_jobs import (
     JOB_TOOL_DEFINITIONS,
     DurableJobStore,
     GCEAuthorizedTarget,
     GCEJobBackend,
 )
-from llm_super.execution_backends import (
+from conflux.execution_backends import (
     ExecutionBackendLock,
     ExecutionBoundaryError,
     LockedJobExecutor,
 )
-from llm_super.flows import FlowRegistry, SQLiteFlowRuntime
+from conflux.flows import FlowRegistry, SQLiteFlowRuntime
 
 
 TARGET = GCEAuthorizedTarget(
@@ -135,7 +135,7 @@ class DurableGCEJobTests(unittest.TestCase):
         secret_command = "printf 'only on the remote VM\\n'; sleep 3"
 
         result = backend.start(
-            secret_command, cwd="/tmp/llm-super-agent", timeout_s=30,
+            secret_command, cwd="/tmp/conflux-agent", timeout_s=30,
             label="streaming proof", context={"session": "s", "task": "t"},
         )
 
@@ -158,7 +158,7 @@ class DurableGCEJobTests(unittest.TestCase):
             "stdout_cursor": 0, "stderr_cursor": 0,
         }])
         backend = self.backend(start)
-        job = backend.start("sleep 1", cwd="/tmp/llm-super-agent", timeout_s=30,
+        job = backend.start("sleep 1", cwd="/tmp/conflux-agent", timeout_s=30,
                             label="cursor proof", context={})
         backend._runner = _QueuedRunner([{
             "ok": True, "state": "running", "job_id": job["job_id"],
@@ -215,7 +215,7 @@ class DurableGCEJobTests(unittest.TestCase):
             "stdout_cursor": 0, "stderr_cursor": 0,
         }])
         job = self.backend(runner).start(
-            "sleep 60", cwd="/tmp/llm-super-agent", timeout_s=90,
+            "sleep 60", cwd="/tmp/conflux-agent", timeout_s=90,
             label="restart proof", context={},
         )
         recovered = DurableJobStore(self.db)
@@ -236,7 +236,7 @@ class DurableGCEJobTests(unittest.TestCase):
             "stdout_cursor": 0, "stderr_cursor": 0,
         }])
         job = self.backend(runner, runtime=runtime).start(
-            "sleep 1", cwd="/tmp/llm-super-agent", timeout_s=30,
+            "sleep 1", cwd="/tmp/conflux-agent", timeout_s=30,
             label="graph proof", context={"session": "s", "task": "t"},
         )
         observed = runtime.inspect(job["job_id"])

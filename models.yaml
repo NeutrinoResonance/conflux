@@ -1,7 +1,7 @@
 # Model & provider registry. Capabilities below reflect empirical probes
-# (2026-07-16, see SPEC.md §6 matrix) — re-verify with `llm-super probe`.
+# (2026-07-16, see SPEC.md §6 matrix) — re-verify with `conflux probe`.
 #
-# key_source values are resolved at request time by llm_super/keys.py:
+# key_source values are resolved at request time by conflux/keys.py:
 #   env:VAR                      — environment variable
 #   hermes:nous                  — agent_key from ~/.hermes/auth.json (rotates ~daily)
 #   opencode:<provider>          — key from ~/.local/share/opencode/auth.json
@@ -172,8 +172,8 @@ admin:
   # Control-plane authentication. DISABLED by default (empty token): the
   # server prints a startup warning that /admin/* is open to anyone who can
   # reach the port. Enable with a single setting — a non-empty token here or
-  # the LLM_SUPER_ADMIN_TOKEN environment variable (env wins). Clients send
-  # "Authorization: Bearer <token>" / "X-LLM-Super-Token"; browsers may visit
+  # the CONFLUX_ADMIN_TOKEN environment variable (env wins). Clients send
+  # "Authorization: Bearer <token>" / "X-Conflux-Token"; browsers may visit
   # any dashboard once with ?token=<token> to set the session cookie.
   token: ""
 
@@ -181,7 +181,7 @@ summaries:
   # Incremental (non-invoked) summary generation. DISABLED by default: each
   # run invokes the local Claude CLI and spends model budget. When enabled,
   # the server periodically fills missing step/message summaries with the
-  # same resumable backfills as `llm-super summarize-steps/-history`; every
+  # same resumable backfills as `conflux summarize-steps/-history`; every
   # run (manual or incremental) is recorded in the durable summary_jobs
   # ledger (GET /admin/summary-jobs).
   incremental: false

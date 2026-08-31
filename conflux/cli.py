@@ -8,7 +8,7 @@ import json
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(prog="llm-super")
+    p = argparse.ArgumentParser(prog="conflux")
     p.add_argument("--config", default="models.yaml")
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -101,8 +101,8 @@ def main() -> None:
             probe.bind((args.host, args.port))
         except OSError:
             sys.exit(
-                f"llm-super: port {args.port} on {args.host} is already in use.\n"
-                f"Another llm-super (or something else) is running there — "
+                f"conflux: port {args.port} on {args.host} is already in use.\n"
+                f"Another conflux (or something else) is running there — "
                 f"find it with: lsof -i :{args.port}"
             )
         finally:
@@ -191,7 +191,7 @@ def main() -> None:
             )
             raise SystemExit(130) from None
         except (message_summaries.SummaryError, ValueError) as exc:
-            sys.exit(f"llm-super: history summary backfill failed: {exc}")
+            sys.exit(f"conflux: history summary backfill failed: {exc}")
         print(
             "history summaries complete: "
             f"{result['summarized']}/{result['unique']} distinct messages · "
@@ -224,7 +224,7 @@ def main() -> None:
             )
             raise SystemExit(130) from None
         except (step_summary_backfill.SummaryError, ValueError) as exc:
-            sys.exit(f"llm-super: step-summary backfill failed: {exc}")
+            sys.exit(f"conflux: step-summary backfill failed: {exc}")
         print(
             "step summaries complete: "
             f"{result['summarized']}/{result['steps']} conversation steps · "
