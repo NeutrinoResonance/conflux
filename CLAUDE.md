@@ -1,9 +1,13 @@
 # Conflux — notes for Claude Code
 
+Rebuild in progress: read `AGENTS.md` and `docs/rebuild/MISSION.md` first.
+On the `conflux-dev-ctl` controller the identity cannot create VMs: use the two pre-created
+worker slots (`docs/rebuild/RESOURCES.md`) instead of the ephemeral `conflux-*` VMs described below.
+
 ## Cloud code execution is available (this project's "execution power")
 
 This machine has an authenticated `gcloud` CLI (project
-`oneascendant-auspice`). This project runs model-produced code on low-cost
+`project96-sar`). This project runs model-produced code on low-cost
 ephemeral Compute Engine VMs (e2-micro ≈ $0.008/h, billed per second):
 create → run → delete, ~1 min round trip. Implementation:
 `conflux/sandbox.py` (backends: `local` subprocess, `gcloud`, `off`).

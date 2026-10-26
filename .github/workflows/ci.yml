@@ -1,0 +1,46 @@
+name: ci
+
+on:
+  pull_request:
+    branches: ["rebuild/**", "epic/**"]
+  push:
+    branches: ["rebuild/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -q -e . pytest
+      - run: python -m pytest tests -q -p no:cacheprovider
+
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: No secrets in the change
+        run: |
+          base="${{ github.event.pull_request.base.sha || github.event.before }}"
+          git cat-file -e "$base" 2>/dev/null || base="$(git rev-list --max-parents=0 HEAD | tail -1)"
+          if git diff "$base" HEAD | grep -nE '^\+.*(sk-[A-Za-z0-9_-]{20,}|inf_[a-f0-9]{32}|gh[pousr]_[A-Za-z0-9]{30,}|AIza[0-9A-Za-z_-]{35}|BEGIN [A-Z ]*PRIVATE KEY)'; then
+            echo "::error::possible secret in diff"; exit 1
+          fi
+      - name: No raw evidence or large binaries added
+        run: |
+          base="${{ github.event.pull_request.base.sha || github.event.before }}"
+          git cat-file -e "$base" 2>/dev/null || base="$(git rev-list --max-parents=0 HEAD | tail -1)"
+          bad=$(git diff --name-only --diff-filter=A "$base" HEAD | grep -E '^artifacts/|\.(db|sqlite|db-wal)$' || true)
+          [ -z "$bad" ] || { echo "::error::evidence/db files must stay outside Git: $bad"; exit 1; }
+          big=$(git diff --name-only --diff-filter=AM "$base" HEAD | while read -r f; do [ -f "$f" ] && [ "$(wc -c <"$f")" -gt 2000000 ] && echo "$f"; done || true)
+          [ -z "$big" ] || { echo "::error::files over 2 MB: $big"; exit 1; }
