@@ -2,7 +2,7 @@ name: ci
 
 on:
   pull_request:
-    branches: ["rebuild/**", "epic/**"]
+    branches: ["rebuild/**", "epic/**", "smoke/**"]
   push:
     branches: ["rebuild/**"]
 
