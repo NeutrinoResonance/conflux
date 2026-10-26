@@ -18,8 +18,10 @@ import threading
 import time
 import uuid
 from dataclasses import asdict
+from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+from .config import Config, load as load_config
 from .flows import FlowRegistry, NODE_TYPES
 
 
@@ -101,15 +103,27 @@ def _cosine(left: list[float], right: list[float]) -> float:
 class ConversationGraphStore:
     """SQLite-backed graph store shared with the trace connection."""
 
-    def __init__(self, connection: sqlite3.Connection, registry: FlowRegistry):
+    def __init__(self, connection: sqlite3.Connection, registry: FlowRegistry,
+                 cfg: Config | None = None):
         self._conn = connection
         self.registry = registry
+        self._cfg = cfg
         self._lock = threading.RLock()
         self._ensure_schema()
 
     @property
     def connection(self) -> sqlite3.Connection:
         return self._conn
+
+    @property
+    def model_config(self) -> Config:
+        if self._cfg is None:
+            self._cfg = getattr(self.registry, "model_config", None)
+        if self._cfg is None:
+            path = (Path(self.registry.source).with_name("models.yaml")
+                    if self.registry.source else Path("models.yaml"))
+            self._cfg = load_config(path if path.exists() else "models.yaml")
+        return self._cfg
 
     def _ensure_schema(self) -> None:
         schema = (
@@ -918,7 +932,7 @@ class ConversationGraphStore:
         declared registry is never modified.
         """
         current = self.workflow(instance_id)
-        clean = self.validate_workflow_graph(graph)
+        clean = self.validate_workflow_graph(graph, cfg=self.model_config)
         clean["synthesized"] = True
         flow_id = _clean_id(str(graph.get("id") or "synthesized"), "flow id")
         version = int(graph.get("version", 1) or 1)
@@ -949,7 +963,8 @@ class ConversationGraphStore:
         return item
 
     @staticmethod
-    def validate_workflow_graph(graph: Mapping[str, Any]) -> dict[str, Any]:
+    def validate_workflow_graph(graph: Mapping[str, Any], *,
+                                cfg: Config | None = None) -> dict[str, Any]:
         if not isinstance(graph, Mapping):
             raise ValueError("workflow graph must be an object")
         clean = dict(graph)
@@ -975,7 +990,20 @@ class ConversationGraphStore:
             node["id"] = node_id
             node["label"] = _clean_text(node.get("label", node_id), "label", limit=160)
             node["description"] = _clean_text(node.get("description", ""), "description", limit=2000)
-            node["config"] = dict(node.get("config") or {})
+            config = node.get("config", {})
+            if not isinstance(config, Mapping):
+                raise ValueError(f"workflow node {node_id!r} config must be an object")
+            node["config"] = dict(config)
+            if node.get("agent") == "decider":
+                try:
+                    (cfg or load_config()).decider_settings(node["config"])
+                except ValueError as exc:
+                    raise ValueError(f"decider node {node_id!r}: {exc}") from exc
+            if node_type == "critic":
+                try:
+                    (cfg or load_config()).critic_settings(node["config"])
+                except ValueError as exc:
+                    raise ValueError(f"critic node {node_id!r}: {exc}") from exc
             node["runtime_status"] = str(node.get("runtime_status", "idle"))
             nodes.append(node)
         entry = _clean_id(str(clean.get("entry", "")), "workflow entry")
@@ -1004,12 +1032,14 @@ class ConversationGraphStore:
         clean["nodes"] = nodes
         clean["edges"] = edges
         clean["instance_schema"] = 1
+        from .flows import validate_decider_topology
+        validate_decider_topology(nodes, edges)
         return clean
 
     def save_workflow(self, instance_id: str, graph: Mapping[str, Any], *,
                       apply_globally: bool = False) -> dict[str, Any]:
         current = self.workflow(instance_id)
-        clean = self.validate_workflow_graph(graph)
+        clean = self.validate_workflow_graph(graph, cfg=self.model_config)
         now = _now()
         revision = int(current["revision"]) + 1
         updated_instances = 1
@@ -1149,17 +1179,33 @@ class ConversationGraphStore:
             self._conn.commit()
         return self.workflow(instance_id)
 
-    def workflow_plan(self, instance_id: str) -> dict[str, Any]:
-        graph = self.workflow(instance_id)["graph"]
+    def workflow_plan(self, instance_id: str | None = None, *,
+                      flow_id: str = "supervised_tool_turn") -> dict[str, Any]:
+        """Settings for one instance, or the declared/global route for API clients.
+
+        The fixed action pipeline uses action_critic when present, otherwise
+        the first enabled critic. Other critic nodes remain visible in the plan.
+        """
+        graph = (self.workflow(instance_id)["graph"] if instance_id
+                 else self._base_workflow_graph(flow_id))
         enabled = [node for node in graph["nodes"]
                    if (node.get("config") or {}).get("enabled", True)]
         ensemble = next((node for node in enabled if node["type"] == "ensemble"), None)
         human = next((node for node in enabled if node["type"] == "human_input"
                       and (node.get("config") or {}).get("required", True)
                       and not (node.get("config") or {}).get("satisfied", False)), None)
+        critics = {
+            node["id"]: asdict(self.model_config.critic_settings(node.get("config") or {}))
+            for node in enabled if node["type"] == "critic"
+        }
+        critic_id = "action_critic" if "action_critic" in critics else next(iter(critics), None)
+        decider_nodes = [n for n in graph["nodes"] if n.get("agent") == "decider"]
+        decider_node = decider_nodes[0] if decider_nodes else None
+        decider = self.model_config.decider_settings(decider_node.get("config") if decider_node else {})
         executor_prompts = [
             str((node.get("config") or {}).get("prompt", "")).strip()
             for node in enabled if node["type"] in {"agent", "context"}
+            and node.get("agent") != "decider"
             and str((node.get("config") or {}).get("prompt", "")).strip()
         ]
         verification_prompts = [
@@ -1168,6 +1214,11 @@ class ConversationGraphStore:
             and str((node.get("config") or {}).get("prompt", "")).strip()
         ]
         return {
+            "decider": asdict(decider),
+            "decider_node_id": decider_node["id"] if decider_node else None,
+            "critic": critics[critic_id] if critic_id else asdict(self.model_config.critic_settings()),
+            "critic_node_id": critic_id,
+            "critic_nodes": critics,
             "ensemble": dict(ensemble.get("config") or {}) if ensemble else None,
             "ensemble_node_id": ensemble["id"] if ensemble else None,
             "human_input_node_id": human["id"] if human else None,

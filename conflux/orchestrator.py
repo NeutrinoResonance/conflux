@@ -14,10 +14,11 @@ from __future__ import annotations
 
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Callable
 
 import asyncio
+import json
 import re
 
 from . import contract as contract_mod
@@ -30,6 +31,7 @@ from . import sandbox
 from .checkpoint import Checkpoints, turn_key
 from .config import Config, Model
 from .control import PAUSED_BOUNDARY_NOTICE, PAUSED_NOTICE, ControlState
+from .decider import ConversationRequired, Decider, DeciderUnavailable, ScopeViolation, canonical, enforce_scope
 from .flows import FlowRegistry, SQLiteFlowRuntime
 from .governance import ActionGovernor, ActionStore
 from .history import History, diff_prefix, similarity
@@ -201,6 +203,8 @@ class Orchestrator:
         self.governor = governor or ActionGovernor(
             cfg, client, trace, self.action_store, self.flow_runtime
         )
+        self.decision_store = self.governor.decisions
+        self.decider = Decider(cfg, client, self.decision_store)
 
     def _route_executor(self) -> str:
         """Forced > exploit > learned (best recent avg score, min sample
@@ -816,8 +820,427 @@ class Orchestrator:
 
     # ---------- agentic (tool-carrying) turn ----------
 
-    async def run_tool_turn(self, session: str, body: dict, *,
-                            stateless: bool = False) -> dict:
+    async def run_tool_turn(self, session: str, body: dict, *, stateless: bool = False,
+                            explicit_identity: bool = True) -> dict:
+        async with self.decision_store.lock(session):
+            task_id = uuid.uuid4().hex[:8]
+            approved = self.action_store.approved_batch(session)
+            held = next((self.action_store.by_probe_call(session, str(m.get("tool_call_id")))
+                         for m in reversed(body.get("messages", []))
+                         if m.get("role") == "tool" and self.action_store.by_probe_call(session, str(m.get("tool_call_id")))), None)
+            run_id = (approved[0]["run_id"] if approved else held["run_id"] if held else
+                      self.governor.start_run(session, task_id, _last_user_text(body.get("messages", [])),
+                                              self.control.budget_usd or self.cfg.supervision.budget_usd_per_task))
+            plan = self.governor._decider_plan(session, run_id, body)
+            settings = self.cfg.decider_settings(plan["decider"])
+            if not settings.enabled:
+                return await self._run_tool_turn_legacy(session, body, stateless=stateless,
+                                                        initial_run_id=run_id, initial_task_id=task_id)
+            if not explicit_identity or not session or session.startswith("oneshot_"):
+                raise ConversationRequired("decider requires a stable conversation_id or X-Conflux-Conversation")
+            try:
+                return await self._run_decided_tool_turn(session, task_id, run_id, body, settings, plan)
+            except DeciderUnavailable as exc:
+                self.flow_runtime.transition(run_id, "blocked", "decider_error", status="failed",
+                                             summary=str(exc), allow_jump=True)
+                raise
+
+    async def _run_decided_tool_turn(self, session, task_id, run_id, body, settings, plan):
+        budget = Budget(self.control.budget_usd or self.cfg.supervision.budget_usd_per_task)
+        messages = list(body.get("messages") or [])
+        goal = _last_user_text(messages)
+        chain = self.cfg.executor_chain(self._route_executor())
+        node_id = plan["decider_node_id"] or "decider"
+        reqlog.set_context(self.trace, session, task_id)
+        self.trace.record_exchange(session, task_id, "client_request", None, body)
+        panel = None
+        consultations = 0
+        review_base: dict[str, int] = {}  # decision id -> revision when its action review began
+
+        def log(kind, **data):
+            if panel:
+                data.setdefault("decision_id", panel.id)
+            self.trace.record(session, task_id, kind, graph_id="supervised_tool_turn",
+                              graph_run_id=run_id, node_id=data.pop("node_id", node_id),
+                              **data)
+
+        def response(data):
+            self.trace.record_exchange(session, task_id, "client_response", data.get("model"), data)
+            msg = data["choices"][0]["message"]
+            if not msg.get("tool_calls"):
+                self.history.record_turn(session, goal, msg.get("content") or "", None, [], len(messages))
+            return data
+
+        def incomplete(reason):
+            log("completion_denied", reason=reason)
+            self.flow_runtime.transition(run_id, "blocked", "completion_denied", status="blocked",
+                                         summary=reason, allow_jump=True)
+            data = _agent_text_completion("[conflux] Incomplete: " + reason, body.get("model", "super"))
+            data["conflux"] = {"status": "incomplete", "reason": reason, "graph_run_id": run_id}
+            return response(data)
+
+        async def consult(executor, held=None):
+            nonlocal panel, consultations
+            if self.control.paused:
+                raise DeciderUnavailable("supervisor paused")
+            if consultations >= settings.max_decisions_per_request:
+                raise DeciderUnavailable("per-request decision budget exhausted")
+            consultations += 1
+            self.flow_runtime.transition(run_id, "decider", "decider_started", allow_jump=True)
+            panel = await self.decider.decide(session, run_id, executor, settings, goal, messages,
+                                               budget, log, held=held, tools=body.get("tools") or [])
+            log("decider_panel_decision", model=panel.selected, decision=asdict(panel.decision))
+            for obligation in self.decision_store.obligations(session):
+                if obligation["decision_id"] == panel.id:
+                    log("obligation_created", obligation_id=obligation["id"], member=obligation["member"], claim=obligation["claim"])
+            return panel
+
+        async def authorize(data, action_ids, executor, *, review_usage=(0, 0, 0)):
+            nonlocal panel
+            budget.add(*review_usage)
+            # Concerns the senate raised while approving this exact action are
+            # part of that approval: they stay in the decision context for the
+            # next step. Any other new observation invalidates the decision
+            # before action bytes reach the client.
+            current = self.decision_store.revision(session)
+            if panel is not None and panel.revision != current and panel.revision == review_base.get(panel.id):
+                panel = replace(panel, revision=current)
+            if panel is None or panel.revision != current:
+                await consult(executor, data)
+            if budget.exhausted:
+                raise DeciderUnavailable("budget exhausted before action release")
+            manifests = self.governor._manifests(body)
+            from .governance import ToolManifest, assess_action, build_proposal
+            for call in data["choices"][0]["message"].get("tool_calls") or []:
+                name = call["function"]["name"]
+                manifest = manifests.get(name) or ToolManifest(name=name)
+                enforce_scope(panel.decision, call, manifest)
+                assessment = assess_action(build_proposal(call, data["choices"][0]["message"], manifest), manifest)
+                if not assessment.schema_valid or not assessment.capability_valid:
+                    raise ScopeViolation("decision scope must intersect current manifest permissions and schema")
+            self.decision_store.release(session, panel, data, action_ids)
+            return panel
+
+        def validate_checks(check_panel, checks, data):
+            from .governance import assess_action, build_proposal
+            if budget.exhausted or self.control.paused:
+                raise ScopeViolation("check release paused or budget exhausted")
+            calls = data["choices"][0]["message"].get("tool_calls") or []
+            if len(calls) != len(checks) or len(calls) > settings.max_checks_per_turn:
+                raise ScopeViolation("check batch does not match its obligation contracts or current limit")
+            manifests = self.governor._manifests(body)
+            for call, obligation in zip(calls, checks, strict=True):
+                name = call["function"]["name"]
+                check = obligation["check"]
+                if (obligation["decision_id"] != check_panel.id or not check
+                        or name != check["tool"]
+                        or canonical(json.loads(call["function"]["arguments"])) != canonical(check["arguments"])):
+                    raise ScopeViolation("governor substituted or rewrote an exact check contract")
+                if name not in manifests:
+                    raise ScopeViolation(f"check tool {name!r} is no longer exposed")
+                manifest = manifests[name]
+                enforce_scope(check_panel.decision, call, manifest, is_check=True)
+                assessment = assess_action(build_proposal(call, data["choices"][0]["message"], manifest), manifest)
+                if not assessment.schema_valid or not assessment.capability_valid:
+                    raise ScopeViolation("check must intersect current manifest permissions and schema")
+
+        async def issue_checks():
+            nonlocal panel
+            # Checks are proxy-authored actions bound to their original scope.
+            # They cross the same governor as executor proposals, before either
+            # model is consulted. Senate feedback does not replace that scope.
+            check_panel, checks = self.decision_store.pending_checks(session, settings.max_checks_per_turn)
+            if checks:
+                candidate = self.decision_store.panel(session, check_panel.id)
+                if candidate.decision.done and completion_blockers(candidate):
+                    self.decision_store.revoke_completion(session, candidate)
+                    return None
+                panel = check_panel
+                calls = [{"id": "conflux_check_" + uuid.uuid4().hex, "type": "function",
+                          "function": {"name": o["check"]["tool"],
+                                       "arguments": canonical(o["check"]["arguments"])}} for o in checks]
+                data = _agent_text_completion("Conflux obligation checks", "conflux-checks")
+                data["choices"][0]["message"]["tool_calls"] = calls
+                data["choices"][0]["finish_reason"] = "tool_calls"
+                data["conflux_checks"] = {"decision_id": check_panel.id, "obligation_ids": [o["id"] for o in checks]}
+
+                async def authorize_checks(released, action_ids, executor, *, review_usage=(0, 0, 0)):
+                    budget.add(*review_usage)
+                    if released["choices"][0]["message"].get("tool_calls") != calls:
+                        raise ScopeViolation("governor substituted or rewrote an exact check contract")
+                    validate_checks(check_panel, checks, released)
+                    self.decision_store.release_checks(session, check_panel, released, action_ids, checks)
+                    return check_panel
+
+                try:
+                    self.flow_runtime.transition(run_id, "policy_gate", "obligation_checks_started", allow_jump=True,
+                                                 data={"decision_id": check_panel.id})
+                    outcome = await self.governor.review(
+                        session, task_id, run_id, body, data, chain[0],
+                        budget_remaining=max(0, budget.cap - budget.spent),
+                        decision=check_panel, authorize=authorize_checks, is_check=True)
+                except ScopeViolation as exc:
+                    # A check the gate cannot scope leaves its claim unchecked;
+                    # the decider sees that status in the obligations it reads.
+                    self.decision_store.unchecked_checks(session, checks, str(exc))
+                    log("obligation_checks_blocked", reason=str(exc))
+                    outcome = None
+                if outcome is not None:
+                    if outcome.disposition == "release":
+                        log("obligation_checks_released", call_ids=[c["id"] for c in calls])
+                        return response(outcome.response)
+                    budget.add(outcome.cost_usd, outcome.tokens_in, outcome.tokens_out)
+                    self.decision_store.fail_checks(session, checks, outcome.reason)
+                    self.decision_store.concern(session, "obligation_checks_blocked", outcome.reason)
+                    if not check_panel.decision.done:
+                        return response(outcome.response)
+            return None
+
+        def completion_blockers(candidate):
+            obligations = self.decision_store.obligations(session)
+            replacements = {o["claim"] for o in obligations if o["decision_id"] == candidate.id
+                            and o["status"] in {"planned", "pending"} and o["check"]}
+            return [o for o in obligations if o["status"] in {"failed", "unchecked"}
+                    and (o["decision_id"] == candidate.id
+                         or (o["member"] == "observation" and o["claim"] not in replacements))]
+
+        if self.control.paused:
+            return incomplete("supervisor paused")
+        for update in self.decision_store.ingest(session, messages):
+            log("obligation_result", **update)
+        # Legacy runner corrections and all observed findings are decider input.
+        # They are never forwarded as direct executor repair instructions.
+        executor_messages = [m for m in messages if m.get("name") != "conflux_governor"]
+        for m in messages:
+            if m.get("name") == "conflux_governor":
+                self.decision_store.concern(session, "runner_feedback", m.get("content"))
+        for guidance in self.governor.operator_guidance(session):
+            self.decision_store.concern(session, "operator", guidance)
+
+        try:
+            checked = await issue_checks()
+            if checked is not None:
+                return checked
+            if self.decision_store.waiting(session):
+                return incomplete("waiting for released tool results")
+            # Exact held responses are reconsidered and scope-checked without
+            # asking the executor to regenerate their protocol IDs.
+            approved = self.action_store.approved_batch(session)
+            if approved:
+                held = approved[0]["response"]
+                marker = held.get("conflux_checks")
+                if marker:
+                    check_panel = self.decision_store.panel(session, marker["decision_id"])
+                    by_id = {o["id"]: o for o in self.decision_store.obligations(session)}
+                    checks = [by_id[oid] for oid in marker["obligation_ids"] if oid in by_id]
+                    if checks:
+                        check_panel = self.decision_store.check_panel(session, check_panel.id, checks[0]["member"])
+                    validate_checks(check_panel, checks, held)
+                    self.decision_store.release_checks(session, check_panel, held,
+                                                       [a["action_id"] for a in approved], checks)
+                    outcome = self.governor.release_operator_approved(session, task_id, authorized=True,
+                                                                      decision_id=check_panel.id)
+                    return response(outcome.response)
+                for item in approved:
+                    self.decision_store.concern(session, "operator_approval", {
+                        "action_id": item["action_id"], "note": item.get("human_note", "")})
+                executor = chain[0]
+                saved_model = (approved[0].get("proposal") or {}).get("executor") or held.get("model")
+                executor = next((m for m in self.cfg.models.values() if saved_model in {m.name, m.id}), executor)
+                # The approval covers this exact response under the decision
+                # that produced it; a fresh panel could decide a different
+                # scope and silently void what the senate or operator approved.
+                original = (approved[0].get("proposal") or {}).get("decision_id")
+                if original:
+                    panel = self.decision_store.panel(session, original)
+                    review_base[panel.id] = panel.revision
+                else:
+                    await consult(executor, held)
+                await authorize(held, [a["action_id"] for a in approved], executor)
+                outcome = self.governor.release_operator_approved(session, task_id, authorized=True,
+                                                                  decision_id=panel.id)
+                return response(outcome.response)
+            probe = await self.governor.resolve_probe(session, task_id, body, chain[0], authorize=authorize)
+            if probe is not None:
+                if probe.disposition != "release":
+                    budget.add(probe.cost_usd, probe.tokens_in, probe.tokens_out)
+                return response(probe.response) if probe.disposition == "release" else incomplete("held action remains " + probe.disposition)
+
+            soundness = await self.governor.resolve_soundness_probe(
+                session, task_id, body, chain[0], task_text=goal,
+                budget_remaining=max(0, budget.cap - budget.spent))
+            if soundness is not None:
+                budget.add(soundness.cost_usd, soundness.tokens_in, soundness.tokens_out)
+                directives = soundness.directives
+                pending = []
+            else:
+                _, directives, pending = self.governor.record_results(session, task_id, messages)
+            for directive in directives:
+                self.decision_store.concern(session, "postcheck", directive)
+            if pending:
+                soundness = await self.governor.begin_soundness_checks(
+                    session, task_id, body, chain[0], pending, task_text=goal,
+                    budget_remaining=max(0, budget.cap - budget.spent))
+                budget.add(soundness.cost_usd, soundness.tokens_in, soundness.tokens_out)
+                for directive in soundness.directives:
+                    self.decision_store.concern(session, "soundness", directive)
+                if soundness.disposition == "probe":
+                    await consult(chain[0], soundness.response)
+                    await authorize(soundness.response, [], chain[0])
+                    return response(soundness.response)
+
+            resumed_completion = self.decision_store.completion(session, messages, body.get("tools"))
+            scope_feedback, scope_repairs = "", {}
+            for attempt in range(settings.max_decisions_per_request):
+                data = None
+                reconsider = False
+                consulted_for = None
+                for model in chain:
+                    # Family policy is checked against each actual fallback; a
+                    # decision made for one executor family stays valid for a
+                    # fallback in that family, or when the rule ignores family.
+                    if resumed_completion is not None:
+                        panel, resumed_completion = resumed_completion, None
+                        consulted_for = model.family
+                    elif consulted_for is None or (settings.family_rule == "different_from_executor"
+                                                   and model.family != consulted_for):
+                        if consultations >= settings.max_decisions_per_request:
+                            return incomplete("bounded reconsideration exhausted")
+                        await consult(model)
+                        consulted_for = model.family
+                    if panel.decision.done:
+                        candidate = panel
+                        blockers = completion_blockers(candidate)
+                        if not blockers:
+                            checked = await issue_checks()
+                            if checked is not None:
+                                return checked
+                            # Check dispatch may temporarily select a member's
+                            # scope; completion authority stays with the panel.
+                            panel = candidate
+                        if (completion_blockers(candidate) or self.decision_store.unresolved(session, candidate.id)
+                                or candidate.revision != self.decision_store.revision(session)):
+                            self.decision_store.revoke_completion(session, candidate)
+                            reconsider = True
+                            break
+                    req = dict(body)
+                    req["messages"] = list(executor_messages) + [{
+                        "role": "system", "content": f"Conflux decision {panel.id}:\n" + canonical(asdict(panel.decision))
+                        + ("\nAll completion checks passed. Return the final answer without tool calls."
+                           if panel.decision.done else
+                           "\nImplement only this decision; do not broaden scope or declare completion.")
+                        + "\nOutstanding check contracts (execute only within this decision scope):\n"
+                        + canonical(self.decision_store.obligations(session)),
+                    }]
+                    if scope_feedback:
+                        req["messages"].append({"role": "system", "content":
+                            "Conflux refused your previous proposal for this decision: "
+                            + scope_feedback + "\nPropose the same step again in a form the gate accepts."})
+                        scope_feedback = ""
+                    self.flow_runtime.transition(run_id, "executor", "executor_started", allow_jump=True)
+                    if budget.exhausted or self.control.paused:
+                        return incomplete("budget exhausted or supervisor paused before executor")
+                    try:
+                        data = await self.client.raw_chat(model, req)
+                        break
+                    except ProviderError as exc:
+                        log("executor_error", model=model.name, error=str(exc))
+                if reconsider:
+                    continue
+                if data is None:
+                    raise DeciderUnavailable("all executors unavailable")
+                usage = data.get("usage") or {}
+                budget.add(model.cost(usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0)),
+                           usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+                log("execute", node_id="executor", model=model.name, cost_usd=model.cost(
+                    usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0)),
+                    tokens_in=usage.get("prompt_tokens", 0), tokens_out=usage.get("completion_tokens", 0))
+                if self.control.paused:
+                    return incomplete("supervisor paused after executor")
+                msg = data["choices"][0]["message"]
+                if msg.get("tool_calls"):
+                    if panel.decision.done:
+                        self.decision_store.concern(session, "executor", "Executor proposed tools after done authorization")
+                        continue
+                    review_base[panel.id] = self.decision_store.revision(session)
+                    try:
+                        outcome = await self.governor.review(
+                            session, task_id, run_id, req, data, model,
+                            budget_remaining=max(0, budget.cap - budget.spent),
+                            decision=panel, authorize=authorize)
+                    except ScopeViolation as exc:
+                        log("decision_scope_violation", reason=str(exc))
+                        # The decision stands; its implementation broke the gate's
+                        # contract. The executor retries it before the panel is
+                        # consulted again.
+                        if scope_repairs.get(panel.id, 0) < settings.executor_repairs:
+                            scope_repairs[panel.id] = scope_repairs.get(panel.id, 0) + 1
+                            scope_feedback, resumed_completion = str(exc), panel
+                            continue
+                        self.decision_store.concern(session, "scope_violation", {"reason": str(exc), "held_response": data})
+                        continue
+                    if outcome.disposition not in {"release", "probe"}:
+                        budget.add(outcome.cost_usd, outcome.tokens_in, outcome.tokens_out)
+                    if outcome.disposition in {"release", "probe"}:
+                        return response(outcome.response)
+                    if outcome.disposition == "human":
+                        return response(outcome.response)
+                    if scope_repairs.get(panel.id, 0) < settings.executor_repairs:
+                        # A refused implementation is retried against the same
+                        # decision; the senate's concerns are already recorded.
+                        scope_repairs[panel.id] = scope_repairs.get(panel.id, 0) + 1
+                        scope_feedback, resumed_completion = outcome.reason, panel
+                        continue
+                    self.decision_store.concern(session, "governor", outcome.reason)
+                    continue
+                if (not (msg.get("content") or "").strip()
+                        and scope_repairs.get(panel.id, 0) < settings.executor_repairs):
+                    # An empty reply is an executor failure, not a final answer:
+                    # retry the same decision before the panel is consulted again.
+                    log("executor_empty", model=model.name)
+                    scope_repairs[panel.id] = scope_repairs.get(panel.id, 0) + 1
+                    resumed_completion = panel
+                    continue
+                if (not panel.decision.done or self.decision_store.unresolved(session, panel.id)
+                        or panel.revision != self.decision_store.revision(session)):
+                    log("completion_denied", reason="panel done vote or obligation evidence missing")
+                    self.decision_store.concern(session, "premature_final", msg.get("content"))
+                    continue
+                if budget.exhausted:
+                    return incomplete("budget exhausted before final verification")
+                try:
+                    report = await self.verifier.verify(task=goal, output=msg.get("content") or "",
+                        contract=[], executor_family=model.family,
+                        evidence=_final_evidence(msg.get("content") or "", messages))
+                    budget.add(report.cost_usd, report.tokens_in, report.tokens_out)
+                except Exception as exc:
+                    log("verify_error", error=str(exc))
+                    return incomplete("verification unavailable")
+                events = run_monitors(msg.get("content") or "", goal)
+                log("verify", node_id="final_verifier", model=report.verifier,
+                    score=report.score, passed=report.passed, cost_usd=report.cost_usd,
+                    tokens_in=report.tokens_in, tokens_out=report.tokens_out)
+                if (report.passed and not events and not budget.exhausted
+                        and not self.control.paused
+                        and panel.revision == self.decision_store.revision(session)
+                        and not self.decision_store.unresolved(session, panel.id)):
+                    log("completion_authorized", model=model.name, verifier=report.verifier)
+                    self.flow_runtime.transition(run_id, "completed", "flow_completed", allow_jump=True)
+                    return response(data)
+                self.decision_store.concern(session, "final_verification", {
+                    "feedback": report.feedback, "monitors": [e.feedback for e in events]})
+            return incomplete("bounded reconsideration exhausted")
+        except DeciderUnavailable as exc:
+            if str(exc) == "per-request decision budget exhausted":
+                return incomplete("bounded reconsideration exhausted")
+            raise
+        except ScopeViolation as exc:
+            log("decision_scope_violation", reason=str(exc))
+            return incomplete(str(exc))
+
+    async def _run_tool_turn_legacy(self, session: str, body: dict, *,
+                            stateless: bool = False, initial_run_id: str = "",
+                            initial_task_id: str = "") -> dict:
         """Supervision for agent clients (Hermes, OpenCode, …), whose
         requests carry tool definitions. Every proposed tool call crosses the
         durable action governor before it is released.  The governor may
@@ -825,7 +1248,7 @@ class Orchestrator:
         protocol, or stop for an explicit operator decision. A FINAL TEXT
         answer is still monitored and cross-family verified, with one repair.
         Returns the raw OpenAI-format response dict."""
-        task_id = uuid.uuid4().hex[:8]
+        task_id = initial_task_id or uuid.uuid4().hex[:8]
         sup = self.cfg.supervision
         budget = Budget(cap=self.control.budget_usd or sup.budget_usd_per_task)
         messages = body.get("messages", [])
@@ -888,7 +1311,7 @@ class Orchestrator:
         # the held call, release the original response without buying another
         # executor generation.
         probe_outcome = await self.governor.resolve_probe(
-            session, task_id, body, chain[0]
+            session, task_id, body, chain[0], legacy=True
         )
         if probe_outcome is not None:
             budget.add(probe_outcome.cost_usd, probe_outcome.tokens_in,
@@ -914,7 +1337,7 @@ class Orchestrator:
         # Human approval is one-shot authorization for the exact response that
         # was held. Release that durable protocol message directly instead of
         # asking a stochastic executor to recreate matching fingerprints.
-        approved = self.governor.release_operator_approved(session, task_id)
+        approved = self.governor.release_operator_approved(session, task_id, authorized=True)
         if approved is not None:
             log("tool_step", model=chain[0].name, governed=True,
                 disposition="released_after_human_approval",
@@ -978,9 +1401,8 @@ class Orchestrator:
                 )
                 return soundness.response
         if not graph_run_id:
-            graph_run_id = self.governor.start_run(
-                session, task_id, task_text, budget.cap
-            )
+            graph_run_id = initial_run_id or self.governor.start_run(session, task_id, task_text, budget.cap)
+            self.governor._move(graph_run_id, "executor", "executor_started")
         operator_guidance = self.governor.operator_guidance(session)
         if operator_guidance:
             recovery_directives.extend(operator_guidance)
@@ -1075,6 +1497,7 @@ class Orchestrator:
                 outcome = await self.governor.review(
                     session, task_id, graph_run_id, req, data, model,
                     budget_remaining=max(0.0, budget.cap - budget.spent),
+                    legacy=True,
                 )
                 budget.add(outcome.cost_usd, outcome.tokens_in,
                            outcome.tokens_out)
@@ -1099,6 +1522,8 @@ class Orchestrator:
                 )
 
             text = msg.get("content") or ""
+            if self.flow_runtime.inspect(graph_run_id)["current_node"] == "decider":
+                self.flow_runtime.transition(graph_run_id, "executor", "executor_started")
             self.flow_runtime.transition(
                 graph_run_id, "final_verifier", "final_verifier_started",
                 summary="Checking final claims against observed tool evidence",
@@ -1170,7 +1595,7 @@ class Orchestrator:
             feedback = " ".join(p for p in parts if p)
             if attempt == 0:
                 self.flow_runtime.transition(
-                    graph_run_id, "executor", "repair_requested",
+                    graph_run_id, "decider", "repair_requested",
                     summary="Verifier feedback returned for one bounded repair",
                     model=model.name,
                 )
@@ -1576,6 +2001,73 @@ def _tool_transcript(messages: list[dict], limit: int = 12) -> str | None:
         return None
     return ("Tool activity from the agent's conversation (these tools were "
             "actually executed):\n" + "\n".join(lines[-16:]))
+
+
+def _provenance(output: str, messages: list[dict], *, window: int = 700,
+                limit_chars: int = 12_000) -> str | None:
+    """Where the output an answer quotes, and the identifiers it names, were observed.
+
+    A claim about a quoted log line or a named call, constant or field is
+    checked against the tool output that printed or defined it, however far
+    back that was."""
+    import re
+
+    def text_of(m):
+        content = m.get("content")
+        if isinstance(content, list):
+            content = " ".join(str(p.get("text", "")) for p in content if isinstance(p, dict))
+        try:
+            decoded = json.loads(content) if isinstance(content, str) else None
+        except ValueError:
+            decoded = None
+        if isinstance(decoded, dict):
+            content = "\n".join(str(decoded.get(k) or "") for k in ("stdout", "stderr")) or content
+        return str(content or "")
+
+    from .decider import _normalize_line
+
+    results = [(i, text_of(m)) for i, m in enumerate(messages) if m.get("role") == "tool"]
+    sections, used, seen = [], 0, set()
+    # Lines the answer quotes from output, then identifiers it names.
+    quoted = [line.strip() for block in re.findall(r"```[^\n]*\n(.*?)```", output, re.S)
+              for line in block.split("\n") if len(line.strip()) > 12]
+    names = re.findall(r"\b[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]{3,}\b", output)
+
+    def locate(needle, text):
+        at = text.find(needle)
+        if at >= 0 or needle not in quoted:
+            return at
+        want, offset = _normalize_line(needle), 0
+        for line in text.split("\n"):
+            if want in _normalize_line(line):
+                return offset
+            offset += len(line) + 1
+        return -1
+
+    for name in dict.fromkeys([*quoted, *names]):
+        for index, text in reversed(results):
+            at = locate(name, text)
+            if at < 0:
+                continue
+            start = max(0, at - window)
+            key = (index, start // window)
+            if key not in seen:
+                seen.add(key)
+                snippet = text[start:at + window]
+                sections.append(f"[{name[:80]}, tool result {index}]\n{snippet}")
+                used += len(snippet)
+            break
+        if used >= limit_chars:
+            break
+    if not sections:
+        return None
+    return ("Earlier tool output where identifiers this answer cites appeared "
+            "(check each claim against its source):\n" + "\n---\n".join(sections))
+
+
+def _final_evidence(output: str, messages: list[dict]) -> str | None:
+    parts = [p for p in (_tool_transcript(messages), _provenance(output, messages)) if p]
+    return "\n\n".join(parts) or None
 
 
 def _looks_multipart(task: str) -> bool:

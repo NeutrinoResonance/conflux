@@ -54,6 +54,7 @@ class SynthesisValidationTests(unittest.TestCase):
             "entry": "ingress",
             "nodes": [
                 {"id": "ingress", "label": "Intake", "type": "ingress"},
+                {"id": "decider", "label": "Decide", "type": "agent", "agent": "decider"},
                 {"id": "work", "label": "Do the work", "type": "agent",
                  "agent": "executor",
                  "capabilities": ["synthesize", "launch_missiles"]},
@@ -62,7 +63,8 @@ class SynthesisValidationTests(unittest.TestCase):
                 {"id": "done", "label": "Done", "type": "terminal"},
             ],
             "edges": [
-                {"source": "ingress", "target": "work"},
+                {"source": "ingress", "target": "decider"},
+                {"source": "decider", "target": "work"},
                 {"source": "work", "target": "check"},
                 {"source": "check", "target": "done"},
             ],

@@ -95,6 +95,15 @@ def prune(path: str | Path, settings: dict[str, Any]) -> dict[str, Any]:
                 report["deleted"][table] = cur.rowcount
             except sqlite3.OperationalError:
                 report["deleted"][table] = 0
+        # Full copies of oversized payloads belong to their exchange row.
+        try:
+            cur = conn.execute(
+                """DELETE FROM exchange_full
+                    WHERE exchange_id NOT IN (SELECT id FROM exchanges)"""
+            )
+            report["deleted"]["exchange_full"] = cur.rowcount
+        except sqlite3.OperationalError:
+            report["deleted"]["exchange_full"] = 0
         # Step summaries are intentionally retained after raw exchanges age
         # out so the event timeline stays readable.  Once both the exchanges
         # and events for a task are gone, the display row has no owner.

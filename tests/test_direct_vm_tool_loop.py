@@ -29,6 +29,8 @@ from scripts.direct_vm_tool_loop import (
     bounded_tool_json,
     load_transcript,
     require_supervised_virtual_model,
+    ToolLoopResult,
+    resolve_hold_with_senate,
     run_tool_loop,
     save_transcript,
 )
@@ -291,9 +293,11 @@ class ToolLoopTests(unittest.TestCase):
         messages = [{"role": "user", "content": "task"}]
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "run.json"
-            save_transcript(path, "task", messages)
+            tools = [{"type": "function", "function": {"name": "recorded", "parameters": {}}}]
+            save_transcript(path, "task", messages, tools=tools)
 
             self.assertEqual(load_transcript(path, "task"), messages)
+            self.assertEqual(json.loads(path.read_text())["tools"], tools)
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
             with self.assertRaisesRegex(
                 DirectClientError, "does not match this task or is malformed"
@@ -349,6 +353,38 @@ class ToolLoopTests(unittest.TestCase):
             "decision=governor_retry attempt=1" in event for event in events
         ))
         self.assertEqual(result.text, "verified")
+
+    def test_correction_budget_resets_after_an_executed_action(self) -> None:
+        blocked = {"role": "assistant", "content": "[conflux] Action blocked: rejected"}
+        client = _FakeClient([
+            _completion(blocked),
+            _completion(_tool_message("call-1", '{"command":"true"}')),
+            _completion(blocked),
+            _completion({"role": "assistant", "content": "done"}),
+        ])
+        result = run_tool_loop(
+            "two separate corrections", model="super", client=client,
+            executor=_FakeExecutor(), max_governor_retries=1,
+        )
+        self.assertEqual(result.text, "done")
+
+    def test_proxy_incomplete_resends_the_request_and_is_bounded(self) -> None:
+        incomplete = {"role": "assistant", "content": "[conflux] Incomplete: bounded reconsideration exhausted"}
+        client = _FakeClient([
+            _completion(incomplete),
+            _completion(_tool_message("call-1", '{"command":"true"}')),
+            _completion(incomplete),
+            _completion({"role": "assistant", "content": "done"}),
+        ])
+        result = run_tool_loop("resumable", model="super", client=client,
+                               executor=_FakeExecutor(), max_incomplete_retries=1)
+        self.assertEqual(result.text, "done")
+        self.assertFalse(any(str(m.get("content") or "").startswith("[conflux] Incomplete")
+                             for m in result.transcript))
+        client = _FakeClient([_completion(incomplete), _completion(incomplete)])
+        with self.assertRaisesRegex(LimitReached, "proxy remained incomplete"):
+            run_tool_loop("stuck", model="super", client=client,
+                          executor=_FakeExecutor(), max_incomplete_retries=1)
 
     def test_governor_correction_attempts_are_bounded(self) -> None:
         blocked = "[conflux] Action blocked: rejected"
@@ -625,6 +661,123 @@ class ToolLoopTests(unittest.TestCase):
 
         self.assertEqual([call[0] for call in executor.calls], ["true"])
 
+    def test_before_tool_observes_each_call_before_it_runs(self) -> None:
+        client = _FakeClient(
+            [
+                _completion(_tool_message("call-1", '{"command":"ls /tmp"}')),
+                _completion({"role": "assistant", "content": "done"}),
+            ]
+        )
+        executor = _FakeExecutor()
+        seen = []
+
+        def before_tool(step, tool, arguments, messages):
+            seen.append((step, tool, dict(arguments), len(executor.calls), messages[-1]["role"]))
+
+        run_tool_loop(
+            "observed run", model="super", client=client, executor=executor,
+            before_tool=before_tool,
+        )
+
+        self.assertEqual(seen, [(1, TOOL_NAME, {"command": "ls /tmp"}, 0, "assistant")])
+        self.assertEqual([call[0] for call in executor.calls], ["ls /tmp"])
+
+    def test_hold_notice_ids_cover_single_and_batch_holds(self) -> None:
+        from scripts.direct_vm_tool_loop import _HOLD_IDS
+
+        single = "Review pending action act_1 in the operator interface."
+        batch = "Review pending actions act_1, act_2 in the operator interface."
+        self.assertEqual(_HOLD_IDS.search(single).group(1), "act_1")
+        self.assertEqual(_HOLD_IDS.search(batch).group(1), "act_1, act_2")
+
+    def test_senate_resolves_holds_through_operator_endpoint(self) -> None:
+        import scripts.direct_vm_tool_loop as loop
+
+        class _Verdict:
+            def __init__(self, danger, how):
+                self.danger, self.how = danger, how
+                self.objections = [] if how in ("", "none") else [
+                    type("R", (), {"model": "glm-5.2", "normalized": danger or 0.0, "how": how})()]
+
+            def approves(self, below, method="max", quorum=1):
+                return None if self.danger is None else self.danger < below
+
+        hold = {"role": "assistant", "content": (
+            "[conflux] Human approval is required before this action can run. "
+            "Review pending action act_1 in the operator interface.")}
+        transcript = [{"role": "user", "content": "task"}]
+        for danger, expected in ((0.2, "approve"), (0.9, "deny")):
+            posted = []
+
+            def admin(endpoint, path, body=None):
+                if body is None:
+                    return {"items": [{"action_id": "act_1", "proposal": {
+                        "tool_name": TOOL_NAME, "arguments": {"command": "rm -rf ~/x"}}}]}
+                posted.append((path, body))
+                return {}
+
+            original = loop._admin_json
+            loop._admin_json = admin
+            try:
+                messages = resolve_hold_with_senate(
+                    ToolLoopResult(hold, transcript, 0),
+                    senate=lambda step, tool, args, msgs: _Verdict(danger, "deletes work"),
+                    endpoint="http://127.0.0.1:1/v1/chat/completions",
+                    approve_below=0.5, step=3, progress=lambda event: None,
+                )
+            finally:
+                loop._admin_json = original
+            self.assertEqual(posted[0][0], "/admin/actions/act_1/decision")
+            self.assertEqual(posted[0][1]["decision"], expected)
+            self.assertEqual(messages, transcript)
+            self.assertEqual(posted[0][1]["concerns"][0]["model"], "glm-5.2")
+            self.assertEqual(posted[0][1]["concerns"][0]["how"], "deletes work")
+
+    def test_senate_outage_is_retried_before_failing_closed(self) -> None:
+        import scripts.direct_vm_tool_loop as loop
+
+        class _Verdict:
+            def __init__(self, danger, how):
+                self.danger, self.how = danger, how
+                self.objections = [] if how in ("", "none") else [
+                    type("R", (), {"model": "glm-5.2", "normalized": danger or 0.0, "how": how})()]
+
+            def approves(self, below, method="max", quorum=1):
+                return None if self.danger is None else self.danger < below
+
+        hold = {"role": "assistant", "content": (
+            "Review pending action act_1 in the operator interface.")}
+        transcript = [{"role": "user", "content": "task"}]
+
+        def admin_into(posted):
+            def admin(endpoint, path, body=None):
+                if body is None:
+                    return {"items": [{"action_id": "act_1", "proposal": {
+                        "tool_name": TOOL_NAME, "arguments": {"command": "ls"}}}]}
+                posted.append(body)
+                return {}
+            return admin
+
+        for answers, expected, waits in (
+            ([None, _Verdict(None, ""), _Verdict(0.1, "none")], "approve", [60.0, 120.0]),
+            ([None] * 5, "deny", [60.0, 120.0, 240.0, 480.0]),
+        ):
+            posted, slept, queue = [], [], list(answers)
+            original = loop._admin_json
+            loop._admin_json = admin_into(posted)
+            try:
+                resolve_hold_with_senate(
+                    ToolLoopResult(hold, transcript, 0),
+                    senate=lambda *a: queue.pop(0),
+                    endpoint="http://127.0.0.1:1/v1/chat/completions",
+                    approve_below=0.5, step=1, progress=lambda event: None,
+                    sleep=slept.append,
+                )
+            finally:
+                loop._admin_json = original
+            self.assertEqual(posted[0]["decision"], expected)
+            self.assertEqual(slept, waits)
+
     def test_progress_covers_each_boundary_without_prompt_output_or_secrets(self) -> None:
         secret = "do-not-log-this-token"
         command = (
@@ -670,6 +823,67 @@ class ToolLoopTests(unittest.TestCase):
 
 
 class HTTPClientTests(unittest.TestCase):
+    def test_client_sends_one_stable_conversation_id(self) -> None:
+        from scripts.direct_vm_tool_loop import run_conversation_id
+
+        seen = []
+
+        class _Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def read(self, limit):
+                return json.dumps(_completion({"role": "assistant", "content": "ok"})).encode()
+
+        def opener(request, timeout):
+            seen.append(request.get_header("X-conflux-conversation"))
+            return _Response()
+
+        conversation = run_conversation_id("task", "/tmp/t.json")
+        self.assertEqual(conversation, run_conversation_id("task", "/tmp/t.json"))
+        self.assertNotEqual(conversation, run_conversation_id("task", "/tmp/u.json"))
+        client = ChatCompletionsClient(
+            "http://127.0.0.1:1/v1/chat/completions", opener=opener,
+            conversation_id=conversation,
+        )
+        client.complete({"model": "super"})
+        client.complete({"model": "super"})
+        self.assertEqual(seen, [conversation, conversation])
+
+    def test_unavailable_proxy_is_retried_with_backoff_then_fails(self) -> None:
+        import urllib.error
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self, limit: int) -> bytes:
+                return json.dumps(_completion({"role": "assistant", "content": "done"})).encode()
+
+        outcomes = [503, 503, None]
+
+        def opener(request, timeout):
+            code = outcomes.pop(0)
+            if code:
+                raise urllib.error.HTTPError(request.full_url, code, "unavailable", {}, None)
+            return Response()
+
+        waits: list[float] = []
+        client = ChatCompletionsClient("http://127.0.0.1:1/v1/chat/completions", opener=opener)
+        client._sleep = waits.append
+        self.assertEqual(client.complete({"model": "super"})["choices"][0]["message"]["content"], "done")
+        self.assertEqual(waits, [60.0, 120.0])
+        outcomes[:] = [503] * 3
+        client.unavailable_retries = 2
+        with self.assertRaisesRegex(DirectClientError, "completion HTTP 503"):
+            client.complete({"model": "super"})
+
     def test_nonstreaming_post_targets_exact_chat_completions_path(self) -> None:
         captured: dict = {}
 
@@ -716,3 +930,15 @@ class HTTPClientTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class InterruptedResumeTests(unittest.TestCase):
+    def test_unanswered_released_calls_get_an_explicit_interrupted_result(self) -> None:
+        from scripts.direct_vm_tool_loop import close_interrupted_calls, INTERRUPTED_RESULT
+        call = lambda i: {"id": i, "type": "function", "function": {"name": "run", "arguments": "{}"}}
+        messages = [{"role": "user", "content": "task"},
+                    {"role": "assistant", "content": None, "tool_calls": [call("a"), call("b")]},
+                    {"role": "tool", "tool_call_id": "a", "content": "done"}]
+        closed = close_interrupted_calls(list(messages))
+        self.assertEqual(closed[-1], {"role": "tool", "tool_call_id": "b", "content": INTERRUPTED_RESULT})
+        self.assertEqual(close_interrupted_calls(list(closed)), closed)

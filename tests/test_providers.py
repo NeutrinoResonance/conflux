@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from conflux.config import Config, Execution, Model, Provider, Supervision
+from conflux.config import DeciderSettings, Config, Execution, Model, Provider, Supervision
 from conflux.control import ControlState
 from conflux.keys import KeyResolutionError
 from conflux.orchestrator import Orchestrator
@@ -33,6 +33,7 @@ def _config() -> Config:
     primary = _model("primary", "primary-provider", "primary-id", ("fallback",))
     fallback = _model("fallback", "fallback-provider", "fallback-id")
     return Config(
+        decider=DeciderSettings(enabled=False),
         providers={
             "primary-provider": Provider(
                 "primary-provider", "https://primary.test/v1", "hermes:nous"),
@@ -210,3 +211,57 @@ class ProviderCompatibilityTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_provider_headers_expand_process_session(monkeypatch):
+    from conflux import providers as providers_module
+    monkeypatch.setattr(providers_module, "resolve", lambda source: "k")
+    provider = Provider("go", "https://x.test/v1", "env:K",
+                        headers={"x-opencode-session": "{session}"})
+    model = Model("m", "go", "m", "fam", (), False, 5, 0.0, 0.0)
+    headers = providers_module.Client._headers(provider, model)
+    assert headers["x-opencode-session"] == providers_module._PROCESS_SESSION
+    assert headers["x-opencode-session"].startswith("conflux-")
+    assert providers_module.Client._headers(provider, model) == headers
+
+
+def test_model_request_params_reach_both_chat_paths():
+    import asyncio, dataclasses
+    from conflux.config import load
+    from conflux.providers import Client
+    cfg = load()
+    model = dataclasses.replace(cfg.model("glm-5.3"), request={"reasoning_effort": "high"})
+    sent = []
+
+    async def post(url, headers=None, json=None, **kw):
+        import httpx
+        sent.append(json)
+        return httpx.Response(200, json={
+            "choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1}})
+
+    client = Client(cfg)
+    client._http.post = post
+    client._headers = lambda provider, model: {}
+    asyncio.run(client.chat(model, [{"role": "user", "content": "x"}]))
+    asyncio.run(client.raw_chat(model, {"messages": [], "reasoning_effort": "low"}))
+    assert sent[0]["reasoning_effort"] == "high"
+    assert sent[1]["reasoning_effort"] == "low"  # a client's explicit choice wins
+
+
+def test_text_tool_call_markup_becomes_tool_calls():
+    from conflux.providers import normalize_text_tool_calls
+    d = "｜DSML｜"
+    content = (f'Launching.\n\n<{d}tool_calls>\n<{d}invoke name="start_locked_job">\n'
+               f'<{d}parameter name="command" string="true">make -f qemu_v8.mk all</{d}parameter>\n'
+               f'<{d}parameter name="timeout_s" string="false">21600</{d}parameter>\n'
+               f'</{d}invoke>\n</{d}tool_calls>')
+    data = normalize_text_tool_calls({"choices": [{"message": {"role": "assistant", "content": content},
+                                                   "finish_reason": "stop"}]})
+    choice = data["choices"][0]
+    call = choice["message"]["tool_calls"][0]
+    assert choice["finish_reason"] == "tool_calls" and choice["message"]["content"] == "Launching."
+    assert call["function"]["name"] == "start_locked_job"
+    assert json.loads(call["function"]["arguments"]) == {"command": "make -f qemu_v8.mk all", "timeout_s": 21600}
+    plain = {"choices": [{"message": {"content": "done"}, "finish_reason": "stop"}]}
+    assert normalize_text_tool_calls(plain) == plain

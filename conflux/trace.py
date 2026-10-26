@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+import zlib
 from pathlib import Path
 from typing import Any
 
@@ -51,6 +52,18 @@ class Trace:
                 kind TEXT NOT NULL,          -- client_request/client_response/upstream
                 model TEXT,
                 payload TEXT NOT NULL        -- full JSON
+            )"""
+        )
+        # Payloads over MAX_PAYLOAD keep a bounded head in `exchanges` (so
+        # every reader and size guard behaves as before) and their complete
+        # JSON here, zlib-compressed.  Without it a long agent run loses the
+        # tail of every late request: the newest tool output, and with it the
+        # ability to audit, detect rewinds, or resume from a given step.
+        self._conn.execute(
+            """CREATE TABLE IF NOT EXISTS exchange_full (
+                exchange_id INTEGER PRIMARY KEY,
+                chars INTEGER NOT NULL,
+                body BLOB NOT NULL           -- zlib(full JSON payload)
             )"""
         )
         ensure_step_summary_schema(self._conn)
@@ -195,15 +208,22 @@ class Trace:
     def record_exchange(self, session: str, task: str, kind: str,
                         model: str | None, payload: Any) -> None:
         blob = json.dumps(payload, default=str)
+        full = None
         if len(blob) > self.MAX_PAYLOAD:
+            full = blob
             blob = json.dumps({"truncated": True, "chars": len(blob),
-                               "head": blob[: self.MAX_PAYLOAD]})
+                               "head": blob[: self.MAX_PAYLOAD], "full": True})
         now = time.time()
-        self._conn.execute(
+        cur = self._conn.execute(
             "INSERT INTO exchanges (ts, session, task, kind, model, payload) "
             "VALUES (?,?,?,?,?,?)",
             (now, session, task, kind, model, blob),
         )
+        if full is not None:
+            self._conn.execute(
+                "INSERT INTO exchange_full (exchange_id, chars, body) VALUES (?,?,?)",
+                (cur.lastrowid, len(full), zlib.compress(full.encode(), 6)),
+            )
         # A request creates immediately useful metadata for an in-flight task;
         # its paired response then upgrades the same row with what the prompt
         # elicited.  This is intentionally local and deterministic so tracing
@@ -242,16 +262,33 @@ class Trace:
         """The previous turn's full message prefix — the baseline for
         detecting client-side edits/rewinds (history.diff_prefix)."""
         row = self._conn.execute(
-            "SELECT payload FROM exchanges WHERE session=? AND "
+            "SELECT id FROM exchanges WHERE session=? AND "
             "kind='client_request' ORDER BY id DESC LIMIT 1",
             (session,)).fetchone()
         if not row:
             return None
-        try:
-            msgs = json.loads(row[0]).get("messages")
-        except (json.JSONDecodeError, AttributeError):
-            return None
+        payload = self.full_payload(row[0])
+        msgs = payload.get("messages") if isinstance(payload, dict) else None
         return msgs if isinstance(msgs, list) else None
+
+    def full_payload(self, exchange_id: int) -> Any:
+        """One exchange's complete payload, including rows stored over
+        MAX_PAYLOAD.  Legacy truncated rows (no full copy) return their
+        truncation marker unchanged; a missing row returns None."""
+        row = self._conn.execute(
+            "SELECT body FROM exchange_full WHERE exchange_id=?", (exchange_id,)
+        ).fetchone()
+        if row:
+            return json.loads(zlib.decompress(row[0]))
+        row = self._conn.execute(
+            "SELECT payload FROM exchanges WHERE id=?", (exchange_id,)
+        ).fetchone()
+        if not row:
+            return None
+        try:
+            return json.loads(row[0])
+        except json.JSONDecodeError:
+            return None
 
     def exchanges(self, task: str | None = None, session: str | None = None,
                   n: int = 100) -> list[dict[str, Any]]:

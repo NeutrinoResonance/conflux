@@ -98,6 +98,7 @@ class AdminAuthConfigTests(unittest.TestCase):
             "    provider: p\n"
             "    id: m\n"
             "    family: f\n"
+            "decider: {enabled: false}\n"
             + admin_block
         )
         return path

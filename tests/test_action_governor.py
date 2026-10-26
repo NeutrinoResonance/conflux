@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from conflux.config import Config, Execution, Model, Provider, Supervision
+from conflux.config import DeciderSettings, Config, Execution, Model, Provider, SenateSettings, Supervision
 from conflux.control import ControlState
 from conflux.durable_jobs import JOB_TOOL_DEFINITIONS
 from conflux.flows import FlowRegistry, SQLiteFlowRuntime
@@ -36,10 +36,12 @@ def _config() -> Config:
         price_in_per_m=1, price_out_per_m=1,
     )
     return Config(
+        decider=DeciderSettings(enabled=False),
         providers={"test": provider}, models={"executor": executor, "critic": critic},
         default_executor="executor", utility="critic", verifier_pool=["critic"],
         supervision=Supervision(confirm_new_sessions=False, turn_timeout_s=10),
         execution=Execution(backend="off"), learned_routing=False,
+        senate=SenateSettings(members=["critic"]),
     )
 
 
@@ -101,9 +103,16 @@ class _Client:
         self.critic_prompts.append(messages[-1]["content"])
         payload = self.critic_json.pop(0)
         return ChatResult(
-            text=json.dumps(payload), tokens_in=13, tokens_out=5,
+            text=(_senate_reply(payload) if "safety senate" in messages[-1]["content"]
+                  else json.dumps(payload)), tokens_in=13, tokens_out=5,
             cost_usd=0.000018,
         )
+
+
+def _senate_reply(payload: dict) -> str:
+    letter = "A" if payload["verdict"] == "approve" else "T"
+    return (f"<danger>{letter}</danger><how>{payload.get('objection', '')}</how>"
+            f"<review>{json.dumps(payload)}</review>")
 
 
 class DeterministicPolicyTests(unittest.TestCase):
@@ -667,21 +676,23 @@ class GovernorProtocolTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(soundness_pending, [])
         self.assertEqual(orch.action_store.get(action["action_id"])["status"], "completed")
 
-    async def test_masked_exit_status_is_deterministically_blocked(self) -> None:
+    async def test_masked_exit_status_is_a_concern_the_senate_rates(self) -> None:
+        objection = {"verdict": "block", "reason": "masked failure",
+                     "objection": "the trailing echo hides the validator's exit status",
+                     "arguments": None, "probe": None}
         client = _Client(raw=[_response(
             "python3 /tmp/validate.py --output /tmp/acceptance.json 2>&1; "
             "echo \"EXIT:$?\""
-        )])
+        )], critic_json=[objection] * 8)
         orch = self.orch(client)
 
         result = await orch.run_tool_turn("session-masked-status", _body())
 
         self.assertEqual(result["choices"][0]["finish_reason"], "stop")
-        self.assertIn("masks", result["choices"][0]["message"]["content"])
-        self.assertEqual(client.critic_calls, 0)
+        self.assertGreaterEqual(client.critic_calls, 1)
+        self.assertIn("policy concern exit_status_propagation", client.critic_prompts[0])
         action = orch.action_store.list()[0]
-        self.assertEqual(action["status"], "blocked")
-        self.assertEqual(action["verdict"]["critic"], "deterministic")
+        self.assertNotEqual(action["verdict"]["critic"], "deterministic")
         governed_context = "\n".join(
             str(message.get("content", ""))
             for message in client.raw_bodies[0]["messages"]
@@ -695,20 +706,18 @@ class GovernorProtocolTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("successful read-only falsification probe is evidence", governed_context)
         self.assertIn("do not recursively verify the verifier", governed_context)
 
-    async def test_narration_only_tool_call_is_deterministically_blocked(self) -> None:
+    async def test_narration_only_tool_call_is_a_concern_the_senate_rates(self) -> None:
         client = _Client(raw=[_response(
             "echo '{\"accepted\":true,\"evidence\":\"already observed\"}'"
-        )])
+        )], critic_json=[{"verdict": "approve", "reason": "harmless", "objection": "",
+                          "arguments": None, "probe": None}] * 8)
         orch = self.orch(client)
 
-        result = await orch.run_tool_turn("session-narration-only", _body())
+        await orch.run_tool_turn("session-narration-only", _body())
 
-        self.assertEqual(result["choices"][0]["finish_reason"], "stop")
-        self.assertIn("return final text directly", result["choices"][0]["message"]["content"])
-        self.assertEqual(client.critic_calls, 0)
-        action = orch.action_store.list()[0]
-        self.assertEqual(action["status"], "blocked")
-        self.assertEqual(action["verdict"]["critic"], "deterministic")
+        self.assertGreaterEqual(client.critic_calls, 1)
+        self.assertIn("policy concern evidence_value", client.critic_prompts[0])
+        self.assertIn("return final text directly", client.critic_prompts[0])
 
     async def test_explicit_task_tool_call_limit_is_deterministically_enforced(self) -> None:
         prior_call = _tool_call("stat /tmp/first", "call-first")
@@ -768,10 +777,11 @@ class GovernorProtocolTests(unittest.IsolatedAsyncioTestCase):
         result = await orch.run_tool_turn("session-combined-correction", _body())
 
         content = result["choices"][0]["message"]["content"]
+        # The contract check still blocks deterministically; the shell-style
+        # heuristic is advisory and never reaches the client as a block.
         self.assertIn("target_scope", content)
-        self.assertIn("exit_status_propagation", content)
         self.assertIn("exact absolute path matching /app, /app/**", content)
-        self.assertIn("use pipefail", content)
+        self.assertNotIn("exit_status_propagation", content)
         self.assertEqual(client.critic_calls, 0)
 
     async def test_medium_action_uses_cross_family_critic(self) -> None:
@@ -817,7 +827,7 @@ class GovernorProtocolTests(unittest.IsolatedAsyncioTestCase):
                 if model.name == "critic":
                     raise ProviderError(model.name, 401, "expired credential")
                 return ChatResult(
-                    text=json.dumps({
+                    text=_senate_reply({
                         "verdict": "approve", "reason": "bounded build",
                         "objection": "may consume resources", "arguments": None,
                         "probe": None,
@@ -858,7 +868,7 @@ class GovernorProtocolTests(unittest.IsolatedAsyncioTestCase):
             async def chat(self, model: Model, messages: list[dict], **kwargs) -> ChatResult:
                 self.critic_calls += 1
                 self.critic_prompts.append(messages[-1]["content"])
-                text = "{\"verdict\": \"approve\"" if model.name == "critic" else json.dumps({
+                text = "<danger>" if model.name == "critic" else _senate_reply({
                     "verdict": "approve", "reason": "bounded build",
                     "objection": "resource use", "arguments": None, "probe": None,
                 })
@@ -1365,19 +1375,20 @@ class FlowRuntimeTests(unittest.TestCase):
         connection = sqlite3.connect(":memory:")
         runtime = SQLiteFlowRuntime(connection, registry)
         compiled = runtime.compile("supervised_tool_turn")
-        self.assertEqual(compiled["nodes"], 14)
+        self.assertEqual(compiled["nodes"], 15)
         run_id = runtime.start(
             "supervised_tool_turn", {"goal": "test"}, {"usd": 0.1},
             list(registry.flows["supervised_tool_turn"].capabilities),
             session="s", task="t",
         )
+        runtime.transition(run_id, "decider", "decider_started")
         runtime.transition(run_id, "executor", "executor_started")
         checkpoint = runtime.checkpoint(run_id)
         replay = runtime.replay(run_id)
         self.assertTrue(checkpoint.startswith("ckpt_"))
         self.assertEqual(replay["graph_hash"], compiled["graph_hash"])
-        self.assertEqual([event["node_id"] for event in replay["events"]][:2],
-                         ["ingress", "executor"])
+        self.assertEqual([event["node_id"] for event in replay["events"]][:3],
+                         ["ingress", "decider", "executor"])
 
     def test_runtime_rejects_jump_outside_declared_edges(self) -> None:
         registry = FlowRegistry.load(Path(__file__).parents[1] / "agent_flows.yaml")

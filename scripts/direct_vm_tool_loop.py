@@ -28,6 +28,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from conflux.config import SENATE_CONCERNS, SENATE_DECISIONS
+
 from conflux.durable_jobs import (
     COLLECT_JOB_TOOL,
     INSPECT_JOB_TOOL,
@@ -614,6 +616,7 @@ class ChatCompletionsClient:
         timeout_s: float = 300.0,
         max_response_bytes: int = 2_097_152,
         opener: Callable[..., Any] = urllib.request.urlopen,
+        conversation_id: str | None = None,
     ) -> None:
         parsed = urllib.parse.urlsplit(endpoint)
         if (
@@ -633,6 +636,12 @@ class ChatCompletionsClient:
         self.timeout_s = timeout_s
         self.max_response_bytes = max_response_bytes
         self._opener = opener
+        # One explicit conversation for the whole run. The stateless proxy
+        # endpoint otherwise gives each request a fresh session, so an
+        # operator-approved hold could never be released to the next request.
+        self.conversation_id = conversation_id
+
+    unavailable_retries = 8  # about an hour of backoff for a temporarily unavailable proxy
 
     def complete(
         self, body: Mapping[str, Any], *, timeout_s: float | None = None
@@ -643,21 +652,33 @@ class ChatCompletionsClient:
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
+        if self.conversation_id:
+            headers["X-Conflux-Conversation"] = self.conversation_id
         request = urllib.request.Request(
             self.endpoint,
             data=json.dumps(body, separators=(",", ":")).encode("utf-8"),
             headers=headers,
             method="POST",
         )
-        try:
-            with self._opener(request, timeout=effective_timeout) as response:
-                raw = response.read(self.max_response_bytes + 1)
-        except urllib.error.HTTPError as exc:
-            # Upstreams sometimes echo request material in error bodies. Do
-            # not print that body: status alone is sufficient and stays safe.
-            raise DirectClientError(f"completion HTTP {exc.code}") from exc
-        except (urllib.error.URLError, TimeoutError) as exc:
-            raise DirectClientError(f"completion request failed: {exc}") from exc
+        attempt = 0
+        while True:
+            try:
+                with self._opener(request, timeout=effective_timeout) as response:
+                    raw = response.read(self.max_response_bytes + 1)
+                break
+            except urllib.error.HTTPError as exc:
+                # The proxy answers 503 when no reviewer or decider can be
+                # reached; its state persists, so the same request is retried
+                # with backoff before the run is abandoned.
+                if exc.code in {502, 503, 504} and attempt < self.unavailable_retries:
+                    getattr(self, "_sleep", time.sleep)(min(600.0, 60.0 * 2 ** attempt))
+                    attempt += 1
+                    continue
+                # Upstreams sometimes echo request material in error bodies. Do
+                # not print that body: status alone is sufficient and stays safe.
+                raise DirectClientError(f"completion HTTP {exc.code}") from exc
+            except (urllib.error.URLError, TimeoutError) as exc:
+                raise DirectClientError(f"completion request failed: {exc}") from exc
         if len(raw) > self.max_response_bytes:
             raise ProtocolError("completion response exceeded the configured byte limit")
         try:
@@ -705,16 +726,41 @@ def load_transcript(path: Path, task: str) -> list[dict[str, Any]] | None:
         or {"role": "user", "content": task} not in messages
     ):
         raise DirectClientError("transcript is missing the exact initial task message")
-    return copy.deepcopy(messages)
+    return close_interrupted_calls(copy.deepcopy(messages))
 
 
-def save_transcript(path: Path, task: str, messages: list[dict[str, Any]]) -> None:
+INTERRUPTED_RESULT = json.dumps({
+    "ok": False, "interrupted": True,
+    "error": ("the client stopped before this call returned; its effects on the VM are "
+              "unknown. Inspect the state before relying on or repeating it."),
+})
+
+
+def close_interrupted_calls(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Give every call the client released but never answered an explicit
+    interrupted result. Re-running it could repeat its effects; leaving it
+    open would stall a proxy that waits for every released call."""
+    last = next((i for i in range(len(messages) - 1, -1, -1)
+                 if messages[i].get("role") == "assistant" and messages[i].get("tool_calls")), None)
+    if last is None:
+        return messages
+    answered = {m.get("tool_call_id") for m in messages[last + 1:] if m.get("role") == "tool"}
+    for call in messages[last]["tool_calls"]:
+        if call.get("id") not in answered:
+            messages.append({"role": "tool", "tool_call_id": call.get("id"), "content": INTERRUPTED_RESULT})
+    return messages
+
+
+def save_transcript(path: Path, task: str, messages: list[dict[str, Any]], *,
+                    tools: list[dict[str, Any]] | None = None) -> None:
     """Atomically checkpoint protocol messages for approval/restart recovery."""
     payload = {
         "version": 1,
         "task_sha256": hashlib.sha256(task.encode()).hexdigest(),
         "messages": messages,
     }
+    if tools is not None:
+        payload["tools"] = tools
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_name(path.name + ".tmp")
@@ -889,6 +935,7 @@ def run_tool_loop(
     job_executor: LockedJobExecutor | None = None,
     max_steps: int = 32,
     max_governor_retries: int = 3,
+    max_incomplete_retries: int = 10,
     max_tokens: int = 8192,
     max_tool_result_bytes: int = 32_768,
     total_timeout_s: float = 14_400.0,
@@ -897,6 +944,7 @@ def run_tool_loop(
     tool_definitions: list[dict[str, Any]] | None = None,
     initial_messages: list[dict[str, Any]] | None = None,
     checkpoint: Callable[[list[dict[str, Any]]], None] | None = None,
+    before_tool: Callable[[int, str, Mapping[str, Any], list[dict[str, Any]]], Any] | None = None,
 ) -> ToolLoopResult:
     require_supervised_virtual_model(model)
     if not isinstance(task, str) or not task.strip():
@@ -952,6 +1000,7 @@ def run_tool_loop(
     tool_steps = 0
     completion_steps = 0
     governor_retries = 0
+    incomplete_retries = 0
     exposed_tools = tool_definitions or TOOL_DEFINITIONS
     exposed_names = {
         str((tool.get("function") or {}).get("name")) for tool in exposed_tools
@@ -1026,6 +1075,19 @@ def run_tool_loop(
                 if progress is not None:
                     progress(f"completion={completion_steps} decision=human_hold")
                 return ToolLoopResult(assistant, messages, tool_steps)
+            if isinstance(content, str) and content.startswith("[conflux] Incomplete:"):
+                # The proxy ran out of reconsiderations for this request; its
+                # decision state persists, so the same request resumes it. This
+                # notice is not task output.
+                messages.pop()
+                persist()
+                if incomplete_retries >= max_incomplete_retries:
+                    raise LimitReached("proxy remained incomplete: " + content[:200])
+                incomplete_retries += 1
+                if progress is not None:
+                    progress(f"completion={completion_steps} decision=proxy_incomplete_retry "
+                             f"attempt={incomplete_retries} reason={content[22:120]!r}")
+                continue
             governor_blocked = (
                 isinstance(content, str)
                 and content.startswith("[conflux] Action")
@@ -1072,6 +1134,7 @@ def run_tool_loop(
             return ToolLoopResult(assistant, messages, tool_steps)
         if not isinstance(tool_calls, list):
             raise ProtocolError("assistant tool_calls field was not a list")
+        incomplete_retries = 0
         if progress is not None:
             progress(
                 f"completion={completion_steps} decision=tool_calls "
@@ -1105,6 +1168,18 @@ def run_tool_loop(
                     else:
                         detail = f"job={arguments.get('job_id', 'n/a')}"
                     progress(f"tool_step={tool_steps + 1} tool={tool_name} {detail}")
+                if before_tool is not None:
+                    # Observation only (shadow senate): it may snapshot the
+                    # target but never changes what runs.
+                    shadow = before_tool(tool_steps + 1, tool_name, arguments, copy.deepcopy(messages))
+                    conversation_id = getattr(client, "conversation_id", None)
+                    if shadow is not None and conversation_id:
+                        _admin_json(client.endpoint,
+                            f"/admin/conversations/{urllib.parse.quote(conversation_id, safe='')}/concerns",
+                            {"concerns": _senate_concerns(shadow, step=tool_steps + 1)})
+                    remaining = deadline - clock()
+                    if remaining <= 0:
+                        raise LimitReached("total tool-loop timeout reached")
                 if tool_name == executor_tool_name:
                     result = executor.run(arguments["command"], timeout_s=remaining)
                 elif tool_name == CONTAINER_WRITE_TOOL_NAME and isinstance(
@@ -1145,6 +1220,9 @@ def run_tool_loop(
             if active_correction in messages:
                 messages.remove(active_correction)
                 active_correction = None
+            # The correction budget bounds consecutive rejected proposals; an
+            # executed action ends that sequence.
+            governor_retries = 0
             persist()
             tool_steps += 1
 
@@ -1181,6 +1259,10 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--max-steps", type=_positive_int, default=32)
     parser.add_argument(
+        "--max-incomplete-retries", type=_positive_int, default=10,
+        help="resends after the proxy reports a request incomplete (its state persists)",
+    )
+    parser.add_argument(
         "--max-governor-retries", type=_positive_int, default=3,
         help="bounded automatic corrections after deterministic governor blocks",
     )
@@ -1203,10 +1285,185 @@ def _parser() -> argparse.ArgumentParser:
         help="atomic protocol checkpoint used to resume held or interrupted runs",
     )
     parser.add_argument(
+        "--senate",
+        help="comma-separated models.yaml names that rate each action in shadow "
+             "mode (never blocks); requires --senate-log",
+    )
+    parser.add_argument("--senate-log", help="JSONL file for shadow senate verdicts")
+    parser.add_argument("--senate-config", default="models.yaml")
+    parser.add_argument(
+        "--snapshot-disk",
+        help="GCE disk of the authorized VM to snapshot before actions the "
+             "senate rates at or above --snapshot-at",
+    )
+    parser.add_argument("--snapshot-at", type=float, default=0.5)
+    parser.add_argument(
+        "--conversation-id",
+        help="explicit proxy conversation for this run (default: derived from "
+             "the task and --transcript-file, so a resumed run keeps it)",
+    )
+    parser.add_argument(
+        "--hold-resolver", choices=("none", "senate"), default="none",
+        help="lab only: let the --senate resolve human-approval holds through "
+             "the proxy's operator endpoint instead of stopping the run",
+    )
+    parser.add_argument(
+        "--hold-approve-below", type=float, default=None,
+        help="danger threshold for senate approval (default: senate.approve_below in the config)",
+    )
+    parser.add_argument(
+        "--senate-decision", choices=SENATE_DECISIONS, default=None,
+        help="how member ratings combine (default: senate.decision in the config)",
+    )
+    parser.add_argument("--senate-quorum", type=_positive_int, default=None)
+    parser.add_argument("--senate-concerns", choices=SENATE_CONCERNS, default=None)
+    parser.add_argument("--max-holds", type=_positive_int, default=200)
+    parser.add_argument(
         "--durable-only", action="store_true",
         help="expose only backend-neutral durable job operations to the agent",
     )
     return parser
+
+
+def _shadow_senate(args: argparse.Namespace, parser: argparse.ArgumentParser):
+    """Build the optional shadow senate hook from trusted operator flags.
+
+    Members and decision settings come from the config's `senate:` block;
+    flags override them for one run.
+    """
+    from conflux import config as conflux_config
+    from conflux.senate import ShadowSenate
+
+    cfg = conflux_config.load(args.senate_config) if (args.senate or args.senate_log) else None
+    members = ([name.strip() for name in args.senate.split(",") if name.strip()]
+               if args.senate else list(cfg.senate.members) if cfg else [])
+    if not members:
+        if args.senate_log or args.snapshot_disk:
+            parser.error("--senate-log/--snapshot-disk need senate members (--senate or senate.members)")
+        return None
+    if not args.senate_log:
+        parser.error("a senate requires --senate-log")
+    settings = cfg.senate
+    args.hold_approve_below = (args.hold_approve_below if args.hold_approve_below is not None
+                               else settings.approve_below)
+    args.senate_decision = args.senate_decision or settings.decision
+    args.senate_quorum = args.senate_quorum or settings.quorum
+    args.senate_concerns = args.senate_concerns or settings.concerns
+
+    snapshot = None
+    if args.snapshot_disk:
+        def snapshot(step: int) -> str:
+            name = f"{args.snapshot_disk}-s{step:04d}-{time.strftime('%Y%m%d%H%M%S', time.gmtime())}"
+            subprocess.run(
+                ["gcloud", "compute", "disks", "snapshot", args.snapshot_disk,
+                 f"--project={args.project}", f"--account={args.account}",
+                 f"--zone={args.zone}", f"--snapshot-names={name}", "--quiet"],
+                check=True, capture_output=True, timeout=1_800,
+            )
+            print(f"[direct-vm] tool_step={step} snapshot={name}", file=sys.stderr)
+            return name
+    return ShadowSenate(
+        cfg, members,
+        args.senate_log, snapshot_at=args.snapshot_at, snapshot=snapshot,
+    )
+
+
+def run_conversation_id(task: str, transcript_file: str | None) -> str:
+    """Stable per-run conversation id: same task and checkpoint, same id."""
+    anchor = str(Path(transcript_file).resolve()) if transcript_file else ""
+    return "direct_" + hashlib.sha256(f"{task}\0{anchor}".encode()).hexdigest()[:24]
+
+
+_HOLD_IDS = re.compile(r"Review pending actions? (.+?) in the operator interface")
+
+
+def _admin_json(endpoint: str, path: str, body: Mapping[str, Any] | None = None) -> Any:
+    base = endpoint.split("/v1/", 1)[0]
+    request = urllib.request.Request(
+        base + path,
+        data=None if body is None else json.dumps(body).encode(),
+        headers={"Content-Type": "application/json"},
+        method="GET" if body is None else "POST",
+    )
+    with urllib.request.urlopen(request, timeout=60) as response:
+        return json.loads(response.read())
+
+
+def _senate_concerns(verdict, **context) -> list[dict[str, Any]]:
+    # Includes approvals, non-voters, errors, and members omitted by top mode.
+    ratings = getattr(verdict, "ratings", getattr(verdict, "objections", []))
+    return [{**context, "model": r.model, "family": getattr(r, "family", ""),
+             "how": r.how, "danger": r.normalized,
+             "error": getattr(r, "error", "")} for r in ratings]
+
+
+def resolve_hold_with_senate(
+    result: ToolLoopResult, *, senate, endpoint: str, approve_below: float,
+    step: int, progress: Callable[[str], None],
+    decision: str = "max", quorum: int = 1, concerns: str = "all",
+    unanswered_retries: int = 4, retry_wait: float = 60.0,
+    sleep: Callable[[float], None] = time.sleep,
+) -> list[dict[str, Any]] | None:
+    """Decide one held response with the senate; return messages to resume.
+
+    Approval lets the proxy release the exact held response on the next
+    request.  Denial resumes with the senate's objection as the governor
+    correction, so the executor proposes a different action.  None means the
+    hold could not be matched to a pending action and the run must stop.
+
+    A senate with no answering member is a provider outage, not a verdict:
+    it is re-asked with growing waits, and only an outage outlasting every
+    retry fails closed to denial.
+    """
+    content = str(result.final_message.get("content") or "")
+    match = _HOLD_IDS.search(content)
+    if not match:
+        return None
+    ids = [part.strip() for part in match.group(1).split(",") if part.strip()]
+    pending = {
+        item["action_id"]: item
+        for item in _admin_json(endpoint, "/admin/actions?status=human_pending&limit=200")["items"]
+    }
+    if not ids or any(action_id not in pending for action_id in ids):
+        return None
+    verdicts = []
+    for action_id in ids:
+        proposal = pending[action_id].get("proposal") or {}
+        for attempt in range(unanswered_retries + 1):
+            verdict = senate(
+                step, str(proposal.get("tool_name") or ""),
+                proposal.get("arguments") or {}, result.transcript,
+            )
+            if verdict is not None and verdict.danger is not None:
+                break
+            if attempt < unanswered_retries:
+                wait = retry_wait * 2 ** attempt
+                progress(f"hold action={action_id} senate unanswered; retry in {wait:.0f}s")
+                sleep(wait)
+        verdicts.append(verdict)
+    dangers = [v.danger if v is not None else None for v in verdicts]
+    approve = all(
+        v is not None and v.approves(approve_below, decision, quorum) is True for v in verdicts
+    )
+    concern_mode = concerns
+    concerns = [
+        f"- {r.model} (danger {r.normalized:.2f}): {r.how}"
+        for v in verdicts if v is not None
+        for r in (v.objections if concern_mode == "all" else v.objections[:1])
+    ]
+    answered = any(d is not None for d in dangers)
+    note = (
+        f"senate danger={max((d for d in dangers if d is not None), default=1.0):.2f}: "
+        + ("; ".join(c[2:] for c in concerns) or "none" if answered else "no senator answered")
+    )
+    for action_id, verdict in zip(ids, verdicts):
+        _admin_json(endpoint, f"/admin/actions/{action_id}/decision",
+                    {"decision": "approve" if approve else "deny", "note": note[:500],
+                     "concerns": _senate_concerns(verdict) if verdict is not None else []})
+    progress(f"hold actions={','.join(ids)} senate={'approve' if approve else 'deny'} {note[:160]}")
+    messages = copy.deepcopy(result.transcript)
+    # Feedback is durable decider input, never direct executor instructions.
+    return messages
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1254,6 +1511,7 @@ def main(argv: list[str] | None = None) -> int:
                 job_executor=LockedJobExecutor(boundary, job_backend),
                 max_steps=args.max_steps,
                 max_governor_retries=args.max_governor_retries,
+                max_incomplete_retries=args.max_incomplete_retries,
                 max_tokens=args.max_tokens,
                 max_tool_result_bytes=args.max_tool_result_bytes,
                 total_timeout_s=args.total_timeout_seconds,
@@ -1265,7 +1523,7 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 checkpoint=(
                     (lambda messages: save_transcript(
-                        Path(args.transcript_file), task, messages
+                        Path(args.transcript_file), task, messages, tools=JOB_TOOL_DEFINITIONS
                     )) if args.transcript_file else None
                 ),
             )
@@ -1275,10 +1533,13 @@ def main(argv: list[str] | None = None) -> int:
             if not getattr(args, name):
                 parser.error(f"--{name} is required with --job-backend gce")
         target = AuthorizedVM(args.vm, args.project, args.account, args.zone)
+        before_tool = _shadow_senate(args, parser)
         client = ChatCompletionsClient(
             args.endpoint,
             api_key=os.environ.get("CONFLUX_API_KEY"),
             timeout_s=args.api_timeout_seconds,
+            conversation_id=args.conversation_id or run_conversation_id(
+                task, args.transcript_file),
         )
         job_target = GCEAuthorizedTarget(
             args.vm, args.project, args.account, args.zone
@@ -1321,29 +1582,61 @@ def main(argv: list[str] | None = None) -> int:
             )
             job_executor = LockedJobExecutor(boundary, job_backend)
             exposed_tools = JOB_TOOL_DEFINITIONS if args.durable_only else None
-        result = run_tool_loop(
-            task,
-            model=args.model,
-            client=client,
-            executor=executor,
-            job_executor=job_executor,
-            max_steps=args.max_steps,
-            max_governor_retries=args.max_governor_retries,
-            max_tokens=args.max_tokens,
-            max_tool_result_bytes=args.max_tool_result_bytes,
-            total_timeout_s=args.total_timeout_seconds,
-            progress=lambda event: print(f"[direct-vm] {event}", file=sys.stderr),
-            tool_definitions=exposed_tools,
-            initial_messages=(
-                load_transcript(Path(args.transcript_file), task)
-                if args.transcript_file else None
-            ),
-            checkpoint=(
-                (lambda messages: save_transcript(
-                    Path(args.transcript_file), task, messages
-                )) if args.transcript_file else None
-            ),
+        if args.hold_resolver == "senate" and before_tool is None:
+            parser.error("--hold-resolver senate requires --senate")
+        progress = lambda event: print(f"[direct-vm] {event}", file=sys.stderr)
+        initial_messages = (
+            load_transcript(Path(args.transcript_file), task)
+            if args.transcript_file else None
         )
+        steps_used = holds = 0
+        deadline = time.monotonic() + args.total_timeout_seconds
+        while True:
+            offset = steps_used
+            result = run_tool_loop(
+                task,
+                model=args.model,
+                client=client,
+                executor=executor,
+                job_executor=job_executor,
+                max_steps=max(1, args.max_steps - steps_used),
+                max_governor_retries=args.max_governor_retries,
+                max_incomplete_retries=args.max_incomplete_retries,
+                max_tokens=args.max_tokens,
+                max_tool_result_bytes=args.max_tool_result_bytes,
+                total_timeout_s=max(1.0, deadline - time.monotonic()),
+                progress=progress,
+                tool_definitions=exposed_tools,
+                initial_messages=initial_messages,
+                checkpoint=(
+                    (lambda messages: save_transcript(
+                        Path(args.transcript_file), task, messages, tools=exposed_tools or TOOL_DEFINITIONS
+                    )) if args.transcript_file else None
+                ),
+                before_tool=(
+                    (lambda step, *rest: before_tool(step + offset, *rest))
+                    if before_tool is not None else None
+                ),
+            )
+            steps_used += result.tool_steps
+            held = str(result.final_message.get("content") or "").startswith(
+                "[conflux] Human approval is required")
+            if not held or args.hold_resolver != "senate":
+                break
+            holds += 1
+            if holds > args.max_holds or steps_used >= args.max_steps:
+                raise LimitReached("hold or step budget exhausted while resolving holds")
+            initial_messages = resolve_hold_with_senate(
+                result, senate=before_tool, endpoint=args.endpoint,
+                approve_below=args.hold_approve_below, step=steps_used + 1,
+                progress=progress, decision=args.senate_decision,
+                quorum=args.senate_quorum, concerns=args.senate_concerns,
+            )
+            if initial_messages is None:
+                break
+            if args.transcript_file:
+                save_transcript(Path(args.transcript_file), task, initial_messages,
+                                tools=exposed_tools or TOOL_DEFINITIONS)
         final_text = result.text
     except (DirectClientError, ValueError) as exc:
         print(f"direct-vm-client: {exc}", file=sys.stderr)

@@ -29,6 +29,43 @@ NODE_TYPES = {
 TERMINAL_TYPES = {"terminal"}
 
 
+def validate_decider_topology(nodes: list[dict], edges: list[dict]) -> None:
+    """Compile a single decision stage; edges cannot dispatch extra deciders."""
+    from .config import DeciderSettings
+    deciders = [n for n in nodes if n.get("agent") == "decider"]
+    if not deciders:
+        return  # legacy/non-tool graphs remain representable
+    if len(deciders) != 1 or deciders[0].get("type") != "agent":
+        raise ValueError("fixed pipeline supports exactly one agent decider node")
+    decider = deciders[0]
+    raw = decider.get("config") or {}
+    keys = set(DeciderSettings.__dataclass_fields__)
+    if set(raw) - keys - {"prompt"}:
+        raise ValueError("unsupported decider node settings")
+    DeciderSettings(**{k: v for k, v in raw.items() if k in keys})
+    executors = {n["id"] for n in nodes if n.get("agent") == "executor"}
+    if len(executors) != 1:
+        raise ValueError("decider stage requires exactly one executor agent")
+    executor = next(iter(executors))
+    if not any(e["source"] == decider["id"] and e["target"] == executor for e in edges):
+        raise ValueError("decider must precede the executor")
+    if any(e["target"] == executor and e["source"] != decider["id"] for e in edges):
+        raise ValueError("all executor ingress and feedback must pass through decider")
+    supported = {executor, "action_released", "blocked"}
+    if any(e["source"] == decider["id"] and e["target"] not in supported for e in edges):
+        raise ValueError("unsupported decider wiring in fixed pipeline")
+    reachable = {n["id"] for n in nodes if n.get("type") == "ingress"}
+    while True:
+        expanded = reachable | {e["target"] for e in edges if e["source"] in reachable and not e.get("loop")}
+        if expanded == reachable:
+            break
+        reachable = expanded
+    if decider["id"] not in reachable:
+        raise ValueError("ingress must reach the decider before executor work")
+    if not any(n.get("type") == "verifier" for n in nodes):
+        raise ValueError("decider pipeline requires final verification")
+
+
 @dataclass(frozen=True)
 class AgentSpec:
     id: str
@@ -79,6 +116,7 @@ class FlowSpec:
         return {node.id: node for node in self.nodes}
 
     def validate(self, agents: dict[str, AgentSpec]) -> None:
+        validate_decider_topology([asdict(n) for n in self.nodes], [asdict(e) for e in self.edges])
         if not self.id or self.version < 1:
             raise ValueError("flow id is required and version must be positive")
         node_ids = [node.id for node in self.nodes]

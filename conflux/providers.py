@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import re
 import time
+import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -16,6 +18,7 @@ from .config import Config, Model, Provider
 from .keys import KeyResolutionError, resolve, try_refresh
 
 # Some gateways emit unescaped control chars inside reasoning text.
+_PROCESS_SESSION = f"conflux-{uuid.uuid4()}"
 _CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 
 
@@ -45,6 +48,41 @@ async def chat_chain(client: "Client", cfg: Config, model_name: str,
         except ProviderError as e:
             last = e
     raise last if last else ProviderError(model_name, 0, "empty chain")
+
+
+_DSML = "\uff5cDSML\uff5c"  # DeepSeek's native tool-call markup: <｜DSML｜...>
+_DSML_INVOKE = re.compile(r"<" + _DSML + r'invoke name="([^"]+)">(.*?)</' + _DSML + r"invoke>", re.S)
+_DSML_PARAM = re.compile(r"<" + _DSML + r'parameter name="([^"]+)" string="(true|false)">(.*?)</' + _DSML + r"parameter>", re.S)
+
+
+def normalize_text_tool_calls(data: dict[str, Any]) -> dict[str, Any]:
+    """Some routes return a model's native tool-call markup as message text
+    instead of OpenAI tool_calls. Convert it, so the client sees a tool call
+    rather than a final answer containing markup."""
+    for choice in data.get("choices") or []:
+        message = choice.get("message") or {}
+        content = message.get("content")
+        if message.get("tool_calls") or not isinstance(content, str) or _DSML + "tool_calls" not in content:
+            continue
+        calls = []
+        for name, body in _DSML_INVOKE.findall(content):
+            arguments = {}
+            for key, is_string, value in _DSML_PARAM.findall(body):
+                if is_string == "true":
+                    arguments[key] = value
+                else:
+                    try:
+                        arguments[key] = json.loads(value)
+                    except ValueError:
+                        arguments[key] = value
+            digest = hashlib.sha256(f"{len(calls)}{name}{json.dumps(arguments, sort_keys=True)}".encode()).hexdigest()[:24]
+            calls.append({"id": f"call_{digest}", "type": "function",
+                          "function": {"name": name, "arguments": json.dumps(arguments)}})
+        if calls:
+            message["tool_calls"] = calls
+            message["content"] = content.split("<" + _DSML + "tool_calls>", 1)[0].strip() or None
+            choice["finish_reason"] = "tool_calls"
+    return data
 
 
 @dataclass
@@ -185,6 +223,8 @@ class Client:
         return {
             "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
+            **{name: str(value).replace("{session}", _PROCESS_SESSION)
+               for name, value in provider.headers.items()},
         }
 
     async def _refresh_auth(self, provider: Provider) -> bool:
@@ -203,7 +243,7 @@ class Client:
         policy as chat()."""
         provider = self.cfg.provider_for(model)
         breaker = self._entry_checks(provider, model)
-        out = dict(body)
+        out = {**model.request, **body}
         out["model"] = model.id
         out.pop("stream", None)
         # The upstream call is deliberately non-streaming so the orchestrator
@@ -253,6 +293,7 @@ class Client:
             if resp.status_code != 200 or "choices" not in data:
                 raise ProviderError(model.name, resp.status_code, json.dumps(data))
             self._note_success(provider, model, breaker)
+            data = normalize_text_tool_calls(data)
             reqlog.record("upstream", model.name, {"request": out, "response": data})
             return data
         breaker.fails += 1
@@ -268,6 +309,7 @@ class Client:
         max_tokens: int = 4096,
         temperature: float = 0.2,
         logprobs: bool = False,
+        timeout_s: float | None = None,
     ) -> ChatResult:
         provider = self.cfg.provider_for(model)
         body: dict[str, Any] = {
@@ -275,6 +317,7 @@ class Client:
             "messages": messages,
             "max_tokens": max_tokens,
             "temperature": temperature,
+            **model.request,
         }
         if logprobs and model.logprobs:
             body["logprobs"] = True
@@ -292,6 +335,8 @@ class Client:
                     f"{provider.base_url}/chat/completions",
                     headers=self._headers(provider, model),
                     json=body,
+                    **({"timeout": httpx.Timeout(timeout_s, connect=min(10.0, timeout_s))}
+                       if timeout_s is not None else {}),
                 )
             except httpx.HTTPError as e:
                 last_exc = ProviderError(model.name, 0, f"transport error: {e}")

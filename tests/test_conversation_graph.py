@@ -146,7 +146,7 @@ class ConversationGraphStoreTests(unittest.TestCase):
             for edge in graph["edges"]
         ))
         self.assertTrue(any(
-            edge["source"] == added_id and edge["target"] == "executor"
+            edge["source"] == added_id and edge["target"] == "decider"
             for edge in graph["edges"]
         ))
         plan = self.store.workflow_plan(instance_id)
@@ -162,7 +162,7 @@ class ConversationGraphStoreTests(unittest.TestCase):
         deleted = self.store.delete_workflow_node(instance_id, added_id)
         self.assertFalse(any(node["id"] == added_id for node in deleted["graph"]["nodes"]))
         self.assertTrue(any(
-            edge["source"] == "ingress" and edge["target"] == "executor"
+            edge["source"] == "ingress" and edge["target"] == "decider"
             for edge in deleted["graph"]["edges"]
         ))
 

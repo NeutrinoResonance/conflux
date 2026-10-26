@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from conflux.checkpoint import Checkpoints
-from conflux.config import Config, Execution, Model, Provider, Supervision
+from conflux.config import DeciderSettings, Config, Execution, Model, Provider, Supervision
 from conflux.control import PAUSED_BOUNDARY_NOTICE, PAUSED_NOTICE, ControlState
 from conflux.history import History
 from conflux.library import Library
@@ -27,6 +27,7 @@ def _config(*, budget: float = 0.50) -> Config:
         price_in_per_m=1.0, price_out_per_m=1.0,
     )
     return Config(
+        decider=DeciderSettings(enabled=False),
         providers={"test": provider}, models={"executor": model},
         default_executor="executor", utility="executor", verifier_pool=[],
         supervision=Supervision(

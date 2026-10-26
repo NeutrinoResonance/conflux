@@ -105,23 +105,23 @@ def _letter_value(tok: str, scale: int) -> int | None:
 
 
 def _score_from_logprobs(
-    lp_content: list[dict[str, Any]], text: str, scale: int
+    lp_content: list[dict[str, Any]], text: str, scale: int, tag: str = "score"
 ) -> tuple[float, int, bool, dict]:
     """Return (expected score, point score, was_continuous, letter->prob)."""
-    point = _parse_point(text, scale)
+    point = _parse_point(text, scale, tag)
     empty: dict = {}
-    # Locate the first letter token at/after the LAST '<score>' in the text.
+    # Locate the first letter token at/after the LAST '<tag>' in the text.
     acc = ""
     starts = []
     for tok in lp_content:
         starts.append(len(acc))
         acc += tok.get("token", "")
-    tag = acc.rfind("<score>")
-    if tag < 0:
+    at = acc.rfind(f"<{tag}>")
+    if at < 0:
         return float(point), point, False, empty
     idx = None
     for i, tok in enumerate(lp_content):
-        if starts[i] >= tag and _letter_value(tok.get("token", ""), scale) is not None:
+        if starts[i] >= at and _letter_value(tok.get("token", ""), scale) is not None:
             idx = i
             break
     if idx is None:
@@ -140,15 +140,15 @@ def _score_from_logprobs(
     return expected, point, True, letters
 
 
-def _parse_point(text: str, scale: int) -> int:
+def _parse_point(text: str, scale: int, tag: str = "score") -> int:
     import re
 
-    m = re.findall(r"<score>\s*([A-Za-z])\s*</score>", text)
+    m = re.findall(rf"<{tag}>\s*([A-Za-z])\s*</{tag}>", text)
     if m:
         v = _letter_value(m[-1].upper(), scale)
         if v is not None:
             return v
-    m = re.findall(r"<score>\s*(\d{1,2})\s*</score>", text)
+    m = re.findall(rf"<{tag}>\s*(\d{{1,2}})\s*</{tag}>", text)
     if m:
         return max(1, min(scale, int(m[-1])))
     return 1
@@ -262,7 +262,7 @@ class Verifier:
                                 ),
                             }
                         ],
-                        max_tokens=1500,
+                        max_tokens=sup.verify_max_tokens,
                         temperature=0.0 if repeats == 1 else 0.6,
                         logprobs=True,
                     )
@@ -294,7 +294,10 @@ class Verifier:
         scores = list(await asyncio.gather(*(score_criterion(c) for c in criteria)))
         worst = min(scores, key=lambda c: c.expected)
 
-        norm = (sum(c.expected for c in scores) / len(scores) - 1) / (scale - 1)
+        if sup.criteria_aggregate == "min":
+            norm = (worst.expected - 1) / (scale - 1)
+        else:
+            norm = (sum(c.expected for c in scores) / len(scores) - 1) / (scale - 1)
         passed = norm >= sup.pass_threshold
         feedback = ""
         if not passed and worst is not None:

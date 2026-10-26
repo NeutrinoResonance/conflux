@@ -4,7 +4,7 @@ import json
 import unittest
 
 from conflux import proxy
-from conflux.config import Config, Execution, Model, Provider, Supervision
+from conflux.config import DeciderSettings, Config, Execution, Model, Provider, Supervision
 from conflux.control import ControlState
 from conflux.orchestrator import TurnReport
 
@@ -16,6 +16,7 @@ def _config() -> Config:
         top_logprobs_max=5, price_in_per_m=1.0, price_out_per_m=2.0,
     )
     return Config(
+        decider=DeciderSettings(enabled=False),
         providers={"test": Provider(
             "test", "https://provider.test/v1", "env:TEST_KEY")},
         models={"direct": model}, default_executor="direct", utility="direct",

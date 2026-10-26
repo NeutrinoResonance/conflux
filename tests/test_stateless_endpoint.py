@@ -14,7 +14,7 @@ from pathlib import Path
 
 from conflux import proxy
 from conflux.checkpoint import Checkpoints
-from conflux.config import Config, Execution, Model, Provider, Supervision
+from conflux.config import DeciderSettings, Config, Execution, Model, Provider, Supervision
 from conflux.control import IN_BAND_RETIRED_NOTICE, ControlState
 from conflux.history import History
 from conflux.library import Library
@@ -32,6 +32,7 @@ def _config() -> Config:
         price_in_per_m=1.0, price_out_per_m=1.0,
     )
     return Config(
+        decider=DeciderSettings(enabled=False),
         providers={"test": provider}, models={"executor": model},
         default_executor="executor", utility="executor", verifier_pool=[],
         # Defaults on purpose: stateful_chat_endpoint stays False and the

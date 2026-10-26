@@ -141,9 +141,9 @@ class GraphUIContractTests(unittest.TestCase):
         runtime = SQLiteFlowRuntime(sqlite3.connect(":memory:"), registry)
         payload = registry.describe()
         self.assertEqual(payload["flows"][0]["id"], "supervised_tool_turn")
-        self.assertEqual(len(payload["agents"]), 8)
+        self.assertEqual(len(payload["agents"]), 9)
         self.assertEqual(len(payload["flows"]), 2)
-        self.assertEqual(runtime.compile("supervised_tool_turn")["edges"], 24)
+        self.assertEqual(runtime.compile("supervised_tool_turn")["edges"], 29)
         self.assertEqual(runtime.compile("durable_locked_job")["edges"], 10)
 
 
@@ -172,6 +172,7 @@ class GraphAdminRouteTests(unittest.IsolatedAsyncioTestCase):
             list(self.runtime.registry.flows["supervised_tool_turn"].capabilities),
             session="s", task="t",
         )
+        self.runtime.transition(run_id, "decider", "decider_started")
         self.runtime.transition(run_id, "executor", "executor_started")
 
         declared = await proxy.admin_graphs()
@@ -213,7 +214,7 @@ class GraphAdminRouteTests(unittest.IsolatedAsyncioTestCase):
             list(self.runtime.registry.flows["supervised_tool_turn"].capabilities),
             session="session", task="task",
         )
-        for node in ("executor", "policy_gate", "action_critic", "human_approval"):
+        for node in ("decider", "executor", "policy_gate", "action_critic", "human_approval"):
             self.runtime.transition(run_id, node, f"entered_{node}")
         call = {"id": "call", "function": {
             "name": "terminal",

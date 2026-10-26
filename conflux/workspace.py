@@ -281,12 +281,16 @@ class WorkspaceService:
     def _event_node(self, workflow: dict[str, Any], plan: dict[str, Any],
                     kind: str, data: Mapping[str, Any]) -> str | None:
         nodes = workflow["graph"].get("nodes", [])
+        if any(n.get("id") == data.get("node_id") for n in nodes):
+            return str(data["node_id"])
         def first(*types: str) -> str | None:
             return next((node["id"] for node in nodes if node.get("type") in types), None)
         if kind.startswith("ensemble_") or data.get("ensemble"):
             return plan.get("ensemble_node_id") or first("ensemble", "agent")
         if kind in {"execute", "executor_fallback", "synthesis"}:
-            return first("agent")
+            return next((n["id"] for n in nodes if n.get("agent") == "executor"), None)
+        if kind.startswith("decider_"):
+            return plan.get("decider_node_id")
         if kind in {"verify", "verify_error", "ensemble_fusion_rejected"}:
             return first("verifier", "checker")
         if kind in {"fm_event", "contract", "contract_failed", "contract_skipped", "plan"}:
@@ -497,7 +501,8 @@ class WorkspaceService:
             temperatures = [value.strip() for value in temperatures.split(",") if value.strip()]
         executor_prompt = "\n\n".join(plan.get("executor_prompts") or [])
         executor_node = next(
-            (item for item in workflow["graph"].get("nodes", []) if item.get("type") == "agent"),
+            (item for item in workflow["graph"].get("nodes", [])
+             if item.get("type") == "agent" and item.get("agent") == "executor"),
             {},
         )
         executor_config = dict(executor_node.get("config") or {})

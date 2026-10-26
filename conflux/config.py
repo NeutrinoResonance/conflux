@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import math
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -17,6 +19,9 @@ class Provider:
     # declared usage limits, e.g. {usd_5h: 12, usd_week: 30, usd_month: 60}
     # (Go dollar windows) or {input_tokens_week: 60000000} (NanoGPT)
     limits: dict = field(default_factory=dict)
+    # extra request headers; the value "{session}" becomes a stable id for
+    # this proxy process (OpenCode Go rejects requests without one)
+    headers: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -32,6 +37,9 @@ class Model:
     price_out_per_m: float
     failure_priors: tuple[str, ...] = ()
     fallbacks: tuple[str, ...] = ()
+    # Provider request parameters sent with every call to this model, e.g.
+    # {reasoning_effort: high} where a gateway's default is rejected upstream.
+    request: dict = field(default_factory=dict, hash=False, compare=False)
 
     def cost(self, tokens_in: int, tokens_out: int) -> float:
         return (tokens_in * self.price_in_per_m + tokens_out * self.price_out_per_m) / 1e6
@@ -123,6 +131,10 @@ class Summaries:
 class Supervision:
     score_scale: int = 20
     pass_threshold: float = 0.70
+    # min: every criterion must pass the threshold (no criterion is averaged
+    # away by the others); mean: the legacy average over criteria.
+    criteria_aggregate: str = "min"
+    verify_max_tokens: int = 8000   # thinking verifiers spend budget before scoring
     verify_repeats: int = 1
     adversarial_repeats: int = 3   # K for the adversarial tier (variance ↓ 1/K)
     max_repairs: int = 2
@@ -152,6 +164,89 @@ class Supervision:
     max_plan_units: int = 6
 
 
+# How a senate's member ratings combine into an approve/deny decision.
+#   max     approve only if the most cautious member is below the threshold
+#   median  the middle member decides
+#   mean    the average rating decides
+#   quorum  deny once `quorum` members rate at or above the threshold
+SENATE_DECISIONS = ("max", "median", "mean", "quorum")
+# Legacy verdict feedback selection. The decision panel always receives every
+# member's concerns, including approvals, regardless of this setting.
+SENATE_CONCERNS = ("all", "top")
+
+
+@dataclass
+class SenateSettings:
+    members: list[str] = field(default_factory=list)
+    decision: str = "max"
+    approve_below: float = 0.5
+    quorum: int = 1
+    concerns: str = "all"
+
+    def __post_init__(self) -> None:
+        if self.decision not in SENATE_DECISIONS:
+            raise ValueError(f"senate.decision must be one of {SENATE_DECISIONS}, got {self.decision!r}")
+        if self.concerns not in SENATE_CONCERNS:
+            raise ValueError(f"senate.concerns must be one of {SENATE_CONCERNS}, got {self.concerns!r}")
+        if (isinstance(self.quorum, bool) or not isinstance(self.quorum, int)
+                or self.quorum < 1):
+            raise ValueError("senate.quorum must be a positive integer")
+        if (isinstance(self.approve_below, bool)
+                or not isinstance(self.approve_below, (int, float))
+                or not math.isfinite(self.approve_below)
+                or not 0 <= self.approve_below <= 1):
+            raise ValueError("senate.approve_below must be a finite number between 0 and 1")
+        if (not isinstance(self.members, list)
+                or any(not isinstance(name, str) or not name for name in self.members)):
+            raise ValueError("senate.members must be a list of model names")
+        if len(set(self.members)) != len(self.members):
+            raise ValueError("senate.members must not contain duplicate models")
+        self.members = list(self.members)
+
+
+@dataclass
+class DeciderSettings:
+    enabled: bool = True
+    members: list[str] = field(default_factory=lambda: ["deepseek-v4-pro", "glm-5.3"])
+    done_requires: str = "all"
+    next_step_from: str = "all"
+    family_rule: str = "any"
+    frequency: str = "every_step"
+    max_tokens: int = 24000
+    timeout_s: float = 300
+    max_repairs: int = 1
+    # Executor retries of one decision after a deterministic refusal (scope
+    # gate, governor policy, malformed or empty reply) before re-deciding.
+    executor_repairs: int = 2
+    max_decisions_per_request: int = 4
+    max_checks_per_turn: int = 4
+    failure_mode: str = "closed"
+
+    def __post_init__(self) -> None:
+        if type(self.enabled) is not bool:
+            raise ValueError("decider.enabled must be a boolean")
+        if (not isinstance(self.members, list) or not self.members
+                or any(not isinstance(n, str) or not n for n in self.members)
+                or len(set(self.members)) != len(self.members)):
+            raise ValueError("decider.members must be a nonempty list of unique model names")
+        self.members = list(self.members)
+        for key, choices in {
+            "done_requires": ("all", "any", "majority"),
+            "next_step_from": ("all", "first", "each_in_turn"),
+            "family_rule": ("any", "different_from_executor"),
+            "frequency": ("every_step",), "failure_mode": ("closed",),
+        }.items():
+            if getattr(self, key) not in choices:
+                raise ValueError(f"decider.{key} must be one of {choices}")
+        for key, minimum in (("max_tokens", 1), ("max_repairs", 0), ("executor_repairs", 0),
+                             ("max_decisions_per_request", 1), ("max_checks_per_turn", 1)):
+            if type(getattr(self, key)) is not int or getattr(self, key) < minimum:
+                raise ValueError(f"decider.{key} must be an integer >= {minimum}")
+        if (isinstance(self.timeout_s, bool) or not isinstance(self.timeout_s, (int, float))
+                or not math.isfinite(self.timeout_s) or self.timeout_s <= 0):
+            raise ValueError("decider.timeout_s must be a positive finite number")
+
+
 @dataclass
 class Config:
     providers: dict[str, Provider]
@@ -163,6 +258,8 @@ class Config:
     execution: Execution
     admin: AdminAuth = field(default_factory=AdminAuth)
     summaries: Summaries = field(default_factory=Summaries)
+    senate: SenateSettings = field(default_factory=SenateSettings)
+    decider: DeciderSettings = field(default_factory=DeciderSettings)
     learned_routing: bool = True
     min_routing_samples: int = 5
     referee: str = ""              # large model that picks repair strategies
@@ -174,8 +271,38 @@ class Config:
             raise KeyError(f"model {name!r} not in registry ({', '.join(self.models)})")
         return self.models[name]
 
+    def critic_settings(self, overrides: Mapping | None = None) -> SenateSettings:
+        """Resolve a critic node's settings without changing shared defaults."""
+        raw = dict(overrides or {})
+        values = {key: raw.get(key, getattr(self.senate, key)) for key in (
+            "members", "decision", "approve_below", "quorum", "concerns",
+        )}
+        if values["members"] == "auto":
+            values["members"] = self.senate.members
+        settings = SenateSettings(**values)
+        for name in settings.members:
+            if name not in self.models:
+                raise ValueError(f"senate.members references unknown model {name!r}")
+        return settings
+
     def provider_for(self, model: Model) -> Provider:
         return self.providers[model.provider]
+
+    def decider_settings(self, overrides: Mapping | None = None) -> DeciderSettings:
+        raw = dict(overrides or {})
+        # Graph display/control keys are not model settings.
+        unknown = set(raw) - set(DeciderSettings.__dataclass_fields__) - {"prompt"}
+        if unknown:
+            raise ValueError(f"unknown decider settings: {', '.join(sorted(unknown))}")
+        settings = DeciderSettings(**{
+            key: raw.get(key, getattr(self.decider, key))
+            for key in DeciderSettings.__dataclass_fields__
+        })
+        if settings.enabled:
+            for name in settings.members:
+                if name not in self.models:
+                    raise ValueError(f"decider.members references unknown model {name!r}")
+        return settings
 
     def eligible_verifiers(self, executor_family: str) -> list[Model]:
         """Cross-family rule: verifier family must differ from the executor's.
@@ -248,6 +375,7 @@ def load(path: str | Path = "models.yaml") -> Config:
             price_out_per_m=float(spec.get("price_out_per_m", 0.0)),
             failure_priors=tuple(spec.get("failure_priors", ())),
             fallbacks=tuple(spec.get("fallbacks", ())),
+            request=dict(spec.get("request") or {}),
         )
         if models[name].provider not in providers:
             raise ValueError(f"model {name!r} references unknown provider {models[name].provider!r}")
@@ -257,7 +385,16 @@ def load(path: str | Path = "models.yaml") -> Config:
         name = routing.get(key, "")
         if name and name not in models:
             raise ValueError(f"routing.{key} references unknown model {name!r}")
+    senate = SenateSettings(**(raw.get("senate", {}) or {}))
+    for name in senate.members:
+        if name not in models:
+            raise ValueError(f"senate.members references unknown model {name!r}")
     sup = Supervision(**raw.get("supervision", {}))
+    decider = DeciderSettings(**(raw.get("decider", {}) or {}))
+    if decider.enabled:
+        for name in decider.members:
+            if name not in models:
+                raise ValueError(f"decider.members references unknown model {name!r}")
     execution = Execution(**raw.get("execution", {}))
     admin_raw = raw.get("admin", {}) or {}
     admin = AdminAuth(
@@ -274,6 +411,8 @@ def load(path: str | Path = "models.yaml") -> Config:
         execution=execution,
         admin=admin,
         summaries=Summaries(**(raw.get("summaries", {}) or {})),
+        senate=senate,
+        decider=decider,
         learned_routing=bool(routing.get("learned", True)),
         min_routing_samples=int(routing.get("min_samples", 5)),
         referee=str(routing.get("referee", "")),

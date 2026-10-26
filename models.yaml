@@ -24,10 +24,15 @@ providers:
     base_url: https://opencode.ai/zen/go/v1
     key_source: opencode:opencode-go
     limits: {usd_5h: 12, usd_week: 30, usd_month: 60}
+    headers: {x-opencode-session: "{session}"}  # required since Oct 2026
   nanogpt:
     base_url: https://nano-gpt.com/api/v1
     key_source: opencode:nano-gpt
     limits: {input_tokens_week: 60000000}
+  zai:
+    # GLM Coding Plan (Lite) endpoint. Pay-as-you-go keys use /api/paas/v4.
+    base_url: https://api.z.ai/api/coding/paas/v4
+    key_source: opencode:zai
   ollama-cloud:
     base_url: https://ollama.com/v1
     key_source: opencode:ollama-cloud
@@ -44,17 +49,55 @@ models:
     price_in_per_m: 0.28
     price_out_per_m: 0.42
     failure_priors: [FM-X.1, FM-3.1]
-    fallbacks: [deepseek-v4-pro-go]
-  glm-5.2:
-    provider: nous
-    id: z-ai/glm-5.2
+    fallbacks: [deepseek-v4-pro-go, deepseek-v4-pro-nano, deepseek-v4-pro-ollama]
+  glm-5.3:
+    provider: zai              # Coding Plan (flat rate); quota exhaustion falls through
+    id: glm-5.3
     family: glm
     roles: [executor]          # no logprobs anywhere (Z.ai upstream) → never a verifier
     logprobs: false
+    price_in_per_m: 0          # flat-rate plan
+    price_out_per_m: 0
+    failure_priors: [FM-X.2, FM-2.3]
+    fallbacks: [glm-5.3-nous, glm-5.3-go, glm-5.3-nano, glm-5.3-ollama]
+  # Last resort (2026-10-24): Nous, Go and NanoGPT ran out mid-run. Tool
+  # calls verified on all three. No logprobs; the DeepSeek tag is a dated
+  # snapshot of V4 Pro.
+  deepseek-v4-pro-ollama:
+    provider: ollama-cloud
+    id: deepseek-v4-pro:0813
+    family: deepseek
+    roles: [executor]
+    logprobs: false
+    price_in_per_m: 0
+    price_out_per_m: 0
+  glm-5.3-ollama:
+    provider: ollama-cloud
+    id: glm-5.3
+    family: glm
+    roles: [executor]
+    logprobs: false
+    price_in_per_m: 0
+    price_out_per_m: 0
+  kimi-k2.6-ollama:
+    provider: ollama-cloud
+    id: kimi-k2.6
+    family: kimi
+    roles: [executor]
+    logprobs: false
+    price_in_per_m: 0
+    price_out_per_m: 0
+  glm-5.3-nous:
+    provider: nous
+    id: z-ai/glm-5.3
+    family: glm
+    roles: [executor]
+    logprobs: false
     price_in_per_m: 0.35
     price_out_per_m: 1.40
-    failure_priors: [FM-X.2, FM-2.3]
-    fallbacks: [glm-5.2-go]
+    # Nous began defaulting reasoning effort to "none" (2026-10-22), which
+    # GLM rejects with HTTP 400.
+    request: {reasoning_effort: high}
   kimi-k2.6:
     provider: nous
     id: moonshotai/kimi-k2.6
@@ -65,7 +108,7 @@ models:
     price_in_per_m: 0.40
     price_out_per_m: 1.60
     failure_priors: []
-    fallbacks: [kimi-k2.6-go]
+    fallbacks: [kimi-k2.6-go, kimi-k2.6-nano, kimi-k2.6-ollama]
   kimi-k3:
     provider: nous
     id: moonshotai/kimi-k3
@@ -90,6 +133,37 @@ models:
     failure_priors: []
     fallbacks: [qwen-3.7-plus-go]
 
+  # ---- second fallback channel: NanoGPT (weekly input-token allowance) ----
+  # Added 2026-10-21 after a run died with Nous and Go down at once. No
+  # qwen-3.7-plus here: NanoGPT does not serve it.
+  deepseek-v4-pro-nano:
+    provider: nanogpt
+    id: deepseek/deepseek-v4-pro
+    family: deepseek
+    roles: [executor]          # no logprobs on NanoGPT → never a verifier
+    logprobs: false
+    price_in_per_m: 0.0        # covered by subscription allowance
+    price_out_per_m: 0.0
+    failure_priors: [FM-X.1, FM-3.1]
+  glm-5.3-nano:
+    provider: nanogpt
+    id: z-ai/glm-5.3
+    family: glm
+    roles: [executor]
+    logprobs: false
+    price_in_per_m: 0.0
+    price_out_per_m: 0.0
+    failure_priors: [FM-X.2, FM-2.3]
+  kimi-k2.6-nano:
+    provider: nanogpt
+    id: moonshotai/kimi-k2.6
+    family: kimi
+    roles: [executor]
+    logprobs: false
+    price_in_per_m: 0.0
+    price_out_per_m: 0.0
+    failure_priors: []
+
   # ---- fallback channel: OpenCode Go subscription (flat-rate) ----
   deepseek-v4-pro-go:
     provider: opencode-go
@@ -101,9 +175,9 @@ models:
     price_in_per_m: 0.0        # covered by subscription
     price_out_per_m: 0.0
     failure_priors: [FM-X.1, FM-3.1]
-  glm-5.2-go:
+  glm-5.3-go:
     provider: opencode-go
-    id: glm-5.2
+    id: glm-5.3
     family: glm
     roles: [executor]
     logprobs: false            # chosen-token only on Go
@@ -145,7 +219,7 @@ models:
     id: google/gemma-4-31b-it
     family: gemma
     roles: [verifier, utility]
-    logprobs: true
+    logprobs: false  # probe 2026-10-21: 0/3, provider stopped returning them
     top_logprobs_max: 5
     price_in_per_m: 0.08
     price_out_per_m: 0.16
@@ -202,9 +276,39 @@ execution:
   gcloud_zone: us-central1-a
   gcloud_machine_type: e2-micro   # cheapest broadly available shared-core VM
 
+# Danger senate: independent models rate each held action (conflux/senate.py).
+# Every setting can be overridden per run by the runner's --senate* flags.
+senate:
+  members: [qwen-3.7-plus, deepseek-v4-pro, glm-5.3, kimi-k2.6]
+  # max | median | mean | quorum. Default max: the most cautious member decides,
+  # so no single relaxed member can approve over another's objection. Revisit
+  # once step_lab has outcome-labelled cases.
+  decision: max
+  approve_below: 0.5
+  quorum: 1               # used by decision: quorum
+  # all | top controls legacy verdict feedback. The decider always receives
+  # every member's concerns, including approvals and non-voting members.
+  concerns: all
+
+decider:
+  enabled: true
+  members: [deepseek-v4-pro, glm-5.3]
+  done_requires: all
+  next_step_from: all        # every member's step is carried out
+  family_rule: any
+  frequency: every_step
+  max_tokens: 24000
+  timeout_s: 300
+  max_repairs: 1
+  executor_repairs: 2         # executor retries a refused implementation before re-deciding
+  max_decisions_per_request: 4
+  failure_mode: closed
+
 supervision:
   score_scale: 20               # verifier scores 1..20
   pass_threshold: 0.70          # normalized [0,1]; below this → repair loop
+  criteria_aggregate: min       # every criterion must pass; "mean" is the legacy average
+  verify_max_tokens: 8000       # 1500 truncated thinking verifiers before <score>
   verify_repeats: 1             # K for the standard tier
   adversarial_repeats: 3        # K for the adversarial tier (refute-framed)
   max_repairs: 2                # structural-change rule: after N repairs, escalate

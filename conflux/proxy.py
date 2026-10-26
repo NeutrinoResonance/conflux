@@ -44,6 +44,7 @@ from .history import History
 from .history_view import HistoryView
 from .library import DEFAULT_SETTINGS, Library
 from .orchestrator import Orchestrator, _last_user_text
+from .decider import ConversationRequired, DeciderUnavailable, DecisionStore
 from .providers import Client, ProviderError  # noqa: F401 (ProviderError used below)
 from .trace import Trace
 from .workspace import WorkspaceService
@@ -508,6 +509,14 @@ async def chat_completions(request: Request):
         state["endeavor_ledger"].set_explicit_endeavor(
             session, explicit_endeavor)
 
+    active_decisions = False
+    decision_store = getattr(state.get("orch"), "decision_store", None)
+    if decision_store is not None:
+        active_decisions = bool(decision_store.connection.execute(
+            "SELECT 1 FROM task_decisions WHERE session=? LIMIT 1", (session,)).fetchone())
+    governed_tools = bool(body.get("tools") or body.get("tool_choice") or active_decisions
+                          or any(m.get("role") == "tool" or m.get("tool_calls") for m in messages))
+
     if stateful:
         # In-band control commands short-circuit everything.
         reply = handle(_last_user_text(messages), control, list(cfg.models),
@@ -637,12 +646,17 @@ async def chat_completions(request: Request):
     # Agentic tool-carrying turns (Hermes, OpenCode, …): mid-loop tool_calls
     # pass through untouched; final text answers get monitored + verified
     # with one repair attempt (Orchestrator.run_tool_turn).
-    if body.get("tools") or body.get("tool_choice"):
+    if governed_tools:
         try:
             data = await asyncio.wait_for(
                 state["orch"].run_tool_turn(session, body,
-                                            stateless=not stateful),
+                                            stateless=not stateful,
+                                            explicit_identity=explicit_session),
                 cfg.supervision.turn_timeout_s)
+        except ConversationRequired as e:
+            return JSONResponse({"error": {"message": str(e)}}, status_code=400)
+        except DeciderUnavailable as e:
+            return JSONResponse({"error": {"message": str(e), "retryable": True}}, status_code=503)
         except ProviderError as e:
             return JSONResponse({"error": {"message": str(e)}}, status_code=502)
         except asyncio.TimeoutError:
@@ -1056,6 +1070,10 @@ def _workspace_stage_for_event(workflow: dict, kind: str,
     """Project legacy trace vocabulary onto the declared workflow graph."""
     nodes = workflow.get("graph", {}).get("nodes", [])
     data = data or {}
+    if any(n.get("id") == data.get("node_id") for n in nodes):
+        return data["node_id"]
+    if kind.startswith("decider_") or kind.startswith("obligation_"):
+        return next((n["id"] for n in nodes if n.get("agent") == "decider"), None)
 
     def first(*types: str, ids: tuple[str, ...] = ()) -> str | None:
         return next((node["id"] for node in nodes
@@ -1066,10 +1084,13 @@ def _workspace_stage_for_event(workflow: dict, kind: str,
     if kind.startswith("soundness_"):
         return first("checker", ids=("soundness_checker",))
     if kind in {"action_critic", "critic_review", "critic_error"}:
+        node_id = data.get("node_id")
+        if any(node.get("id") == node_id and node.get("type") == "critic" for node in nodes):
+            return node_id
         return first("critic", ids=("action_critic",))
     if kind in {"execute", "executor_fallback", "synthesis", "unit_done",
                 "wave_start", "repair_requested"}:
-        return first("agent")
+        return next((n["id"] for n in nodes if n.get("agent") == "executor"), None)
     if kind in {"verify", "verify_error", "ensemble_fusion_rejected"}:
         return first("verifier", "checker")
     if kind in {"tool_step", "tool_result"}:
@@ -1085,13 +1106,17 @@ def _workspace_stage_for_event(workflow: dict, kind: str,
 
 
 def _workspace_runtime_run(workflow: dict, session: str,
-                           task: str) -> dict | None:
+                           task: str, *, run_id: str | None = None) -> dict | None:
     runtime = state.get("flow_runtime")
     recent = getattr(runtime, "recent_runs", None)
     inspect = getattr(runtime, "inspect", None)
     if not callable(recent) or not callable(inspect) or not task:
         return None
     try:
+        if run_id:
+            explicit = inspect(run_id)
+            if str(explicit.get("session") or "") == session:
+                return explicit
         candidates = recent(workflow.get("flow_id"), 200)
         match = next((item for item in candidates
                       if str(item.get("session") or "") == session
@@ -1122,7 +1147,9 @@ def _workspace_workflow_execution(instance_id: str, *,
         )
         projected.append({**event, "node_id": stage_id})
 
-    run = _workspace_runtime_run(workflow, session, task)
+    explicit_run_id = next((e.get("data", {}).get("graph_run_id") for e in reversed(trace_events)
+                            if e.get("data", {}).get("graph_run_id")), None)
+    run = _workspace_runtime_run(workflow, session, task, run_id=explicit_run_id)
     runtime_events = list((run or {}).get("events") or [])
     route_events = runtime_events or [event for event in projected if event["node_id"]]
     observed_sequence = [str(event.get("node_id") or "") for event in route_events
@@ -1759,6 +1786,9 @@ async def admin_action_decision(action_id: str, request: Request):
     body = await request.json()
     decision = str(body.get("decision", ""))
     note = str(body.get("note", ""))
+    item = state["action_store"].get(action_id)
+    if item is not None:
+        _record_decider_concerns(item["session"], body.get("concerns", []), action_id=action_id)
     try:
         action = _resolve_action_decision(action_id, decision, note)
     except KeyError as exc:
@@ -1766,6 +1796,25 @@ async def admin_action_decision(action_id: str, request: Request):
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _public_action(action)
+
+
+def _record_decider_concerns(session: str, concerns, *, action_id: str = "") -> None:
+    if not isinstance(concerns, list) or any(not isinstance(c, dict) for c in concerns):
+        raise HTTPException(status_code=400, detail="concerns must be structured objects")
+    if not concerns:
+        return
+    store = getattr(state.get("orch"), "decision_store", None)
+    if store is None:
+        store = DecisionStore(state["flow_runtime"].connection)
+    for concern in concerns:
+        store.concern(session, "external_senate", {**concern, "action_id": action_id or concern.get("action_id", "")})
+
+
+@app.post("/admin/conversations/{session}/concerns", status_code=202)
+async def admin_decider_concerns(session: str, request: Request):
+    body = await request.json()
+    _record_decider_concerns(session, body.get("concerns", []))
+    return {"accepted": True}
 
 
 @app.post("/admin/workspace/actions/{action_id}/decision", status_code=202)
@@ -1777,6 +1826,7 @@ async def admin_workspace_action_decision(action_id: str, request: Request):
     before = state["action_store"].get(action_id)
     if before is None:
         raise HTTPException(status_code=404, detail="action not found")
+    _record_decider_concerns(before["session"], body.get("concerns", []), action_id=action_id)
     workspace_node = next(
         (
             node for node in state["workspace_store"].nodes(before["session"])
