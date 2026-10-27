@@ -2708,7 +2708,16 @@ class ActionGovernor:
                 plan = await self._soundness_plan(
                     action, executor, manifests, task_text=task_text
                 )
-                if plan.cost_usd > available:
+                over_budget = plan.cost_usd > available
+                if over_budget and plan.decision == "fail":
+                    # A returned fail verdict is evidence; the overrun is recorded
+                    # without turning it into missing evidence.
+                    self._record(
+                        session, task, run_id, "soundness_budget_exceeded",
+                        "soundness_checker", action_id=action_id,
+                        checker_cost_usd=plan.cost_usd, budget_remaining=available,
+                    )
+                elif over_budget:
                     plan = replace(
                         plan, decision="unverified", probe=None,
                         reason=("soundness check exceeded the remaining task budget and "
@@ -2882,8 +2891,16 @@ class ActionGovernor:
                     probe_evidence="UNTRUSTED SOUNDNESS PROBE OUTPUT:\n" + evidence,
                     allow_probe=False,
                 )
-                if (budget_remaining is not None and
-                        verdict.cost_usd > budget_remaining):
+                over_budget = (budget_remaining is not None and
+                               verdict.cost_usd > budget_remaining)
+                if over_budget and verdict.decision == "fail":
+                    self._record(
+                        session, task, run_id, "soundness_budget_exceeded",
+                        "soundness_checker", action_id=action["action_id"],
+                        check_id=check["check_id"], checker_cost_usd=verdict.cost_usd,
+                        budget_remaining=budget_remaining,
+                    )
+                elif over_budget:
                     verdict = replace(
                         verdict, decision="unverified", probe=None,
                         reason=("soundness interpretation exceeded the remaining task "

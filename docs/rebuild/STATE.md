@@ -15,7 +15,11 @@ MISSION-STATUS: ACTIVE
     `unverified`. Of the 10 failed-retry holds, 6 are removed (including `act_f2e51f2cc42840a1`) and
     4 are kept (their prior `act_edaa16c73d5d46ab` had a real fail).
   - **Acceptance:** `tests/test_run12_t2_unverified.py` (402 → unverified + retry released; a real
-    fail is still held). Suite: 601 passed, 1 xfailed (letter scale).
+    fail is still held). Suite: 603 passed, 1 xfailed (letter scale).
+  - **Over-budget fail (from orphaned PR #4):** a checker `fail` that costs more than the remaining
+    budget stays `postcheck_failed` with its reason, in both the direct and the probe path. The overrun
+    is logged as `soundness_budget_exceeded` (`checker_cost_usd`, so it is not counted twice). Before
+    the fix, both regressions were red on the base.
   - **Not covered:** unsafe or same-target probes stay `postcheck_failed`.
 - **T1 fixed (2026-10-27, verified offline, $0):** `_shell_effects` now strips fd prefixes (`2>&1`),
   consumes `>&`/`<&` targets, parses option values (`head`/`tail -n`, grep `-e/-f/-m/-A/-B/-C`) and
