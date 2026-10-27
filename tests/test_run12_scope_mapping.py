@@ -7,7 +7,7 @@ were rated non-low risk, sent to a soundness checker that failed closed on
 HTTP 402, recorded as postcheck_failed, and their identical re-checks held for
 a human. Evidence: tests/fixtures/run12_netbsd/manifest.json.
 
-Strict xfail pins the failing baseline; the fix flips it.
+The failing baseline was pinned by strict xfail; the T1 fix flipped it.
 """
 
 import json
@@ -16,9 +16,6 @@ import pathlib
 import pytest
 
 from conflux.decider import _shell_effects
-
-pytestmark = pytest.mark.xfail(
-    strict=True, reason="_shell_effects maps non-path operands to relative paths (run 12)")
 
 MANIFEST = json.loads(
     (pathlib.Path(__file__).parent / "fixtures" / "run12_netbsd" / "manifest.json").read_text())
@@ -56,3 +53,23 @@ def test_recorded_checks_name_no_phantom_relative_paths(action_id):
     # only the false relative paths are in scope here.
     _, unproven = scope(RECORDED[action_id])
     assert not [r for r in unproven if r.startswith("relative path")]
+
+
+@pytest.mark.parametrize("command, effects, relative", [
+    ("cat 2 >/tmp/o", {("/tmp/o", "write")}, ["2"]),
+    ("echo x >&/tmp/f", {("/tmp/f", "write")}, []),
+    ("echo x 2>&- > -", set(), ["-"]),
+    ("grep -f pats /tmp/x", {("/tmp/x", "read")}, ["pats"]),
+    ("grep -e 'a/b' /tmp/x", {("/tmp/x", "read")}, []),
+    ("grep -ea/b /tmp/x", {("/tmp/x", "read")}, []),
+    ("grep -f/tmp/pats /tmp/x", {("/tmp/pats", "read"), ("/tmp/x", "read")}, []),
+    ("grep -fn /tmp/x", {("/tmp/x", "read")}, ["n"]),
+    ("grep --file=/tmp/pats /tmp/x", {("/tmp/pats", "read"), ("/tmp/x", "read")}, []),
+    ("grep 'x' 'it''s 2>' /tmp/y", {("/tmp/y", "read")}, ["its 2>"]),
+    ("tail -n 1 rel", set(), ["rel"]),
+])
+def test_gate_still_names_real_operands(command, effects, relative):
+    # The fix must drop only non-path operands; real files stay scoped or unproven.
+    scoped, unproven = scope(command)
+    assert scoped == effects
+    assert [r.split("'")[1] for r in unproven if r.startswith("relative path")] == relative

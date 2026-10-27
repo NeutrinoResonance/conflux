@@ -828,6 +828,58 @@ _PURE_PROGRAMS = {"echo", "printf", "true", "false", ":"}
 _DEVICES = {"/dev/null", "/dev/stdout", "/dev/stderr", "/dev/zero", "/dev/urandom"}
 _SYSTEM_PREFIXES = ("/usr/", "/bin/", "/sbin/")
 _REDIRECTS = {">": "write", ">>": "write", ">|": "write", "&>": "write", "<": "read"}
+# Short options whose value is the rest of the cluster or the next word.
+_VALUE_OPTIONS = {"head": "nc", "tail": "nc", "grep": "efmABC"}
+
+
+def _strip_fd_prefixes(command: str) -> str:
+    """Drop unquoted fd numbers that prefix a redirect (`2>&1` -> `>&1`).
+
+    An fd prefix never changes which file a redirect touches; `cat 2 >x`
+    keeps its operand because the digit is not adjacent to the redirect."""
+    out, quote, i = [], None, 0
+    while i < len(command):
+        ch = command[i]
+        if quote == "'":
+            quote = None if ch == "'" else quote
+        elif ch == "\\":
+            out.append(command[i:i + 2])
+            i += 2
+            continue
+        elif quote == '"':
+            quote = None if ch == '"' else quote
+        elif ch in "'\"":
+            quote = ch
+        elif ch.isdigit() and (i == 0 or command[i - 1] in " \t\n;|&()"):
+            fd = re.match(r"\d+(?=[<>])", command[i:])
+            if fd:
+                i += fd.end()
+                continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def _getopt(words: list[str], value_letters: str) -> tuple[list[tuple[str, str | None]], list[str]]:
+    """Split arguments into (option, value) pairs and operands, as getopt does."""
+    options: list[tuple[str, str | None]] = []
+    operands: list[str] = []
+    rest = iter(words)
+    for word in rest:
+        if word == "--":
+            operands.extend(rest)
+        elif word.startswith("--"):
+            name, eq, value = word.partition("=")
+            options.append((name, value if eq else None))
+        elif word.startswith("-"):
+            for i, letter in enumerate(word[1:], 1):
+                if letter in value_letters:
+                    options.append(("-" + letter, word[i + 1:] or next(rest, None)))
+                    break
+                options.append(("-" + letter, None))
+        else:
+            operands.append(word)
+    return options, operands
 
 
 def _shell_effects(command: str, cwd: str | None, *, read_only: bool = False,
@@ -852,7 +904,7 @@ def _shell_effects(command: str, cwd: str | None, *, read_only: bool = False,
     if "\n" in command and unproven is None:
         raise ScopeViolation("shell expansion cannot be scoped; use literal absolute paths")
     # Each line is its own command; quoted newlines stay inside their token.
-    lexer = shlex.shlex(command.replace("\n", " ; "), posix=True, punctuation_chars=True)
+    lexer = shlex.shlex(_strip_fd_prefixes(command).replace("\n", " ; "), posix=True, punctuation_chars=True)
     lexer.whitespace_split = True
     try:
         tokens = list(lexer)
@@ -901,16 +953,16 @@ def _shell_effects(command: str, cwd: str | None, *, read_only: bool = False,
     for segment in segments:
         if not segment:
             continue
-        words, pending = [], None
+        words, pending, dup = [], None, False
         for token in segment:
             if pending:
-                if not token.isdigit() and token not in _DEVICES:
-                    add(token, pending)
+                if not token.isdigit() and not (dup and token == "-") and token not in _DEVICES:
+                    add(token, pending)  # an fd duplicate or close names nothing
                 pending = None
             elif token in _REDIRECTS:
-                pending = _REDIRECTS[token]
+                pending, dup = _REDIRECTS[token], False
             elif token in {">&", "<&"}:
-                pending = None
+                pending, dup = "write" if token == ">&" else "read", True
             else:
                 words.append(token)
         while words and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[0]):
@@ -941,7 +993,16 @@ def _shell_effects(command: str, cwd: str | None, *, read_only: bool = False,
                 effects.append((cwd, "traverse"))  # being in a directory reads nothing
             continue
         access = "read" if program in _READ_PROGRAMS else "write" if program in _WRITE_PROGRAMS else "execute"
-        if program in _READ_PROGRAMS - {"grep", "find", "[", "test"} or program in _WRITE_PROGRAMS:
+        if program in _VALUE_OPTIONS:
+            options, operands = _getopt(words[1:], _VALUE_OPTIONS[program])
+            if program == "grep":
+                # A pattern comes from -e/-f, else the first operand; -f names a file.
+                given = any(o in {"-e", "--regexp", "-f", "--file"} for o, _ in options)
+                files = [v for o, v in options if v and (
+                    o in {"-f", "--file"}
+                    or o.startswith("--") and o != "--regexp" and ("/" in v or v.startswith(".")))]
+                operands = files + operands[0 if given else 1:]
+        elif program in _READ_PROGRAMS - {"grep", "find", "[", "test"} or program in _WRITE_PROGRAMS:
             operands = [w for w in words[1:] if not w.startswith("-")]
         else:
             operands = [p for w in words[1:] for p in paths_in(w)]

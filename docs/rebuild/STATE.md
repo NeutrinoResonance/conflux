@@ -5,6 +5,13 @@ Keep this short and current. One entry per decision; newest first.
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item A — reproduce the NetBSD / child-model mapping failure from evidence.
+- **T1 fixed (2026-10-27, verified offline, $0):** `_shell_effects` now strips fd prefixes (`2>&1`),
+  consumes `>&`/`<&` targets, parses option values (`head`/`tail -n`, grep `-e/-f/-m/-A/-B/-C`) and
+  grep patterns. Replay of all 293 run-12 commands: actions with phantom relative paths 38 → 2.
+  The two left are not T1, both still fail closed: `case` patterns in `act_df85b83b994640ac`, qemu
+  `-serial file:PATH` in `act_527d9183f574432e`. Old-vs-new effect diff: 0 real paths lost. 20 more
+  actions lose phantom reads under a `cd` dir (e.g. `/tmp/conflux-agent/1`), so T1 affected ≥58
+  actions, not 39. Suite: 585 passed, 1 xfailed (letter scale).
 - **Finding (2026-10-27, verified offline, $0):** run 12 never launched the NetBSD clone (0 clone
   proposals reached governance). The stall comes from two deterministic transformations, both in code:
   1. **T1 — first incorrect transformation:** `conflux/decider.py` `_shell_effects()` turns non-path
@@ -26,10 +33,10 @@ MISSION-STATUS: ACTIVE
     read these as attribution, so this is an observation, not a cause.
 - **Evidence:** `~/evidence/optee-ctl-runs/run12/` (hashes and action ids in
   `tests/fixtures/run12_netbsd/manifest.json`); analysis outputs in `~/evidence/analysis/run12-netbsd/`.
-- **Failing baseline:** `tests/test_run12_scope_mapping.py` (strict xfail, 9 cases) pins T1.
+- **Acceptance:** `tests/test_run12_scope_mapping.py`: the 9 T1 cases now pass, plus regressions
+  checking that real operands are still scoped.
 - **Known contract violation (2026-10-27, PR #1):** `conflux/verifier.py` `_parse_point` still accepts
   digit scores (`<score>7</score>`); pinned by strict xfail in `tests/test_letter_scale_contract.py`.
-- **Next action:** fix T1 in `_shell_effects` (grep pattern ≠ path, option values and fd numbers ≠
-  paths) and flip the xfail. Then write an acceptance test for T2: a provider/billing error in the
+- **Next action:** T2. Write an acceptance test: a provider/billing error (HTTP 402) in the
   soundness checker must leave the action unverified, not `postcheck_failed`, and must not trigger
-  the failed-retry hold. Fix T2 next.
+  the failed-retry hold (`act_f2e51f2cc42840a1`). Strict-xfail it first, then fix.
