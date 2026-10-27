@@ -5,7 +5,7 @@ Keep this short and current. One entry per decision; newest first.
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred to E); B done.
-- **C slice 5 (2026-10-27, executed, $0.000000 metered + $0.03 GCE): default executor is `deepseek-v4.1-flash`; a4 cut.**
+- **C slice 5 (2026-10-27, executed, $0.000000 metered + $0.05 GCE): default executor is `deepseek-v4.1-flash`; a4 cut.**
   - **Offers** (`GET https://api.surplusintelligence.ai/v1/prices`, 09:31Z): at list price v4.1-flash is *not* cheaper
     ($0.14–0.30/M in, $0.42–1.20/M out vs v4-flash $0.05–0.17 / $0.275–0.45). Billed price decides (founder decision).
   - **H5a supported:** tuning run c5 (3 tasks × 2) gave **6/6 accepted**, 2–5 steps, 0 retries, 20 calls, 20/20
@@ -20,6 +20,11 @@ MISSION-STATUS: ACTIVE
     in 54 s**. Log markers: `I/TC: OP-TEE version: 4.11.0`, `Primary CPU switching to normal world boot`, `Linux version
     7.3.0`, `optee: revision 4.11`, `Status: PASS (10 test cases)`. This is a harness pass, not a model-accepted run.
     The logs were reset afterwards; c3 is stopped with its disk kept.
+  - **Critic fix (the evaluator is model-editable):** before booting, the check requires `optee/build` (the Makefile and
+    expect drivers) to be clean, with HEAD in the history of the freshly fetched `OP-TEE/build` master, and QEMU to be
+    an ELF binary. On c3: pristine tree → pass (55 s); appending to `qemu_v8.mk` → fail. The regression test rejects a
+    fabricated echo target, a dirty tree, a fake QEMU and stale logs. Trust boundary: built images are the work under
+    test.
   - Evidence: `~/evidence/core-runs/2026-10-27-c5/` (`offers.json`, `tuning/reconciled.json`, `recheck_a4.try{1,2}.json`).
     Tests: 55 in `tests/test_core_loop.py`; suite 681 passed, 1 xfailed.
 - **Next action:**
