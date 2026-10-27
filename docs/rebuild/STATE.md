@@ -5,6 +5,18 @@ Keep this short and current. One entry per decision; newest first.
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred to E); B done.
+- **C slice 12 (2026-10-27, demo, $0.000084 metered + $0 GCE): telling flash its step budget does not make it write.
+  The hypothesis is falsified, and nothing was built.**
+  - The demo replays c11/b1's exact prefix at steps 20 and 30 (prompt tokens match c11 exactly) and samples the next
+    reply 5× per arm:
+    - A, control: 0/10 replies contain a write, build or `finish` call.
+    - B, `[step i of 40 used; N remain]` on every tool result: 0/10.
+    - C, B plus a "smallest change, then finish" system sentence: 0/10.
+    - Hand-checked: all 56 commands are reads.
+  - At k=30, the reasoning of 9 of 10 B/C samples says "only 10 steps left", and every one of them reads on, mostly
+    outside b1's scope (OP-TEE SMC return codes, PTA, QEMU `virt.c`). The cause is not missing budget information.
+  - Offline: goal (a) traces first write or build at steps 4–21; c10/b1 and c11/b1 never do.
+  - Evidence: `~/evidence/overexplore-demo-2026-10-27/RESULTS.md` (`demo.py`, `samples.jsonl`, `reconciled.json`).
 - **C slice 11 (2026-10-27, executed, $0.000073 metered + $0.19 GCE): b1 re-run with the output-limit fix. The
   hypothesis "with room to write, flash gets b1 accepted" is falsified. The remaining failure is a model fault.**
   - Run c11: lab c3, bare `deepseek-v4.1-flash`, 40/40 calls export-matched, 1875 s. Both b1 checks fail, and the
@@ -139,15 +151,19 @@ MISSION-STATUS: ACTIVE
   - Model habits like `cat big | head` now report 141 with `pipestatus=141 0`. That is intended.
   - Evidence: `~/evidence/core-runs/2026-10-27-c6/` (`recheck_goal_a.py`, `recheck.json`). Suite 688 passed, 1 xfailed.
 - **Next action:**
-  1. Demo (founder rule cdba530; contract: change hypothesis after two identical failures). Bare flash
-     over-explores and does not write or call `finish` (c10/b1, c11/b1; c4/a3 and c8/a3 do not stop). On recorded
-     traces, measure the steps before the first write or build and the steps after the checks first pass. Then
-     run a tiny cost-capped live replay: resume c11/b1 at a fixed step (e.g. 20) with one intervention, such as
-     telling the model its step budget plus "write the minimal driver first", and sample k≈5 next actions against
-     the unchanged control. Count writes. Numbers go to `~/evidence/<demo>/RESULTS.md`. Build only if they support it.
-  2. If the demo supports an intervention, re-run b1 (c12) on c3 with it.
-  3. For the completion gate, run a1→a4 then b1→b3 unattended from the clean snapshot on a fresh lab. Then delete the
-     c3 disk. GCE stockouts happen (c10): retry the lab start, it is not a blocker.
+  1. Demo, with the same replay script (`~/evidence/overexplore-demo-2026-10-27/demo.py`, ≈ $0.0001), one factor per
+     arm against the control:
+     - (i) **scope framing:** b1's goal text without the "Overall task … provide proof" preface, which invites
+       b2/b3 research, plus its deliverables listed as files;
+     - (ii) **deterministic read cap:** from step k, the harness denies read-only commands (`READ_ONLY`) with
+       "write or build next";
+     - (iii) **brief stronger plan:** one `deepseek-v4-pro` call on the prefix writes a file-level plan, injected
+       as a user message.
+     Count writes, and for writes, whether the content is a plausible driver or config. If all three arms fail,
+     hand the diagnosis to `codex exec` (contract).
+  2. If an arm is supported, build it with a regression test, then re-run b1 (c12) on c3.
+  3. For the completion gate, run a1→a4 then b1→b3 unattended from the clean snapshot on a fresh lab. Then delete
+     the c3 disk. GCE stockouts happen (c10): retry the lab start, it is not a blocker.
 - **C slice 5 (2026-10-27, executed, $0.000000 metered + $0.05 GCE): default executor is `deepseek-v4.1-flash`; a4 cut.**
   - **Offers** (`GET https://api.surplusintelligence.ai/v1/prices`, 09:31Z): at list price v4.1-flash is *not* cheaper
     ($0.14–0.30/M in, $0.42–1.20/M out vs v4-flash $0.05–0.17 / $0.275–0.45). Billed price decides (founder decision).
