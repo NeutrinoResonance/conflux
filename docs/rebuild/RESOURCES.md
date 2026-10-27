@@ -45,6 +45,11 @@
   - Tools that ignore proxy env (raw sockets, `git://`, ping) have no egress.
 - Every task ends with the D1 self-audit (`audit` trace row, `audit_hits` on `task_end`/`summary.json`); recorded
   traces: `python -m conflux.core audit <trace.jsonl>...` (no key needed).
+- **The snapshot holds the NetBSD project (goal b)**, owned by `darrenhidalgo` (lab user `dev` has passwordless sudo):
+  `/home/darrenhidalgo/netbsd-src` (git `7f2c5e73f`, clean, has `sys/arch/arm/arm/smccc.{c,h}`, no optee driver);
+  `/home/darrenhidalgo/netbsd-obj` (built GENERIC64 `netbsd`/`netbsd.img` from 2026-10-21, tooldirs
+  `tooldir.Linux-6.1.0-50/51-cloud-amd64-x86_64`); `/home/darrenhidalgo/llmsuper-netbsd-run` (earlier NetBSD-only
+  QEMU boot). Labs run kernel `6.1.0-54`, so plain `build.sh` finds no matching tooldir; pass `-T <existing tooldir>`.
 - The c3 disk holds a built qemu_v8 tree in `~/optee-work/optee`. `make check-only CHECK_TESTS=xtest XTEST_ARGS=1001`
   boots it and passes in ≈ 54 s. The snapshot has no `expect`; the a4 check installs it.
 

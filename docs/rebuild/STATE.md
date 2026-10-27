@@ -5,6 +5,36 @@ Keep this short and current. One entry per decision; newest first.
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred to E); B done.
+- **C slice 9 (2026-10-27, executed harness-only, $0 metered + $0.58 GCE): goal (b) is cut into b1–b3, and every
+  check is validated on c3. The checks were revised after the critic found 5 holes.**
+  - `tests/fixtures/core_loop/optee_goal_b.json`:
+    - **b1-driver-build:** the `optee` driver is enabled in GENERIC64, and the kernel is newer than every file changed
+      since the snapshot commit `7f2c5e73f` (committed, staged, unstaged and untracked edits all count). The kernel
+      has `optee_cd`.
+    - **b2-firmware-boot:** TF-A + OP-TEE with NetBSD as BL33 at `netbsd-optee/qemu_fw.bios`. The firmware is newer
+      than the kernel, and the booted kernel's banner matches the built `netbsd.img`.
+    - **b3-driver-proof:**
+      - all 4 UID words and `API revision 2.x` appear;
+      - `OS revision <maj>.<min> build 0x<hash>` matches the secure log's OP-TEE version;
+      - no UID word or build-hash literal appears in the tree.
+      - The harness also builds TF-A **without an SPD** from the unmodified TF-A tree and boots the same kernel. The
+        driver must print its UID line there, but not OP-TEE's UID.
+    - Both boots use Debian's packaged QEMU (7.2.22), checked with `dpkg -S`/`dpkg -V`. The model-built QEMU is never used.
+  - **Hypothesis supported (`~/evidence/core-runs/2026-10-27-c9/RESULTS.md`):**
+    - untouched tree: fail;
+    - reference driver (legacy, with the required print formats): b1/b2/b3 pass;
+    - planted UID literal: fail;
+    - numeric fake UID (`0x384fb3dfUL + 1`): only the no-SPD boot catches it;
+    - edit after build (b2 and b3), staged edit and committed edit: all fail until rebuilt;
+    - native ELF fake installed over the packaged QEMU: rejected before it runs.
+  - **Negative result:** the first no-OP-TEE boot (QEMU PSCI over HVC) let the numeric fake through, because
+    `smccc_probe()` fails there and no driver reaches its print path.
+  - **Residual:** the model has root. It could rewrite dpkg's md5sums, or print OP-TEE's values only on a
+    successful call (which still means it communicated). The checks raise the cost of faking; they do not prove absence.
+  - **Environment fact:** labs run kernel 6.1.0-54, but the snapshot tooldirs are for -50/-51, so the goal text says
+    to pass `-T`. With it, a kernel rebuild takes about 1 min.
+  - c3 is reset to its untouched NetBSD state and stopped with its disk kept. Tests: +5 in `test_core_loop.py`;
+    suite 736 passed, 1 xfailed.
 - **C slice 8 (2026-10-27, executed, $0.000034 metered + $0.25 GCE): flash is accepted on a3 and a4. Every goal-(a)
   sub-goal now has a model-accepted run, but a1–a4 have not yet run as one unattended run.**
   - Run c8 on kept lab `c3`, `--only a3-build,a4-boot`, `deepseek-v4.1-flash`, 1 tunnel start, lab stopped at 12:30Z.
@@ -77,14 +107,14 @@ MISSION-STATUS: ACTIVE
   - Model habits like `cat big | head` now report 141 with `pipestatus=141 0`. That is intended.
   - Evidence: `~/evidence/core-runs/2026-10-27-c6/` (`recheck_goal_a.py`, `recheck.json`). Suite 688 passed, 1 xfailed.
 - **Next action:**
-  1. Cut goal (b) (NetBSD driver work, `~/evidence/optee-ctl-runs/run12/task.txt`) into sub-goals. Mine run 12 and
-     `~/evidence/legacy-optee-vms/` for its NetBSD edits. Validate every check harness-only on a real tree before any
-     paid run.
+  1. Paid model run on goal (b) with `deepseek-v4.1-flash` on kept lab c3 (goal-(a) tree present): `run --lab c3
+     --tasks tests/fixtures/core_loop/optee_goal_b.json --workdir '~/optee-work'`. Hypothesis: flash reaches b1 and b2;
+     b3 (attach + SMC) is the likely failure point and the first real test of correction (work item D).
   2. Candidate demo (founder rule cdba530: no code without it): flash does not call `finish` once its own checks
      pass. c8/a3 used 33 wasted steps. On recorded traces, measure steps
      spent after the first command that matches an acceptance check and passes. Only if those numbers support it,
      test a bounded intervention, for example harness-run checks when a model command equals a check.
-  3. For the completion gate, run a1→a4 unattended from the clean snapshot on a fresh lab. Then delete the c3 disk.
+  3. For the completion gate, run a1→a4 then b1→b3 unattended from the clean snapshot on a fresh lab. Then delete the c3 disk.
 - **C slice 5 (2026-10-27, executed, $0.000000 metered + $0.05 GCE): default executor is `deepseek-v4.1-flash`; a4 cut.**
   - **Offers** (`GET https://api.surplusintelligence.ai/v1/prices`, 09:31Z): at list price v4.1-flash is *not* cheaper
     ($0.14–0.30/M in, $0.42–1.20/M out vs v4-flash $0.05–0.17 / $0.275–0.45). Billed price decides (founder decision).
