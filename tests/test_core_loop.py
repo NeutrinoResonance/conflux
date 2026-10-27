@@ -964,3 +964,83 @@ def test_truncated_reply_is_named_to_the_model_and_is_not_a_finish(tmp_path):
 def test_output_limit_leaves_room_for_reasoning_and_a_file_write():
     # c10/b1: up to 2017 reasoning tokens per call; a write may be MAX_COMMAND chars (>= 1 token per 4 chars).
     assert core.MAX_TOKENS >= 2048 + core.MAX_COMMAND // 4 + 2048
+
+
+# ---------------------------------------------------------------- slice 17: slow provider replies
+
+
+def _slow_once_surplus():
+    """Local stand-in for Surplus chat: the first request answers after 1 s, later ones at once."""
+    served = []
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers["Content-Length"]))
+            served.append(self.path)
+            if len(served) == 1:
+                time.sleep(1.0)
+            n = len(served)
+            msg = {"role": "assistant", "content": "",
+                   "tool_calls": [call("run_shell", {"command": "echo yes > ok.txt"}) if n == 2
+                                  else call("finish", {})]}
+            body = json.dumps({"id": f"gen-{n}", "choices": [{"message": msg}],
+                               "usage": {"prompt_tokens": 300, "completion_tokens": 40,
+                                         "buyer_cost_micro": 14}}).encode()
+            try:
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            except OSError:  # the client already gave up on the slow reply
+                pass
+
+        def log_message(self, *a):
+            pass
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv, served
+
+
+def test_slow_provider_reply_does_not_end_the_task(tmp_path, monkeypatch):
+    # Fault: a reply slower than CHAT_TIMEOUT came back as status 0 and ended the task `unverified provider_0`
+    # (headroom demo: 10/18 flash calls > 180 s). One transport failure is now retried, each attempt settled.
+    srv, served = _slow_once_surplus()
+    monkeypatch.setattr(core, "SURPLUS", f"http://127.0.0.1:{srv.server_address[1]}")
+    monkeypatch.setattr(core, "CHAT_TIMEOUT", 0.3)
+    try:
+        res, trace = run(TOUCH, core.surplus_chat("k"), tmp_path)
+    finally:
+        srv.shutdown()
+    assert res["status"] == "accepted", res
+    calls = [e for e in trace.events if e["event"] == "model_call"]
+    assert [(e["step"], e["attempt"], e["status"]) for e in calls] == [(1, 1, 0), (1, 2, 200), (2, 1, 200)]
+    assert calls[0]["cost_kind"] == "bound" and res["cost_usd"] == pytest.approx(calls[0]["bound_usd"] + 28e-6)
+    assert res["steps"] == 2 and len(served) == 3
+
+
+def test_second_transport_failure_is_unverified(tmp_path):
+    chat = Scripted((0, {"error": "ReadTimeout"}, 0.1), (0, {"error": "ReadTimeout"}, 0.1))
+    res, trace = run(TOUCH, chat, tmp_path)
+    assert res["status"] == "unverified" and res["reason"] == "provider_0" and len(chat.seen) == 2
+    assert [e["attempt"] for e in trace.events if e["event"] == "model_call"] == [1, 2]
+
+
+def test_http_error_is_not_retried(tmp_path):
+    chat = Scripted((503, {"error": {"message": "no_healthy_sellers"}}, 0.2))
+    res, _ = run(TOUCH, chat, tmp_path)
+    assert res["reason"] == "provider_503" and len(chat.seen) == 1
+
+
+def test_transport_failure_past_the_deadline_is_not_retried(tmp_path):
+    calls = []
+
+    def slow(messages, tools, timeout=None):
+        calls.append(timeout)
+        time.sleep(timeout + 0.1)
+        return 0, {"error": "ReadTimeout"}, timeout
+    res = run_task(TOUCH, slow, core.local_shell(tmp_path), Trace(), Budget(1.0), deadline=time.monotonic() + 0.3)
+    assert res["reason"] == "lab_deadline" and len(calls) == 1
+
+
+def test_chat_timeout_covers_measured_latency():
+    assert core.CHAT_TIMEOUT >= 713  # slowest measured flash reply (headroom demo, 2026-10-27)
