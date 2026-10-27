@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 
+import httpx
 import pytest
 
 _spec = importlib.util.spec_from_file_location(
@@ -170,3 +171,66 @@ def test_sanitize_fields_drops_private_keys():
     out = pp.sanitize_fields({"email": "a@b.c", "balance": 4.2, "user": {"id": "u1"}, "stripeSubscriptionId": "sub_x",
                               "limits": [{"type": "TOKENS", "percentage": 12}]})
     assert out == {"balance": 4.2, "limits.0.type": "TOKENS", "limits.0.percentage": 12}
+
+
+# ---------------------------------------------------------------- derived cost
+
+JEV_PRICING = {"prompt": "0.0000000420", "completion": "0.0000000000"}
+
+
+def test_derived_cost_uses_price_and_minimum_input():
+    body = {"usage": {"input_tokens": 355, "output_tokens": 32}}
+    assert pp.derived_cost(body, JEV_PRICING, 300) == pytest.approx(355 * 42e-9)
+    small = {"usage": {"input_tokens": 120, "output_tokens": 5}}
+    assert pp.derived_cost(small, JEV_PRICING, 300) == pytest.approx(300 * 42e-9)
+    assert pp.derived_cost({"usage": {"total_tokens": 9}}, JEV_PRICING, 300) is None
+    assert pp.derived_cost({"usage": {"input_tokens": 9}}, None) is None
+    assert pp.derived_cost(None, JEV_PRICING) is None
+
+
+def test_derived_settlement_is_labeled_and_keeps_running():
+    b = pp.Budget(ledger_total=0.0)
+    assert b.admit(0.01)[0]
+    assert b.settle(0.01, 0.000015, "derived") == "derived"
+    assert b.derived == pytest.approx(0.000015)
+    assert b.actual == 0 and b.estimated == 0
+    assert b.stop_reason is None
+    assert b.report()["derived_usd"] == pytest.approx(0.000015)
+    assert b.admit(0.01)[0]
+
+
+def _prober(handler, tmp_path, only=None):
+    http = httpx.Client(transport=httpx.MockTransport(handler))
+    rec = pp.Recorder(tmp_path / "p.jsonl", ["fake-probe-key-0123"])
+    return pp.PaidProber(http, "fake-probe-key-0123", pp.Budget(0.0, cap=0.10), rec, {"jev-1.14": JEV_PRICING}, only)
+
+
+def test_jev_decision_without_billed_cost_settles_derived(tmp_path):
+    def handler(request):
+        return httpx.Response(200, json={
+            "answers": {"q1": {"score": 1.3, "probabilities": {"0": 0.3, "1": 0.1, "2": 0.6}}},
+            "usage": {"input_tokens": 340, "output_tokens": 30}})
+    p = _prober(handler, tmp_path)
+    p.decision("score", 0)
+    assert p.results["jev-1.14"]["decision_score"][0]["outcome"] == "score_probabilities"
+    assert p.budget.derived == pytest.approx(340 * 42e-9)
+    assert p.budget.stop_reason is None
+    resp = [json.loads(l) for l in (tmp_path / "p.jsonl").read_text().splitlines()
+            if json.loads(l).get("event") == "response"]
+    assert resp[0]["cost_kind"] == "derived"
+
+
+def test_jev_decision_without_usage_still_stops(tmp_path):
+    p = _prober(lambda r: httpx.Response(200, json={"answers": {}}), tmp_path)
+    p.decision("choice", 0)
+    assert p.budget.stop_reason == "unknown_accounting"
+
+
+def test_only_selector_schedules_untested_probes(tmp_path):
+    p = _prober(lambda r: httpx.Response(500), tmp_path, only=[
+        "decision_choice", "decision_score", "deepseek-v4-pro:logprobs", "stream_usage"])
+    assert [(m, c) for m, c, _, _ in p.plan()] == [
+        ("jev-1.14", "decision_choice"), ("jev-1.14", "decision_score"),
+        ("deepseek-v4-pro", "logprobs"),
+        ("deepseek-v4-flash", "stream_usage"), ("deepseek-v4-pro", "stream_usage")]
+    assert len(_prober(lambda r: httpx.Response(500), tmp_path).plan()) == 8
