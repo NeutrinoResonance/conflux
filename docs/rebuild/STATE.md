@@ -10,8 +10,8 @@ MISSION-STATUS: ACTIVE
 - **C slice 15 (2026-10-27, demo, $0.000074 metered + $0 GCE): failing-check feedback before `finish` does not make
   flash write b1. Hypothesis falsified; nothing built.**
   - Replayed c11/b1 at k=20/30 (prompt_tokens match c11 exactly), 5 samples per cell. Arms: control; the verbatim
-    `_check_feedback` of c11's failing b1 checks appended to the last tool result (Flast) or to every tool result
-    (Fevery). Writes/builds/finishes: **control 0/10, Flast 0/10, Fevery 0/10**; all 59 commands are reads.
+    `_check_feedback` of c11's failing b1 checks appended to the last tool result of step k (Flast) or of every
+    step 1..k (Fevery). Writes/builds/finishes: **control 0/10, Flast 0/10, Fevery 0/10**; all 59 commands are reads.
   - Flash reads the feedback and discounts it: 6/10 Flast reasonings say the checks "failed as expected since no
     work yet". Fevery reasonings restate what the checks need, then read b3-scope material.
   - With slices 12–14: budget, scope, read cap, pro plan, headroom and check feedback all fail. **Prompt-level nudges
