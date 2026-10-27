@@ -31,6 +31,13 @@ Only then set `MISSION-STATUS: COMPLETE` and open the promotion PR to `main`.
 
 ## Founder decisions (binding; newest first)
 
+- **2026-10-27 — Pick Surplus models by billed price; default executor is `deepseek-v4.1-flash`.**
+  `deepseek-v4-flash` only has ~61%-discount offers. On an identical 2k-token request (2026-10-27,
+  default `price` routing) it billed $0.000020; `deepseek-v4.1-flash` billed <$0.000001,
+  `deepseek-v4.1-flash-1017` $0.000004–13, `deepseek-v4-pro` $0.000008. Switch the core loop's default
+  to `deepseek-v4.1-flash` (re-check acceptance on the tuning tasks and reconcile billing), and before
+  adopting any Surplus model compare current offers (markets/prices API) and billed cost from the usage
+  export. Old model ids get stale offers; a newer sibling can be orders of magnitude cheaper.
 - **2026-10-27 — Lab VMs.** The controller creates its own `conflux-dev-lab-*` VMs with
   `devbox-lab up|ssh|stop|delete|list <name>` (n2d-standard-8, 31 GB RAM, from snapshot
   `conflux-optee-baseline-clean-20261021`; one at a time; self-stops after 24 h). Stop or delete a lab
