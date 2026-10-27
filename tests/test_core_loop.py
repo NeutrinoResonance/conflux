@@ -623,3 +623,49 @@ def test_egress_proxy_keeps_the_response_after_the_client_half_closes():
     s.sendall(b"abc")
     s.shutdown(socket.SHUT_WR)
     assert s.recv(100) == b"cba"
+
+
+# ---------------------------------------------------------------- pipefail + PIPESTATUS (C slice 6)
+
+
+@pytest.fixture(params=["local", "lab"])
+def any_shell(request, lab, tmp_path):
+    return core.local_shell(tmp_path / "work") if request.param == "local" else lab()
+
+
+def test_a_failing_pipeline_stage_is_not_masked(any_shell):
+    r = any_shell("false | tail -n 1", 10)
+    assert r["exit"] == 1 and r["pipestatus"] == [1, 0]
+    assert "PIPESTATUS" not in r["stderr"]
+
+
+def test_a_reader_that_exits_early_reports_sigpipe(any_shell):
+    """The case acceptance checks must avoid: an early-exiting reader kills a long producer."""
+    r = any_shell("seq 1000000 | head -n 1", 10)
+    assert r["exit"] == 141 and r["pipestatus"] == [141, 0] and r["stdout"] == "1\n"
+
+
+def test_explicit_exit_and_plain_output_are_unchanged(any_shell):
+    r = any_shell("echo out; echo err >&2; false | true; exit 5", 10)
+    assert r["exit"] == 5 and r["stdout"] == "out\n" and r["stderr"] == "err\n" and r["pipestatus"] == [1, 0]
+    assert any_shell("true", 10)["pipestatus"] == [0]
+
+
+def test_a_masked_build_failure_reaches_the_model_with_stage_statuses(tmp_path):
+    """Run c4 shape: `make … 2>&1 | tail` reported exit 0 while make had failed."""
+    build = "sh -c 'echo make: *** Error 2 >&2; exit 2' 2>&1 | tail -n 5"
+    chat = Scripted(resp(call("run_shell", {"command": build})), resp(call("finish", {})),
+                    resp(call("finish", {})), resp(call("finish", {})))
+    res, trace = run(TOUCH, chat, tmp_path)
+    ex = next(e for e in trace.events if e["event"] == "exec")
+    assert ex["exit"] == 2 and ex["pipestatus"] == [2, 0]
+    tool = next(m for m in chat.seen[1] if m["role"] == "tool")["content"]
+    assert tool.startswith("exit=2 pipestatus=2 0\n") and "Error 2" in tool
+    results = next(e for e in trace.events if e["event"] == "acceptance")["results"]
+    assert results[0]["pipestatus"] == [1]
+
+
+@pytest.mark.parametrize("ifs", ["IFS=", "IFS=:", "IFS=,", "unset IFS"])
+def test_pipestatus_does_not_depend_on_the_commands_ifs(any_shell, ifs):
+    r = any_shell(f"{ifs}; false | true | (exit 3)", 10)
+    assert r["exit"] == 3 and r["pipestatus"] == [1, 0, 3] and "PIPESTATUS" not in r["stderr"]

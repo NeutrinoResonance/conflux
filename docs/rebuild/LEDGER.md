@@ -49,5 +49,6 @@ Rate: n2d-standard-8 ≈ $0.338/h running (GCE list price, us-central1) + 100 GB
 | 2026-10-27 | `conflux-dev-lab-c3` | 08:15:46–09:17:47, 09:18:51–09:20:32 | 1.06 | 0.36 | C slice 4 run c4 (a2 + a3) + model-free a3 recheck; stopped, disk kept for a4 |
 | 2026-10-27 | `conflux-dev-lab-c3` | 09:35:27–09:37:50, 09:38:56–09:41:54 | 0.09 | 0.03 | C slice 5 model-free a3 + a4 checks (try 1: no `expect`; try 2: pass); stopped, disk kept |
 | 2026-10-27 | `conflux-dev-lab-c3` | 09:49:42–09:53:36 | 0.07 | 0.02 | C slice 5 critic fix: pristine-evaluator a4 check passes, tampered `qemu_v8.mk` fails; stopped, disk kept |
+| 2026-10-27 | `conflux-dev-lab-c3` | 10:20:19–10:25:23 | 0.08 | 0.03 | C slice 6 harness-only a1–a4 recheck under pipefail: 4/4 pass; stopped, disk kept |
 
-**GCE lab total: $0.64** (plus the c3 disk while it exists)
+**GCE lab total: $0.67** (plus the c3 disk while it exists)

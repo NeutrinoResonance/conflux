@@ -5,6 +5,25 @@ Keep this short and current. One entry per decision; newest first.
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred to E); B done.
+- **C slice 6 (2026-10-27, executed, $0 metered + $0.03 GCE): the executor no longer masks pipeline failures.**
+  - Every command (model, checks, setup; local `execute` and `lab_shell`) runs under `set -o pipefail`. An `EXIT` trap
+    reports the last pipeline's per-stage exits as a stderr marker. The harness strips the marker and returns it as `pipestatus`, which
+    goes into exec trace rows and check results. The model sees `exit=2 pipestatus=2 0` when a pipeline has more than one stage.
+  - **Hypothesis supported.** Offline: 7 new tests, red on the base. They cover `false | tail` → 1 `[1, 0]` in both shells, a c4-shaped
+    `… 2>&1 | tail` build now non-zero in the model observation, and `seq | head` → 141 (the case checks must avoid).
+    On c3 (no model): `make no-such-target | tail` → exit 2 `[2, 0]`; **a1, a2, a3 and a4 all `pass`** under the
+    new shell (a4 in 55 s, OP-TEE 4.11.0 + Linux 7.3.0 markers). The a3 QEMU check dropped `| head -n 1 | grep -q`
+    (a SIGPIPE risk); the a1/a4 `head <file> | grep -q` checks are safe and unchanged.
+  - Model habits like `cat big | head` now report 141 with `pipestatus=141 0`. That is intended.
+  - Evidence: `~/evidence/core-runs/2026-10-27-c6/` (`recheck_goal_a.py`, `recheck.json`). Suite 688 passed, 1 xfailed.
+- **Next action:**
+  1. Work item F, as rescoped (MISSION 089d6e3): build only the deterministic D1 check, "step reported success but its own
+     output reports failure", from `~/evidence/self-audit-demo-2026-10-27/` (`audit.py`, `RESULTS.md`). First fix its known false positives
+     (quoted `\|` split; `git log`/`apt search` as reads). Grade it on the demo's 17 traces; it must find c4/a3 step 27 and c3/a1
+     step 3. Run it after every run. No model-based classifier.
+  2. Then run `--only a3-build,a4-boot --lab c3 --workdir '~/optee-work'` on the default executor (expected: a3 accepts
+     at once, a4 within 25 steps), then cut goal (b) sub-goals with harness-validated checks.
+  - Delete the c3 disk once goal (a) is done or abandoned.
 - **C slice 5 (2026-10-27, executed, $0.000000 metered + $0.05 GCE): default executor is `deepseek-v4.1-flash`; a4 cut.**
   - **Offers** (`GET https://api.surplusintelligence.ai/v1/prices`, 09:31Z): at list price v4.1-flash is *not* cheaper
     ($0.14–0.30/M in, $0.42–1.20/M out vs v4-flash $0.05–0.17 / $0.275–0.45). Billed price decides (founder decision).
@@ -27,11 +46,6 @@ MISSION-STATUS: ACTIVE
     test.
   - Evidence: `~/evidence/core-runs/2026-10-27-c5/` (`offers.json`, `tuning/reconciled.json`, `recheck_a4.try{1,2}.json`).
     Tests: 55 in `tests/test_core_loop.py`; suite 681 passed, 1 xfailed.
-- **Next action:**
-  1. Run `--only a3-build,a4-boot --lab c3 --workdir '~/optee-work'` on the new default. Expected: a3 accepts at once
-     (its tree is built), and a4 accepts within its 25-step cap.
-  2. Then cut goal (b) (NetBSD driver) sub-goals from run-12 / `lab/` evidence, with checks validated harness-only first.
-  - Delete the c3 disk once goal (a) is done or abandoned.
 - **C slice 4 (2026-10-27, executed, $0.011158 metered + $0.36 GCE): bare flash builds the full qemu_v8 tree.**
   Run c4 on kept lab `c3`, `--only a2-sources,a3-build`, 1 tunnel start, 0 restarts.
   - **a2 accepted** in 12 steps / 256 s / $0.00052. That is more than the predicted ≤ 5: flash re-installed `repo`
