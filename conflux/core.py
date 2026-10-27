@@ -52,9 +52,10 @@ LEDGER = Path(__file__).resolve().parents[1] / "docs/rebuild/LEDGER.md"
 SURPLUS = "https://www.surplusintelligence.ai/api/inference/v1"
 EXPORT = "https://api.surplusintelligence.ai/v1/buyer/usage/export"
 
-MODEL = "deepseek-v4-flash"
+MODEL = "deepseek-v4.1-flash"
 MAX_TOKENS = 2048          # flash reasoning tokens count against this
-PRICE_CEILING = 4e-7       # $/byte admission bound: tokens <= bytes, ~2x flash's top list rate ($1.82e-7/tok)
+PRICE_CEILING = 4e-7       # $/byte of request, admission bound: tokens <= bytes, > v4.1-flash's top input list rate ($3e-7/tok)
+OUTPUT_CEILING = 2.4e-6    # $/output token, admission bound: 2x v4.1-flash's top output list rate ($1.2e-6/tok)
 CAMPAIGN_BUDGET = 50.00
 RUN_CAP = 0.20
 EXEC_TIMEOUT = 60
@@ -482,7 +483,7 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
             return end("unverified", "lab_deadline")
         steps += 1
         request = {"model": model, "messages": messages, "tools": TOOLS, "max_tokens": MAX_TOKENS}
-        bound = (len(json.dumps(request).encode()) + MAX_TOKENS) * PRICE_CEILING
+        bound = len(json.dumps(request).encode()) * PRICE_CEILING + MAX_TOKENS * OUTPUT_CEILING
         if cost + bound > task.max_usd:
             return end("unverified", "task_budget")
         if not budget.admit(bound):

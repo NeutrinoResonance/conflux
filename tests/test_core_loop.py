@@ -1,6 +1,7 @@
 """Offline tests of the slice-1 execution loop in conflux/core.py (scripted provider responses)."""
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -365,8 +366,8 @@ def test_run_lab_stops_after_the_first_non_accepted_task(lab, tmp_path, devbox_l
 
 def test_optee_goal_a_checks_execute_and_reject_an_empty_workdir(tmp_path):
     tasks = [Task.from_dict(d) for d in json.loads((FIXTURES / "optee_goal_a.json").read_text())]
-    assert [t.id for t in tasks] == ["a1-host-prereqs", "a2-sources", "a3-build"]
-    for t in tasks[1:]:  # a1 depends on the host; a2/a3 cannot pass without a tree
+    assert [t.id for t in tasks] == ["a1-host-prereqs", "a2-sources", "a3-build", "a4-boot"]
+    for t in tasks[1:]:  # a1 depends on the host; a2-a4 cannot pass without a tree
         assert core.run_checks(t.checks, core.local_shell(tmp_path))[0] == "fail"
 
 
@@ -381,6 +382,33 @@ def test_optee_a3_image_check_accepts_the_empty_pageable_image(tmp_path):
     assert core.run_checks([image_check], core.local_shell(tmp_path))[0] == "pass"
     (out / "bl32_extra1.bin").write_bytes(b"")
     assert core.run_checks([image_check], core.local_shell(tmp_path))[0] == "fail"
+
+
+def test_optee_a4_boot_checks_rerun_the_boot_and_ignore_stale_logs(tmp_path, monkeypatch):
+    # The harness reruns `make check-only` (no rebuild) itself; logs left by the model do not count.
+    a4 = {t.id: t for t in map(Task.from_dict, json.loads((FIXTURES / "optee_goal_a.json").read_text()))}["a4-boot"]
+    assert "make check-only " in a4.checks[0].cmd and a4.checks[0].timeout > 1500
+    build, out, bin_ = tmp_path / "optee/build", tmp_path / "optee/out/bin", tmp_path / "bin"
+    build.mkdir(parents=True)
+    bin_.mkdir()
+    (bin_ / "expect").write_text("#!/bin/sh\n")  # present, so the check does not apt-get it
+    (bin_ / "expect").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_}:{os.environ['PATH']}")
+    out.mkdir(parents=True)
+    (out / "serial1.log").write_text("I/TC: Primary CPU switching to normal world boot\n")
+    (out / "serial0.log").write_text("Linux version 6.x\n")
+    (build / "Makefile").write_text("check-only:\n\ttrue\n")
+    assert core.run_checks(a4.checks, core.local_shell(tmp_path))[0] == "fail"
+    (build / "Makefile").write_text("check-only:\n\techo 'I/TC: Primary CPU switching to normal world boot' > "
+                                    "../out/bin/serial1.log\n\techo 'Linux version 6.x' > ../out/bin/serial0.log\n")
+    assert core.run_checks(a4.checks, core.local_shell(tmp_path))[0] == "pass"
+
+
+def test_admission_bound_covers_the_top_output_list_price(tmp_path):
+    chat = Scripted(resp(call("run_shell", {"command": "echo yes > ok.txt"}), micro=None), resp(call("finish", {})))
+    _, trace = run(TOUCH, chat, tmp_path)
+    mc = [e for e in trace.events if e["event"] == "model_call"][0]
+    assert mc["bound_usd"] >= core.MAX_TOKENS * 1.2e-6  # deepseek-v4.1-flash, priciest seller, 2026-10-27
 
 
 def test_lab_shell_rides_out_transient_poll_failures(lab):

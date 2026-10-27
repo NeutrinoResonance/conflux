@@ -51,5 +51,20 @@
     "timeout": 60
    }
   ]
+ },
+ {
+  "id": "a4-boot",
+  "max_steps": 25,
+  "max_usd": 0.05,
+  "goal": "Overall task (run 12, goal a): on this Linux machine, get QEMU set up with OP-TEE, i.e. build OP-TEE for QEMU Armv8-A (qemu_v8) from the official OP-TEE manifest and build repositories, and later boot it in QEMU. Work in the current directory; the OP-TEE source tree must live in ./optee (the repo client root). You may use sudo -n if it is available. The work is split into sub-goals; this one is: boot the built qemu_v8 setup in QEMU non-interactively (no terminal windows or GUI) and show that OP-TEE starts in the secure world, Linux boots to a login prompt, and OP-TEE is usable from Linux (for example with xtest). Leave the normal-world console log in optee/out/bin/serial0.log and the secure-world log in optee/out/bin/serial1.log. Do not rebuild unless the boot needs it.",
+  "checks": [
+   {
+    "cmd": "cd optee/build && { command -v expect >/dev/null || sudo -n apt-get install -y -q expect >/dev/null; } && rm -f ../out/bin/serial0.log ../out/bin/serial1.log && PATH=$HOME/bin:$PATH timeout 1500 make check-only CHECK_TESTS=xtest XTEST_ARGS=1001 TIMEOUT=300",
+    "timeout": 1800
+   },
+   {
+    "cmd": "grep -q 'Primary CPU switching to normal world boot' optee/out/bin/serial1.log && grep -q 'Linux version' optee/out/bin/serial0.log"
+   }
+  ]
  }
 ]

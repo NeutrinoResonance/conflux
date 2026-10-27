@@ -40,6 +40,8 @@
   - an egress check (curl github/pypi, `apt-get update`) gates the first model call (`egress_failed`).
   - Verified in run c3: apt, pip, curl, git, `repo init` and the full qemu_v8 `repo sync` (56 s) all went through it.
   - Tools that ignore proxy env (raw sockets, `git://`, ping) have no egress.
+- The c3 disk holds a built qemu_v8 tree in `~/optee-work/optee`. `make check-only CHECK_TESTS=xtest XTEST_ARGS=1001`
+  boots it and passes in ≈ 54 s. The snapshot has no `expect`; the a4 check installs it.
 
 ## Workers
 
@@ -86,6 +88,8 @@ gcloud compute instances stop  conflux-dev-worker-1 --zone us-central1-a
   - Kimi Code: `GET /coding/v1/usages`.
   - GLM: `GET https://api.z.ai/api/monitor/usage/quota/limit`.
   - The Kimi and GLM endpoints are undocumented.
+- Current per-seller offers: `GET https://api.surplusintelligence.ai/v1/prices` (same key; `models[].providers[].pricing`
+  in $/M tokens). List price ≠ billed: v4.1-flash lists above v4-flash, but it billed < 1 micro-USD per call on 2026-10-27.
 - Executed capability matrix: `docs/rebuild/PROVIDERS.md`.
 
 Catalogue snapshot 2026-10-26: Surplus lists 489 models incl. `deepseek-v4-pro`, `deepseek-v4-flash`,
