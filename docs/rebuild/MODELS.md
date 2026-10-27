@@ -26,6 +26,10 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   design by step 19, yet it never wrote a file or called `finish`. Confounded by a harness fault: reasoning grew to
   1500–2048 tokens per call and hit `max_tokens` 2048 five times (fixed: 8192, truncation named to the model).
   Evidence: `~/evidence/core-runs/2026-10-27-c10/RESULTS.md`.
+  - **Confirmed without the confound (c11/b1):** with max_tokens 8192 there were 0 truncations, and again all
+    76 commands were reads (OP-TEE MSG ABI, shared memory, bus_dma, TF-A/QEMU: b2/b3 scope). Write intent appears in
+    its reasoning at 9 steps, and the file path was chosen by step 40. No write, no `finish`.
+    Evidence: `~/evidence/core-runs/2026-10-27-c11/RESULTS.md`.
 - **Cheapest billed:** < 1 micro-USD per 2k-token call (2026-10-27); 46 judge calls cost 19 micro-USD.
 - **Strong: command semantics.** "Did this command fail?" 29/30 (28 after the label fix); reasoned
   "grep with no match exits 1" on all three empty-grep items Jev missed. Evidence: Jev fair test above.
