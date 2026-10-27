@@ -9,7 +9,7 @@ Make inexpensive DeepSeek execution achieve the best **reliable work per dollar*
 
 - DeepSeek is capable and cheap, but the founder has seen unreliable decisions and failure to act
   on correction.
-- Jev (TypeSafe, served via Surplus as `jev-1.14`) is preferred for supported, *bounded* semantic
+- Jev (TypeSafe, served via Surplus `/v1/decisions` as `jev-1.14`; see Founder decisions) is preferred for supported, *bounded* semantic
   decisions when it improves total economics.
 - Other models supply selective planning, criticism, correction or localized repair.
 - Deterministic code owns permissions, budgets, evidence and acceptance.
@@ -18,6 +18,30 @@ Make inexpensive DeepSeek execution achieve the best **reliable work per dollar*
   comparison baseline. Preserve its real traces, failure cases, useful tests and provider evidence.
 - The project discovers good model/supervision configurations itself; do not ask the founder to
   guess them.
+
+## Founder decisions (binding; newest first)
+
+- **2026-10-27 — Billed cost is known; read it, don't estimate it.** Surplus responses (including
+  `/v1/decisions`) may omit cost. The authoritative per-request charge is `GET /v1/buyer/usage/export`
+  (`buyer_cost_usd` per `request_id`; follow its 302 without the Authorization header) and
+  `GET /v1/buyer/me` (balance, `recent_usage` with `buyer_cost_usdc` in micro-USD). Reconcile
+  `LEDGER.md` from these. Missing cost in a response is never by itself a reason to stop paid work.
+- **2026-10-27 — Jev is a decisions model, not chat.** Call `POST https://api.surplusintelligence.ai/v1/decisions`
+  in JEV format `{model, state, questions: {<id>: {type, question, criteria}}}`; `score` criteria are a
+  list of labels, `choice` criteria map value → description; both return per-option probabilities.
+  `noul` currently fails upstream: use a two-option `choice`. Chat endpoints for `jev-*` fail by design.
+  Measured ≈ $0.000006 per decision. Surplus chat models return no logprobs, so Jev probabilities are
+  the probability channel. Details: `~/evidence/provider-probes-2026-10-27.md`.
+- **2026-10-27 — File-access scope is not a security boundary.** Conflux and its agents run on
+  disposable scratch VMs. Which files a command reads or writes, scope-check bypasses, sandbox escapes
+  and path-permission precision are never blocking — for development agents, for reviews, or for
+  Conflux's own action governance. Over-holding harmless actions is the bug class this rebuild fixes;
+  err toward allowing.
+- **2026-10-27 — Agents land their own work.** Each step merges its own PR into
+  `rebuild/conflux-core-20261026` once CI is green and correctness findings are addressed (two critic
+  rounds max). Nobody else will merge it. No step waits on a human; `main` promotion remains the
+  only founder-gated merge.
+- **2026-10-26 — OpenCode Go and Nous are out of scope** for this campaign.
 
 ## Work items (owned end to end by the remote master)
 
