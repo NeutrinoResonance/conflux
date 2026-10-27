@@ -31,6 +31,10 @@ Only then set `MISSION-STATUS: COMPLETE` and open the promotion PR to `main`.
 
 ## Founder decisions (binding; newest first)
 
+- **2026-10-27 — Self-improvement is in scope (work item F).** Conflux must detect harness and
+  supervision faults from its own traces and admit fixes only on measured improvement. Schedule F
+  alongside C: its first deliverable (deterministic trace audit graded on the c4 trace) comes before
+  the next long lab run.
 - **2026-10-27 — Fix first: the executor masks pipeline failures.** `conflux/core.py` runs model commands
   as plain `bash -c` (local `execute()` and the lab job launcher), so `make … | tail` reports exit 0 when
   make fails, and the model acts on false success. The old governor enforced `pipefail`; the rebuild
@@ -151,7 +155,26 @@ Only then set `MISSION-STATUS: COMPLETE` and open the promotion PR to `main`.
   promotion PR to `main` only when the completion gate above is met; do not merge it — the
   founder authorizes promotion. Waiting for that does not block further work on the rebuild branch.
 
+**F. Self-audit: the system finds and fixes its own harness faults (founder decision 2026-10-27).**
+- After every run, Conflux audits its own trace for contradictions between what a step reported and
+  what later evidence shows: a "success" that later output or checks contradict, the same failure
+  repeated, steps spent on a check that cannot pass, reads that never lead to action. Deterministic
+  detectors first; a cheap model (or Jev) only for bounded judgements a detector cannot make.
+- Each finding is classified as a harness fault or a model fault, with the trace evidence attached.
+  Harness faults become candidate structural fixes; model faults become candidate supervision changes.
+- A candidate is admitted only when replaying recorded traces/fixtures, then a matched rerun, shows
+  better verified success per dollar (item E rules). The system writes and keeps its own gap list
+  (`docs/rebuild/GAPS.md`, generated from traces).
+- Grading reference, not a hint: the run-c4 trace (`~/evidence/core-runs/`) contains a pipeline whose
+  exit status masked a `make` failure, and an unsatisfiable acceptance check. The audit should find
+  both from that trace with detectors that are not written for those specific cases. Gaps a human or
+  Claude names are grading references for the audit, never hard-coded rules.
+
 ## Engineering discipline
+
+- A failure mode you observe is never only a note. Classify it as harness or model fault. A harness
+  fault gets a structural fix plus a regression test before the next paid run; a model fault becomes a
+  measured supervision experiment. Either way, record it so item F's audit can be graded against it.
 
 - Minimize total tokens, cash, retries and operator attention per *verified* successful task. A few
   strong reasoning calls can beat many ineffective cheap attempts.
