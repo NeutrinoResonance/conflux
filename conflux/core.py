@@ -496,7 +496,8 @@ FAIL_TEXT = re.compile(r"(?im)^.*\b(error|failed|fatal|cannot|can't|no such file
                        r"undefined reference|traceback|exception|\*\*\*)\b.*$")
 READ_ONLY = re.compile(r"^(cat|head|tail|sed -n|less|grep|rg|ls|find|wc|stat|file|readlink|du|df|echo|pwd|which|"
                        r"type|command -v|git (log|show|diff|status|branch|remote|rev-parse|ls-files)|"
-                       r"apt(-cache)? (search|show|list|policy)|dpkg (-l|-s|-L))\b")
+                       r"apt(-cache)? (search|show|list|policy)|dpkg (-l|-s|-L)|strings|od|xxd|hexdump|"
+                       r"(\S*/)?([\w.]+-)*(objdump|readelf|nm))\b")
 
 
 def _scan(cmd: str) -> tuple[list[str], bool]:

@@ -5,6 +5,26 @@ Keep this short and current. One entry per decision; newest first.
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred to E); B done.
+- **C slice 8 (2026-10-27, executed, $0.000034 metered + $0.25 GCE): flash is accepted on a3 and a4. Every goal-(a)
+  sub-goal now has a model-accepted run, but a1–a4 have not yet run as one unattended run.**
+  - Run c8 on kept lab `c3`, `--only a3-build,a4-boot`, `deepseek-v4.1-flash`, 1 tunnel start, lab stopped at 12:30Z.
+    64/64 calls export-matched.
+  - **a3 `accepted` only at the step cap (40 steps, 1801 s, $0.000025). The "≤ 5 steps" hypothesis is falsified.**
+    Flash ran the acceptance checks itself at steps 7, 20 and 31 (all passed). At step 21 it said "Both acceptance
+    checks pass already". It then re-ran no-op `make all` five times (69–107 s each) and kept inspecting the PAGER config and the
+    binaries. It never called `finish`. This is a **model fault**: the work is done but flash does not stop.
+  - **a4 `accepted` in 24 steps** (790 s, $0.000009, `finish` called, 0 retries). Flash read `qemu-check.exp`, then
+    ran upstream's `make check-only CHECK_TESTS=xtest XTEST_ARGS=1001` itself at step 17. It ran the exact check
+    command at step 20 and then called `finish`. The harness check passed independently in 41 s.
+  - **D1 audit: 4 hits.**
+    - 3 are real failures inside `;` chains, and flash saw each as `failed_cmds≥1`: `xxd: command not found` (step
+      13 switched to `od`), a missing `conf.mk`, and no `/dev/kvm`.
+    - 1 is a **harness fault (D1 false positive)**: `strings fip.bin` printed error-message literals embedded in the
+      firmware. Fixed: `strings`, `od`, `xxd`, `hexdump` and (prefixed) `objdump`/`readelf`/`nm` count as reads.
+      Regression case: the real row, added to `audit_d1_cases.json`, red on the base. Regrade of all 25 recorded
+      traces: only that hit drops, 14 → 13 (`~/evidence/core-runs/2026-10-27-c8/d1-regrade.txt`).
+  - Evidence: `~/evidence/core-runs/2026-10-27-c8/` (`summary.json`, `reconciled.json`, traces).
+    Suite 731 passed, 1 xfailed.
 - **C slice 7 (2026-10-27, executed, $0 metered + $0.04 GCE): failed simple commands reach the model.**
   - Every command's preamble adds a bash `ERR` trap that counts failing simple commands outside conditions (`if`,
     `&&`/`||` lists, `!`). The EXIT marker carries the count. Results carry `failed_cmds`, which goes into exec trace rows
@@ -57,10 +77,14 @@ MISSION-STATUS: ACTIVE
   - Model habits like `cat big | head` now report 141 with `pipestatus=141 0`. That is intended.
   - Evidence: `~/evidence/core-runs/2026-10-27-c6/` (`recheck_goal_a.py`, `recheck.json`). Suite 688 passed, 1 xfailed.
 - **Next action:**
-  1. Run `--only a3-build,a4-boot --lab c3 --workdir '~/optee-work'` on the default executor. Expected: a3 accepts at
-     once, a4 within 25 steps. Check `audit_hits` and whether the model reacts to `failed_cmds`. Then cut the goal (b)
-     sub-goals, with checks validated harness-only first.
-  - Delete the c3 disk once goal (a) is done or abandoned.
+  1. Cut goal (b) (NetBSD driver work, `~/evidence/optee-ctl-runs/run12/task.txt`) into sub-goals. Mine run 12 and
+     `~/evidence/legacy-optee-vms/` for its NetBSD edits. Validate every check harness-only on a real tree before any
+     paid run.
+  2. Candidate demo (founder rule cdba530: no code without it): flash does not call `finish` once its own checks
+     pass. c8/a3 used 33 wasted steps. On recorded traces, measure steps
+     spent after the first command that matches an acceptance check and passes. Only if those numbers support it,
+     test a bounded intervention, for example harness-run checks when a model command equals a check.
+  3. For the completion gate, run a1→a4 unattended from the clean snapshot on a fresh lab. Then delete the c3 disk.
 - **C slice 5 (2026-10-27, executed, $0.000000 metered + $0.05 GCE): default executor is `deepseek-v4.1-flash`; a4 cut.**
   - **Offers** (`GET https://api.surplusintelligence.ai/v1/prices`, 09:31Z): at list price v4.1-flash is *not* cheaper
     ($0.14–0.30/M in, $0.42–1.20/M out vs v4-flash $0.05–0.17 / $0.275–0.45). Billed price decides (founder decision).
