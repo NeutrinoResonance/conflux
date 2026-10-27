@@ -100,6 +100,8 @@ gcloud compute instances stop  conflux-dev-worker-1 --zone us-central1-a
   - The Kimi and GLM endpoints are undocumented.
 - Current per-seller offers: `GET https://api.surplusintelligence.ai/v1/prices` (same key; `models[].providers[].pricing`
   in $/M tokens). List price ≠ billed: v4.1-flash lists above v4-flash, but it billed < 1 micro-USD per call on 2026-10-27.
+  `deepseek-v4-pro` offers on 2026-10-27: $0.875–1.73/M in, $1.75–3.80/M out (billed ≈ $0.000046/call in C slice 18).
+  `core.PRICE_CEILING`/`OUTPUT_CEILING` are v4.1-flash bounds; another executor needs its own (slice 18 set 2e-6/7.6e-6 in a wrapper).
 - Executed capability matrix: `docs/rebuild/PROVIDERS.md`.
 - Measured model strengths/weaknesses with examples: `docs/rebuild/MODELS.md` (append new findings there).
 

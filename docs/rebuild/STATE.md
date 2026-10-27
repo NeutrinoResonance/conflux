@@ -7,6 +7,14 @@ MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred
   to E); B done. Goal (a) a1–a4 each model-accepted (not yet as one run); goal (b) b1 not yet accepted.
+- **C slice 18 (2026-10-27, demo, $0.001838 metered + $0.18 GCE): pro in flash's seat writes b1 but runs out of
+  steps before the build.** One live b1 run on c3, `deepseek-v4-pro`, else as c11 (wrapper sets pro admission
+  ceilings and `max_usd` 1.00; nothing built). `failed step_cap`: check 1 **passed** (new `sys/dev/fdt/optee.c`,
+  `files.fdt` stanza, GENERIC64 `optee* at fdt?`), check 2 failed — no `build.sh` ever ran, so whether the driver
+  compiles is unverified. 61 on-scope reads before the first write (step 26); 6 steps repairing its own edits.
+  Flash wrote nothing in c10/c11. Billed $0.000046/call (≈ 25× flash), max latency 71 s. Model behaviour, no harness
+  fault (D1 hit = a real Permission denied the model then fixed). With flash ceilings the fixture's `max_usd` 0.15
+  would refuse pro mid-run (bound peaked at $0.33/call). Evidence: `~/evidence/pro-b1-run-2026-10-27/RESULTS.md`.
 - **C slice 17 (2026-10-27, harness fix, $0): a slow provider reply no longer ends a task.** `CHAT_TIMEOUT` 180 → 900 s
   (flash replies measured up to 713 s); `run_task` retries a status-0 call (transport error/timeout) once, each attempt
   admitted, settled and traced with `attempt`; no retry past the lab deadline, HTTP errors not retried. Regression test
@@ -67,9 +75,10 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. A multi-step b1 demo run with `--model deepseek-v4-pro` on lab c3 (fresh b1 attempt, cap ≈ $0.10 metered,
-     ≈ $0.25 GCE; `PRICE_CEILING`/`OUTPUT_CEILING` are flash rates, so set pro's bound): does pro write, build
-     and get accepted where flash failed twice? If yes, demo a flash-builds / pro-writes hand-off for cost; if no,
-     re-cut b1 into smaller sub-goals (driver file + config, then build).
-  2. For the completion gate, run a1→a4 then b1→b3 unattended from the clean snapshot on a fresh lab, then delete
+  1. Re-cut b1 at the boundary slice 18 exposed: b1a = driver + `files.fdt` + GENERIC64 (check 1), b1b = build
+     GENERIC64 (check 2); validate the split checks harness-only. Then run b1b with flash on c3 **as pro left it**
+     (tests a pro-writes / flash-builds hand-off; compile errors become correction input). c3's `netbsd-src` now
+     holds pro's uncommitted edits: reset `sys/` to `7f2c5e73f` before any fresh b1/b1a attempt.
+  2. If pro becomes the b1a writer: per-model admission ceilings in `core.py` (demo numbers above), not a wrapper.
+  3. For the completion gate, run a1→a4 then b1→b3 unattended from the clean snapshot on a fresh lab, then delete
      the c3 disk.
