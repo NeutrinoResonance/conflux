@@ -5,6 +5,19 @@ Keep this short and current. One entry per decision; newest first.
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred to E); B done.
+- **C slice 14 (2026-10-27, demo, $0.008170 metered + $0 GCE): more output headroom does not turn flash's
+  truncated driver writes into executable edits. The hypothesis is rejected, and nothing was built (`MAX_TOKENS` stays 8192).**
+  - The demo replays the 3 slice-13 truncated-write inputs at max_tokens 8192 vs 16384, 3× each (18 calls, no lab).
+    `prompt_tokens` matched the recorded inputs on 18/18 replies.
+  - Primary outcome, complete admissible substantive edits: **8192 2/9, 16384 0/9** (the rule needed ≥ 5/9 vs ≤ 1/9).
+    The two 8192 successes are complete NetBSD-tree headers (`opteevar.h`, `opteeio.h`), not the driver `.c`.
+  - At 16384, reasoning grows to fill the limit (median 9919 vs 4244 tokens). 4/9 replies started whole-file
+    heredocs: 2 were over `MAX_COMMAND` (8642/9628 chars → `command_too_long`) and 2 truncated again at 16384.
+    12/18 replies were reads or probes, so slice 13's single truncated samples overstated write propensity.
+  - **Live-run risk (observed, not yet in a harness run):** 10/18 calls took over 180 s (max 713 s), while
+    `core.CHAT_TIMEOUT` is 180 s. In `run_task`, one chat timeout ends the task `unverified provider_0`. 2 calls hit a
+    slow seller billed $0.0023–0.0057 (the rest ≤ $0.000023).
+  - Evidence: `~/evidence/headroom-demo-2026-10-27/RESULTS.md` (`demo.py`, `samples.jsonl`, `reconciled.json` 18/18).
 - **C slice 13 (2026-10-27, demo, $0.001352 metered + $0 GCE): scope framing, a read cap and a pro plan each fail to
   make flash write b1. All three hypotheses are falsified, and nothing was built.**
   - The demo replays c11/b1 at k=10/20/30 with 5 samples per cell. The primary outcome is one reply per sample, pooled
@@ -170,15 +183,15 @@ MISSION-STATUS: ACTIVE
   - Model habits like `cat big | head` now report 141 with `pipestatus=141 0`. That is intended.
   - Evidence: `~/evidence/core-runs/2026-10-27-c6/` (`recheck_goal_a.py`, `recheck.json`). Suite 688 passed, 1 xfailed.
 - **Next action:**
-  1. Demo codex's hypothesis: once flash starts a write, the limit is completion headroom. Replay the 3 recorded
-     truncated-write inputs (`samples.jsonl`: ii R2 k=20 i=0 and i=3, ii R3 k=30 i=4) at `max_tokens` 8192 vs 16384,
-     1 sample each (6 calls, no lab). Use the slice-13 admission scheme, with a cap sized to the worst-case bound
-     (≈ $0.06 per call). Supported iff ≥ 2 of the 16384 replies are complete, parseable, substantive edits and
-     none of their 8192 controls is.
-  2. That test addresses only the write turn. Flash still does not reach it unaided (c10, c11, slices 12–13). If
-     headroom is supported, next demo feedback before `finish`: from step k, run the acceptance checks after each
-     step and show their failure (`run_task` does not do this today).
-  3. For the completion gate, run a1→a4 then b1→b3 unattended from the clean snapshot on a fresh lab. Then delete
+  1. Demo feedback before `finish` (codex's main diagnosis; slice 14 rejected the headroom alternative). On replayed
+     c11/b1 prefixes at k=20/30, append the real failing b1 check output to the last tool result, as `run_task` would
+     if it ran the checks after each step. Use c11's recorded check evidence; no lab. Measure next-reply write/build
+     propensity against the slice-12/13 control (0/10).
+  2. If flash then writes: demo deny recovery. Feed back the harness's `command_too_long`/`truncated_at_max_tokens`
+     denial for the 4 slice-14 16384 writes and the 3 slice-13 writes, then sample whether flash splits the file.
+  3. Before the next live run: reproduce the chat-timeout risk (a > 180 s reply ends the task `provider_0`) in a
+     regression test, then fix it structurally, e.g. a longer timeout or one retry.
+  4. For the completion gate, run a1→a4 then b1→b3 unattended from the clean snapshot on a fresh lab. Then delete
      the c3 disk. GCE stockouts happen (c10): retry the lab start, it is not a blocker.
 - **C slice 5 (2026-10-27, executed, $0.000000 metered + $0.05 GCE): default executor is `deepseek-v4.1-flash`; a4 cut.**
   - **Offers** (`GET https://api.surplusintelligence.ai/v1/prices`, 09:31Z): at list price v4.1-flash is *not* cheaper
