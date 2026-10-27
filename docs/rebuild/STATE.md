@@ -5,6 +5,19 @@ Keep this short and current. One entry per decision; newest first.
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred to E); B done.
+- **C slice 7 (2026-10-27, executed, $0 metered + $0.04 GCE): failed simple commands reach the model.**
+  - Every command's preamble adds a bash `ERR` trap that counts failing simple commands outside conditions (`if`,
+    `&&`/`||` lists, `!`). The EXIT marker carries the count. Results carry `failed_cmds`, which goes into exec trace rows
+    and check results. When the command exits 0 with a non-zero count, the model sees `exit=0 failed_cmds=N`. Commands
+    inside shell functions are not counted (no `errtrace`).
+  - **Hypothesis supported.** Offline: 12 new test cases across both shells, all red on the base. They cover the c3/a1
+    step 3 shape (`python3 -c 'import nope'; echo ok` → exit 0, `failed_cmds=1`) and handled failures (0). PIPESTATUS
+    is preserved: bash restores it after the trap, so `false | true; exit 3` → 3 `[1, 0]` and
+    `false; true | false` → 1 `[0, 1]`, 2 failed.
+  - On c3 (bash 5.2.15, no model): the same probes match the local results, and **a1–a4 all `pass`** (a4 in 56 s).
+    Their checks report `failed_cmds=0`.
+  - Still not covered: `|| true` and tools that exit 0 with warnings; neither leaves a failing exit status to count.
+  - Evidence: `~/evidence/core-runs/2026-10-27-c7/` (`recheck_goal_a.py`, `recheck.json`). Suite 730 passed, 1 xfailed.
 - **F step 1 (2026-10-27, executed offline, $0): the D1 self-audit runs at the end of every task.**
   - D1 flags a model step that exited 0 although its own output reports failure. `conflux/core.py` `audit()` runs in
     `run_task`'s `end()` on every exit path, so it covers both `run` and `run --lab`. It writes an `audit` trace row and
@@ -44,12 +57,9 @@ MISSION-STATUS: ACTIVE
   - Model habits like `cat big | head` now report 141 with `pipestatus=141 0`. That is intended.
   - Evidence: `~/evidence/core-runs/2026-10-27-c6/` (`recheck_goal_a.py`, `recheck.json`). Suite 688 passed, 1 xfailed.
 - **Next action:**
-  1. Structural fix for the D1 residual (harness fault, c3/a1 step 3). Extend slice 6's EXIT-trap marker with an
-     `ERR` trap that counts failing simple commands outside conditions, and show `failed_cmds=N` to the model when
-     exit=0. Add a regression test on the c3 shape (`python3 -c 'import nope'; echo ok` → exit 0, failed_cmds=1), and
-     revalidate the a1–a4 checks harness-only on c3 before any paid run.
-  2. Then run `--only a3-build,a4-boot --lab c3 --workdir '~/optee-work'` on the default executor (expected: a3 accepts
-     at once, a4 within 25 steps). Check `audit_hits`, then cut goal (b) sub-goals with harness-validated checks.
+  1. Run `--only a3-build,a4-boot --lab c3 --workdir '~/optee-work'` on the default executor. Expected: a3 accepts at
+     once, a4 within 25 steps. Check `audit_hits` and whether the model reacts to `failed_cmds`. Then cut the goal (b)
+     sub-goals, with checks validated harness-only first.
   - Delete the c3 disk once goal (a) is done or abandoned.
 - **C slice 5 (2026-10-27, executed, $0.000000 metered + $0.05 GCE): default executor is `deepseek-v4.1-flash`; a4 cut.**
   - **Offers** (`GET https://api.surplusintelligence.ai/v1/prices`, 09:31Z): at list price v4.1-flash is *not* cheaper
