@@ -63,7 +63,7 @@ OUTPUT_CEILING = 2.4e-6    # $/output token, admission bound: 2x v4.1-flash's to
 CAMPAIGN_BUDGET = 50.00
 RUN_CAP = 0.20
 EXEC_TIMEOUT = 60
-CHAT_TIMEOUT = 180
+CHAT_TIMEOUT = 900         # flash replies took up to 713 s (headroom demo); the lab deadline still bounds each call
 MAX_TIMEOUT = 10800
 POLL_S = 5
 TRANSPORT_TIMEOUT = 120    # one ssh round trip
@@ -597,27 +597,31 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
         steps += 1
         request = {"model": model, "messages": messages, "tools": TOOLS, "max_tokens": MAX_TOKENS}
         bound = len(json.dumps(request).encode()) * PRICE_CEILING + MAX_TOKENS * OUTPUT_CEILING
-        if cost + bound > task.max_usd:
-            return end("unverified", "task_budget")
-        if not budget.admit(bound):
-            return end("unverified", "run_budget")
-        status, body, latency = chat(messages, TOOLS,
-                                     timeout=None if deadline is None else deadline - time.monotonic())
-        c, kind = billed_cost(body), "billed"
-        if c is None:
-            c, kind = bound, "bound"
-        budget.settle(bound, c)
-        cost += c
-        choices = body.get("choices") if isinstance(body, dict) else None
-        msg = choices[0].get("message") if status == 200 and choices else None
-        trace.write("model_call", task=task.id, step=steps, model=model, status=status,
-                    id=body.get("id") if isinstance(body, dict) else None,
-                    latency_s=round(latency, 3), usage=body.get("usage") if isinstance(body, dict) else None,
-                    cost_usd=c, cost_kind=kind, bound_usd=bound, message=msg,
-                    finish_reason=choices[0].get("finish_reason") if msg else None,
-                    error=None if msg else (body.get("error") if isinstance(body, dict) else str(body)))
-        if past_deadline():
-            return end("unverified", "lab_deadline")
+        # One retry when no HTTP response came back (transport error or timeout); each attempt is admitted and settled.
+        for attempt in (1, 2):
+            if cost + bound > task.max_usd:
+                return end("unverified", "task_budget")
+            if not budget.admit(bound):
+                return end("unverified", "run_budget")
+            status, body, latency = chat(messages, TOOLS,
+                                         timeout=None if deadline is None else deadline - time.monotonic())
+            c, kind = billed_cost(body), "billed"
+            if c is None:
+                c, kind = bound, "bound"
+            budget.settle(bound, c)
+            cost += c
+            choices = body.get("choices") if isinstance(body, dict) else None
+            msg = choices[0].get("message") if status == 200 and choices else None
+            trace.write("model_call", task=task.id, step=steps, attempt=attempt, model=model, status=status,
+                        id=body.get("id") if isinstance(body, dict) else None,
+                        latency_s=round(latency, 3), usage=body.get("usage") if isinstance(body, dict) else None,
+                        cost_usd=c, cost_kind=kind, bound_usd=bound, message=msg,
+                        finish_reason=choices[0].get("finish_reason") if msg else None,
+                        error=None if msg else (body.get("error") if isinstance(body, dict) else str(body)))
+            if past_deadline():
+                return end("unverified", "lab_deadline")
+            if status != 0:
+                break
         if not isinstance(msg, dict):
             return end("unverified", f"provider_{status}")
         calls = msg.get("tool_calls") or []

@@ -7,6 +7,10 @@ MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred
   to E); B done. Goal (a) a1–a4 each model-accepted (not yet as one run); goal (b) b1 not yet accepted.
+- **C slice 17 (2026-10-27, harness fix, $0): a slow provider reply no longer ends a task.** `CHAT_TIMEOUT` 180 → 900 s
+  (flash replies measured up to 713 s); `run_task` retries a status-0 call (transport error/timeout) once, each attempt
+  admitted, settled and traced with `attempt`; no retry past the lab deadline, HTTP errors not retried. Regression test
+  reproduced `unverified provider_0` before the fix. Evidence: `~/evidence/chat-timeout-2026-10-27/RESULTS.md`.
 - **C slice 16 (2026-10-27, demo, $0.001272 metered + $0 GCE): a stronger executor in flash's seat also reads.
   Hypothesis falsified; nothing built.**
   - Replayed c11/b1 (flash's history) at k=10/20/30 and sampled one next reply from `deepseek-v4-pro` (n=5 per k),
@@ -63,12 +67,9 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. Harness fault before the next live run: reproduce the chat-timeout risk (a reply slower than `CHAT_TIMEOUT`
-     ends the task `unverified provider_0`) in a regression test, then fix it structurally (e.g. a longer timeout
-     or one retry). $0.
-  2. Then a multi-step b1 demo run with `--model deepseek-v4-pro` on lab c3 (fresh b1 attempt, cap ≈ $0.10 metered,
+  1. A multi-step b1 demo run with `--model deepseek-v4-pro` on lab c3 (fresh b1 attempt, cap ≈ $0.10 metered,
      ≈ $0.25 GCE; `PRICE_CEILING`/`OUTPUT_CEILING` are flash rates, so set pro's bound): does pro write, build
      and get accepted where flash failed twice? If yes, demo a flash-builds / pro-writes hand-off for cost; if no,
      re-cut b1 into smaller sub-goals (driver file + config, then build).
-  3. For the completion gate, run a1→a4 then b1→b3 unattended from the clean snapshot on a fresh lab, then delete
+  2. For the completion gate, run a1→a4 then b1→b3 unattended from the clean snapshot on a fresh lab, then delete
      the c3 disk.
