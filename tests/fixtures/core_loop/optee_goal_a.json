@@ -44,7 +44,7 @@
   "goal": "Overall task (run 12, goal a): on this Linux machine, get QEMU set up with OP-TEE, i.e. build OP-TEE for QEMU Armv8-A (qemu_v8) from the official OP-TEE manifest and build repositories, and later boot it in QEMU. Work in the current directory; the OP-TEE source tree must live in ./optee (the repo client root). You may use sudo -n if it is available. The work is split into sub-goals; this one is: build the complete qemu_v8 setup (toolchains, OP-TEE OS, TF-A, U-Boot, Linux, buildroot rootfs and QEMU) in optee/build. Do not boot it yet.",
   "checks": [
    {
-    "cmd": "cd optee/out/bin && for f in bl1.bin bl2.bin bl31.bin bl32.bin bl32_extra1.bin bl32_extra2.bin Image rootfs.cpio.gz; do test -s $f || { echo missing $f; exit 1; }; done"
+    "cmd": "cd optee/out/bin && for f in bl1.bin bl2.bin bl31.bin bl32.bin bl32_extra1.bin Image rootfs.cpio.gz; do test -s $f || { echo missing $f; exit 1; }; done && test -e bl32_extra2.bin"
    },
    {
     "cmd": "optee/qemu/build/qemu-system-aarch64 --version | head -n 1 | grep -q 'QEMU emulator version'",
