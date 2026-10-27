@@ -9,7 +9,7 @@
     "proxy.log": "2e73590d6d9ab802d1c4db3a64238c136f78a250e441e6c025a3afdf7fa8e1d2",
     "traces.db": "671df4f211bd083c758bf1b2b672fac4c789ceb0da97d6b52e58d23a8c8f7b46"
   },
-  "analysis_outputs": "~/evidence/analysis/run12-netbsd/ (actions.json, replay.txt, chain.txt)",
+  "analysis_outputs": "~/evidence/analysis/run12-netbsd/ (actions.json, replay.txt, chain.txt, t2_replay.txt, t2_fix_replay.py sha256 16a1c7fd…, t2_fix_replay.txt sha256 c28e65b4…)",
   "counts": {
     "governed_actions": 308,
     "with_false_relative_path": 39,
@@ -17,7 +17,9 @@
     "soundness_failed_closed_http_402": 26,
     "first_http_402_soundness_check": "act_92241593456e411d 2026-10-24T10:29:09Z",
     "goal_a_verified": "act_b5b9add8426e4a9f 2026-10-24T17:02:39Z",
-    "netbsd_clone_launch_proposals_reaching_governance": 0
+    "netbsd_clone_launch_proposals_reaching_governance": 0,
+    "failed_retry_holds": 10,
+    "failed_retry_holds_on_no_verdict_prior": 6
   },
   "actions": [
     {

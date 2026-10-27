@@ -55,7 +55,7 @@ ADVISORY_CHECKS = {
         "If a verifier accumulates errors or discrepancies, make the same program "
         "exit nonzero, raise, or assert when that collection is nonempty."),
 }
-FINAL_ACTION_STATES = {"completed", "blocked", "denied", "postcheck_failed"}
+FINAL_ACTION_STATES = {"completed", "blocked", "denied", "postcheck_failed", "unverified"}
 SHELL_TOOL_NAMES = {"shell", "terminal", "bash", "exec", "run_command", "command"}
 
 READ_COMMANDS = {
@@ -246,7 +246,7 @@ class ActionVerdict:
 
 @dataclass(frozen=True)
 class SoundnessPlan:
-    decision: str  # accept | probe | fail
+    decision: str  # accept | probe | fail | unverified (no verdict was produced)
     hypothesis: str
     test_description: str
     reason: str
@@ -1512,6 +1512,11 @@ def _soundness_payload(text: str) -> dict[str, Any]:
     return parsed
 
 
+def _soundness_status(decision: str) -> str:
+    # A check that produced no verdict is missing evidence, not a failed postcondition.
+    return {"accept": "completed", "unverified": "unverified"}.get(decision, "postcheck_failed")
+
+
 class ActionGovernor:
     def __init__(self, cfg: Config, client: Client, trace: Trace, store: ActionStore,
                  runtime: SQLiteFlowRuntime,
@@ -2476,7 +2481,7 @@ class ActionGovernor:
             checker = self._critic_model(executor)
         except Exception as exc:
             return SoundnessPlan(
-                decision="fail",
+                decision="unverified",
                 hypothesis="The claimed effect has not been independently falsified.",
                 test_description="No test could run because the checker is unavailable.",
                 reason=f"independent soundness checker unavailable: {exc}",
@@ -2587,7 +2592,7 @@ class ActionGovernor:
             )
         except Exception as exc:
             return SoundnessPlan(
-                decision="fail",
+                decision="unverified",
                 hypothesis="The declared postcondition remains unproven.",
                 test_description="The checker failed before producing a valid bounded test.",
                 reason=f"soundness checker failed closed: {exc}",
@@ -2694,7 +2699,7 @@ class ActionGovernor:
                          max(0.0, budget_remaining - total_cost))
             if available <= 0:
                 plan = SoundnessPlan(
-                    decision="fail",
+                    decision="unverified",
                     hypothesis="The declared postcondition remains unproven.",
                     test_description="No test ran because the task budget was exhausted.",
                     reason="soundness-check budget exhausted; the claim failed closed",
@@ -2705,7 +2710,7 @@ class ActionGovernor:
                 )
                 if plan.cost_usd > available:
                     plan = replace(
-                        plan, decision="fail", probe=None,
+                        plan, decision="unverified", probe=None,
                         reason=("soundness check exceeded the remaining task budget and "
                                 "failed closed"),
                     )
@@ -2802,7 +2807,7 @@ class ActionGovernor:
             self.store.put_soundness(check_id, action, "completed", plan)
             self.store.update_soundness(check_id, "completed", verdict=plan)
             passed = plan.decision == "accept"
-            self.store.update(action_id, "completed" if passed else "postcheck_failed")
+            self.store.update(action_id, _soundness_status(plan.decision))
             self._record(
                 session, task, run_id, "soundness_check_result", "soundness_checker",
                 action_id=action_id, check_id=check_id, passed=passed,
@@ -2865,7 +2870,7 @@ class ActionGovernor:
             )
             if budget_remaining is not None and budget_remaining <= 0:
                 verdict = SoundnessPlan(
-                    decision="fail",
+                    decision="unverified",
                     hypothesis="The declared postcondition remains unproven.",
                     test_description="The independent probe ran but could not be interpreted.",
                     reason="soundness-check budget exhausted before interpretation; failed closed",
@@ -2880,7 +2885,7 @@ class ActionGovernor:
                 if (budget_remaining is not None and
                         verdict.cost_usd > budget_remaining):
                     verdict = replace(
-                        verdict, decision="fail", probe=None,
+                        verdict, decision="unverified", probe=None,
                         reason=("soundness interpretation exceeded the remaining task "
                                 "budget and failed closed"),
                     )
@@ -2891,9 +2896,7 @@ class ActionGovernor:
                         "is_error": bool(message.get("is_error", False))},
                 verdict=verdict,
             )
-            self.store.update(
-                action["action_id"], "completed" if passed else "postcheck_failed"
-            )
+            self.store.update(action["action_id"], _soundness_status(verdict.decision))
             self._record(
                 session, task, run_id, "soundness_check_result", "soundness_checker",
                 action_id=action["action_id"], check_id=check["check_id"],

@@ -13,8 +13,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import pytest
-
 from conflux.history import History
 from conflux.orchestrator import ControlState, Orchestrator
 from conflux.providers import ChatResult, ProviderError
@@ -67,7 +65,6 @@ class SoundnessNoVerdictTests(unittest.IsolatedAsyncioTestCase):
         retry = next(a for a in orch.action_store.list() if a["action_id"] != pending[0])
         return outcome, status, retry
 
-    @pytest.mark.xfail(strict=True, reason="T2: 402 no-verdict stored as postcheck_failed")
     async def test_provider_402_leaves_action_unverified_and_retry_not_held(self) -> None:
         outcome, status, retry = await self.check_then_retry("402")
         self.assertEqual(status, "unverified")
