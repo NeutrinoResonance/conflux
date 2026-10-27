@@ -74,6 +74,11 @@ def test_recorded_checks_name_no_phantom_relative_paths(action_id):
     (r"cat /tmp/b\;3</tmp/in", {("/tmp/b;3", "read"), ("/tmp/in", "read")}, []),
     ("grep --reg=x /etc/passwd /tmp/allowed", {("/etc/passwd", "read"), ("/tmp/allowed", "read")}, []),
     ("grep --rege x /etc/passwd", {("/etc/passwd", "read")}, ["x"]),
+    ("true;2>/tmp/private", {("/tmp/private", "write")}, []),
+    ("true;>/tmp/private", {("/tmp/private", "write")}, []),
+    ("true|2>/tmp/private; cat /tmp/allowed", {("/tmp/private", "write"), ("/tmp/allowed", "read")}, []),
+    ("echo x &>>/tmp/log 2>&1", {("/tmp/log", "write")}, []),
+    ("cat <>/tmp/dev", {("/tmp/dev", "write")}, []),
 ])
 def test_gate_still_names_real_operands(command, effects, relative):
     # The fix must drop only non-path operands; real files stay scoped or unproven.

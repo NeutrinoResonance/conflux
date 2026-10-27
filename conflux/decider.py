@@ -827,7 +827,23 @@ _WRITE_PROGRAMS = {"touch", "mkdir", "rm", "rmdir"}
 _PURE_PROGRAMS = {"echo", "printf", "true", "false", ":"}
 _DEVICES = {"/dev/null", "/dev/stdout", "/dev/stderr", "/dev/zero", "/dev/urandom"}
 _SYSTEM_PREFIXES = ("/usr/", "/bin/", "/sbin/")
-_REDIRECTS = {">": "write", ">>": "write", ">|": "write", "&>": "write", "<": "read"}
+_REDIRECTS = {">": "write", ">>": "write", ">|": "write", "&>": "write", "&>>": "write", "<>": "write", "<": "read"}
+# shlex groups any run of punctuation (`;>`); split it into shell operators, longest first.
+_OPERATORS = ("&>>", "&&", "||", ";;", "|&", ">>", ">|", "&>", ">&", "<&", "<<", "<>",
+              ";", "|", "&", "(", ")", "<", ">")
+
+
+def _split_operators(token: str) -> list[str]:
+    if not token or set(token) - set("();<>|&"):
+        return [token]
+    parts = []
+    while token:
+        op = next(o for o in _OPERATORS if token.startswith(o))
+        parts.append(op)
+        token = token[len(op):]
+    return parts
+
+
 # Short options whose value is the rest of the cluster or the next word.
 _VALUE_OPTIONS = {"head": "nc", "tail": "nc", "grep": "efmABC"}
 
@@ -912,7 +928,7 @@ def _shell_effects(command: str, cwd: str | None, *, read_only: bool = False,
     lexer = shlex.shlex(_strip_fd_prefixes(command).replace("\n", " ; "), posix=True, punctuation_chars=True)
     lexer.whitespace_split = True
     try:
-        tokens = list(lexer)
+        tokens = [part for token in lexer for part in _split_operators(token)]
     except ValueError as exc:
         unresolved(str(exc))
         return []

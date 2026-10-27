@@ -193,6 +193,16 @@ def test_done_authorizes_only_exact_system_checks_with_read_effects(command, is_
             enforce_scope(parsed, _tool_call(command), ToolManifest(name="terminal"), is_check=is_check)
 
 
+@pytest.mark.parametrize("command", ["cat /tmp/item;2>/tmp/item", "true;>/tmp/item; cat /tmp/item"])
+def test_done_check_cannot_hide_a_write_behind_a_separator(command):
+    from tests.test_action_governor import _body, _tool_call
+    raw = decision(True)
+    raw["check"][0]["arguments"]["command"] = command
+    parsed = Decision.parse(json.dumps(raw), _body()["tools"])
+    with pytest.raises(ScopeViolation, match="read-only effects"):
+        enforce_scope(parsed, _tool_call(command), ToolManifest(name="terminal"), is_check=True)
+
+
 @pytest.mark.parametrize("wrap", ["```json\n{}\n```", "Here is the decision:\n{}\nSome explanation."])
 def test_decision_extracts_first_object_and_allows_empty_done_step(wrap):
     raw = decision(True)
