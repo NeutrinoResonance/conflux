@@ -5,6 +5,35 @@ Keep this short and current. One entry per decision; newest first.
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred to E); B done.
+- **C slice 4 (2026-10-27, executed, $0.011158 metered + $0.36 GCE): bare flash builds the full qemu_v8 tree.**
+  Run c4 on kept lab `c3`, `--only a2-sources,a3-build`, 1 tunnel start, 0 restarts.
+  - **a2 accepted** in 12 steps / 256 s / $0.00052. That is more than the predicted ≤ 5: flash re-installed `repo`
+    and re-ran `repo init`/`sync` instead of first inspecting the existing tree.
+  - **a3 `failed` at the step cap** (40 steps, 3353 s, $0.010638), **but the build is complete.** `make toolchains`
+    (step 21) and `make -j8` (step 29, 2129 s) both finished, and QEMU 10.0.0 was built. The check was wrong again: it
+    required `bl32_extra2.bin` to be non-empty. That file links to `tee-pageable_v2.bin`, which is 0 bytes because the
+    default config has `CFG_WITH_PAGER=n`. Flash spent steps 32–40 investigating the impossible check.
+  - Check fixed: the file must exist, and every other image must be non-empty. A regression test covers the real
+    layout. A model-free recheck on the kept disk gives a3 `pass` on both checks (`recheck_a3.json`). That pass is
+    not a model-accepted run.
+  - **Hypothesis partly supported:** with tunnelled egress, flash drives the whole goal-(a) build within its caps.
+    Acceptance failed on the harness's check, not on the work.
+  - **Model failure modes (bare flash):**
+    - Steps 1–20 went to reading makefiles in 4 KB slices and installing packages before any build started.
+    - `make … | tail` masks make's exit code.
+    - It never questions a check it cannot satisfy and never calls `finish`.
+  - **Process lesson (twice now):** every acceptance check must pass, harness-only, on a real tree *before* a paid
+    model run.
+  - 52/52 calls export-matched. Lab `c3` is stopped with its disk kept (built tree).
+    Evidence: `~/evidence/core-runs/2026-10-27-c4/`. Tests: 53 in `tests/test_core_loop.py`.
+- **Next action:**
+  1. Apply the founder decision (MISSION.md, 2026-10-27): switch `conflux.core.MODEL` to `deepseek-v4.1-flash` after
+     comparing current offers. Re-check the 3 tuning tasks and reconcile billing.
+  2. Cut a4 (boot QEMU with OP-TEE + Linux). Take its acceptance check from `optee/build/qemu_v8.mk`'s `check`
+     target, which boots via expect and writes `serial0.log`/`serial1.log`, plus run-12 evidence. Validate the
+     check harness-only on the kept `c3` disk first (e.g. `make check-only` with no model).
+  3. Run `--only a3-build,a4-boot --lab c3` on the new default model: a3 should accept at once.
+  - Delete the c3 disk once goal (a) is done or abandoned.
 - **C slice 3 (2026-10-27, executed, $0.004105 metered + $0.13 GCE): labs have egress.** No Cloud NAT exists (0 routers).
   - **How:** `run_lab` serves a stdlib HTTP CONNECT/forward proxy on the controller (`egress_proxy`). A supervised
     `gcloud compute ssh -N -R 3128:…` reverse-tunnels it to the lab. Every lab job gets `PROXY_ENV`. Harness setup
@@ -27,10 +56,6 @@ MISSION-STATUS: ACTIVE
   - The proxy's EOF handling became a half-close after run c3 had started (c3 ran commit `6bce1ef`); covered by a test.
   - 49/49 calls export-matched. Lab `conflux-dev-lab-c3` is **stopped with its disk kept** (a1 + a2 state).
     Evidence: `~/evidence/core-runs/2026-10-27-c3/`.
-- **Next action:** on lab `c3` (kept disk), run `--only a2-sources,a3-build --lab c3 --lab-hours 4`. a2 should
-  accept at once; a3 is the first real build measurement on bare flash, ≤ $0.10 metered, ≤ 4 h lab. Then a4: boot
-  QEMU, with a serial-log check for OP-TEE + Linux, to be added to the fixture. Delete the c3 disk once goal (a) is
-  done or abandoned.
 - **C slice 2 (2026-10-27, executed, $0.00293 metered + $0.10 GCE):** `conflux/core.py` now runs commands through a
   `Shell`. `lab_shell` runs each command as a detached job on a `devbox-lab` VM (`~/.conflux-jobs/<id>/`), polled over
   `gcloud compute ssh`. Waits are capped by one deadline that starts at lab startup. `run --lab` owns up → smoke →

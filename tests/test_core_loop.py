@@ -370,6 +370,19 @@ def test_optee_goal_a_checks_execute_and_reject_an_empty_workdir(tmp_path):
         assert core.run_checks(t.checks, core.local_shell(tmp_path))[0] == "fail"
 
 
+def test_optee_a3_image_check_accepts_the_empty_pageable_image(tmp_path):
+    # Run c4's real tree: CFG_WITH_PAGER=n leaves tee-pageable_v2.bin (bl32_extra2.bin) at 0 bytes.
+    image_check = [Task.from_dict(d) for d in json.loads((FIXTURES / "optee_goal_a.json").read_text())][2].checks[0]
+    out = tmp_path / "optee/out/bin"
+    out.mkdir(parents=True)
+    for f in ("bl1.bin", "bl2.bin", "bl31.bin", "bl32.bin", "bl32_extra1.bin", "Image", "rootfs.cpio.gz"):
+        (out / f).write_bytes(b"x")
+    (out / "bl32_extra2.bin").touch()
+    assert core.run_checks([image_check], core.local_shell(tmp_path))[0] == "pass"
+    (out / "bl32_extra1.bin").write_bytes(b"")
+    assert core.run_checks([image_check], core.local_shell(tmp_path))[0] == "fail"
+
+
 def test_lab_shell_rides_out_transient_poll_failures(lab):
     calls = []
 
