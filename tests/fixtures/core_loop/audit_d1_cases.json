@@ -1,0 +1,117 @@
+{
+ "source": "~/evidence/core-runs/ (outside Git); outputs truncated to the last 10 lines",
+ "cases": [
+  {
+   "trace": "2026-10-27-c4/a3-build/trace.jsonl",
+   "sha256": "dc8cfb460a116762493b06432a1174f72bee50ac1bc600f5e09d6142bdd77830",
+   "step": 27,
+   "expect": "hit",
+   "why": "masked make failure behind | tail",
+   "row": {
+    "event": "exec",
+    "source": "model",
+    "step": 27,
+    "command": "cd optee/build && make -j$(nproc) 2>&1 | tail -100",
+    "exit": 0,
+    "stdout": "make: *** [Makefile:407: u-boot] Error 2\n  CHK     out/arm/conf.cmake\n  CHK     out/arm/export-ta_arm64/mk/conf.mk\n  GEN     out/arm/ta/app_secrets/dyn_list\n  GEN     out/arm/ta/avb/dyn_list\n  GEN     out/arm/ta/pkcs11/dyn_list\n  GEN     out/arm/ta/remoteproc/dyn_list\n  GEN     out/arm/ta/trusted_keys/dyn_list\n  CHK     out/arm/include/generated/conf.h\nmake[1]: Leaving directory '/home/dev/optee-work/optee/optee_os'",
+    "stderr": ""
+   }
+  },
+  {
+   "trace": "2026-10-27-c3/a1-host-prereqs/trace.jsonl",
+   "sha256": "d96911d91cdf87364e8beb0767d1fe6fe02acbd6317e34a20dbe65133f042e0b",
+   "step": 3,
+   "expect": "hit",
+   "why": "Traceback hidden by a ; chain",
+   "row": {
+    "event": "exec",
+    "source": "model",
+    "step": 3,
+    "command": "command -v repo; echo \"---\"; command -v ninja; command -v dtc; command -v bison; command -v flex; command -v cpio; command -v rsync; command -v unzip; command -v make; command -v git; echo \"---\"; python3 -c 'import elftools, Crypto, cryptography, serial' 2>&1; echo \"---\"; pkg-config --exists glib-2.0 pixman-1 && echo \"pkg-config OK\" || echo \"pkg-config FAIL\"",
+    "exit": 0,
+    "stdout": "/usr/bin/flex\n/usr/bin/cpio\n/usr/bin/make\n/usr/bin/git\n---\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nModuleNotFoundError: No module named 'elftools'\n---\npkg-config OK",
+    "stderr": ""
+   }
+  },
+  {
+   "trace": "2026-10-27-c3/a1-host-prereqs/trace.jsonl",
+   "sha256": "d96911d91cdf87364e8beb0767d1fe6fe02acbd6317e34a20dbe65133f042e0b",
+   "step": 9,
+   "expect": "none",
+   "why": "read: apt search | grep with quoted \\|",
+   "row": {
+    "event": "exec",
+    "source": "model",
+    "step": 9,
+    "command": "apt search repo 2>/dev/null | grep -i \"repo\\|google\"",
+    "exit": 0,
+    "stdout": "  set of tools for reporting on and manipulating MPEG data\n  report historical system real time\n  record/mock hardware devices for bug reports and regression tests\n  USB ID Repository\n  Version Control System for $HOME - multiple Git repositories in $HOME\n  Command line tool to make working with multiple repositories easier\nwreport-common/oldstable 3.35-2+b1 amd64\n  common data files for libwreport\n  X Amateur Station Tracking and Information Reporting\n  X Amateur Station Tracking and Information Reporting",
+    "stderr": ""
+   }
+  },
+  {
+   "trace": "2026-10-27-c3/a2-sources/trace.jsonl",
+   "sha256": "d9c77a275569a9c5f936795f7d8072b89f703266c4f750626b166f8d32d5da40",
+   "step": 3,
+   "expect": "none",
+   "why": "read: apt search | grep",
+   "row": {
+    "event": "exec",
+    "source": "model",
+    "step": 3,
+    "command": "apt search repo 2>/dev/null | grep -i repo",
+    "exit": 0,
+    "stdout": "  set of tools for reporting on and manipulating MPEG data\n  report historical system real time\n  record/mock hardware devices for bug reports and regression tests\n  USB ID Repository\n  Version Control System for $HOME - multiple Git repositories in $HOME\n  Command line tool to make working with multiple repositories easier\nwreport-common/oldstable 3.35-2+b1 amd64\n  common data files for libwreport\n  X Amateur Station Tracking and Information Reporting\n  X Amateur Station Tracking and Information Reporting",
+    "stderr": ""
+   }
+  },
+  {
+   "trace": "2026-10-27-c4/a3-build/trace.jsonl",
+   "sha256": "dc8cfb460a116762493b06432a1174f72bee50ac1bc600f5e09d6142bdd77830",
+   "step": 12,
+   "expect": "none",
+   "why": "read: cat | grep with quoted \\|",
+   "row": {
+    "event": "exec",
+    "source": "model",
+    "step": 12,
+    "command": "cat optee/build/common.mk | grep -n 'CROSS_COMPILE\\|CCACHE\\|TOOLCHAIN'",
+    "exit": 0,
+    "stdout": "388:\t\tCROSS_COMPILE=$(CROSS_COMPILE_NS_KERNEL) \\\n425:QEMU_CONFIGURE_PARAMS_COMMON = --cc=\"$(CCACHE)gcc\" --extra-cflags=\"-Wno-error\" \\\n537:OPTEE_OS_TA_CROSS_COMPILE_FLAGS\t+= CROSS_COMPILE_ta_arm64=\"$(CCACHE)$(AARCH64_CROSS_COMPILE)\"\n538:OPTEE_OS_TA_CROSS_COMPILE_FLAGS\t+= CROSS_COMPILE_ta_arm32=\"$(CCACHE)$(AARCH32_CROSS_COMPILE)\"\n557:OPTEE_OS_TA_CROSS_COMPILE_FLAGS\t+= CROSS_COMPILE_ta_rv64=\"$(CCACHE)$(RISCV64_CROSS_COMPILE)\"\n558:OPTEE_OS_TA_CROSS_COMPILE_FLAGS\t+= CROSS_COMPILE_ta_rv32=\"$(CCACHE)$(RISCV32_CROSS_COMPILE)\"\n566:\tCROSS_COMPILE=$(CROSS_COMPILE_S_USER) \\\n567:\tCROSS_COMPILE_core=$(CROSS_COMPILE_S_KERNEL) \\\n568:\t$(OPTEE_OS_TA_CROSS_COMPILE_FLAGS) \\\n595:\tCROSS_COMPILE=$(CROSS_COMPILE_S_USER)\t\\",
+    "stderr": ""
+   }
+  },
+  {
+   "trace": "2026-10-27-c4/a3-build/trace.jsonl",
+   "sha256": "dc8cfb460a116762493b06432a1174f72bee50ac1bc600f5e09d6142bdd77830",
+   "step": 40,
+   "expect": "none",
+   "why": "read: git log",
+   "row": {
+    "event": "exec",
+    "source": "model",
+    "step": 40,
+    "command": "cd optee/build && git log --oneline -20 -- qemu_v8.mk 2>/dev/null",
+    "exit": 0,
+    "stdout": "a1e87ea qemu_v8: add $(OUT_PATH) recipe\n85cc2db qemu_v8: add Trusted Services support\n0264ae3 qemu_v8: fix \"make check\" with QEMU v9.2.0\n1977c37 qemu_v8: support new path to QEMU v9.2.0\n23855b0 qemu_v8.mk: re-enable MEASURED_BOOT_FTPM by default\n009f86a Revert \"qemu_v8.mk: enable MEASURED_BOOT_FTPM by default\"\ne537475 qemuv8: fix TF-A link error on aarch64 build hosts\n9bf2bbe qemu_v8.mk: enable MEASURED_BOOT_FTPM by default\nc926e0b qemu_v8: add CC=... to TF_A_EXPORTS\n75a2959 qemu_v8: remove ENABLE_SPE_FOR_LOWER_ELS",
+    "stderr": ""
+   }
+  },
+  {
+   "trace": "2026-10-27-c5/tuning/fix-mean-1/trace.jsonl",
+   "sha256": "297b34d927f228bfb79f83c7d01817b35c43fcbca890dee5cd65ad435cf16570",
+   "step": 1,
+   "expect": "none",
+   "why": "model captured $? itself",
+   "row": {
+    "event": "exec",
+    "source": "model",
+    "step": 1,
+    "command": "python3 check_calc.py; echo \"exit=$?\"",
+    "exit": 0,
+    "stdout": "exit=1",
+    "stderr": "Traceback (most recent call last):\n  File \"/home/dev/evidence/core-runs/2026-10-27-c5/tuning/fix-mean-1/work/check_calc.py\", line 3, in <module>\n    assert mean([1, 2]) == 1.5, mean([1, 2])\n           ^^^^^^^^^^^^^^^^^^^\nAssertionError: 1"
+   }
+  }
+ ]
+}
