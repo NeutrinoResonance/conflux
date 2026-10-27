@@ -30,8 +30,16 @@
   it runs `up`, waits for ssh, smokes, runs tasks in order, and always runs `stop`. Every command is a detached job in
   `~/.conflux-jobs/<id>/` on the lab (`cmd.sh`, `out`, `err`, `rc`), polled every 5 s over `gcloud compute ssh
   --internal-ip` with an ssh ControlMaster socket in `~/.ssh/cm-*`.
-- **Labs have no internet egress (verified 2026-10-27):** no external IP, no Cloud NAT in the project, Private Google
-  Access only. GitHub, Debian mirrors and PyPI time out; Google endpoints answer. Smoke: user `dev`, passwordless sudo.
+- **Labs have no direct internet egress (verified 2026-10-27):** no external IP, no Cloud NAT in the project (the
+  controller cannot create routers), Private Google Access only. Smoke: user `dev`, passwordless sudo.
+- **Egress is tunnelled (C slice 3):**
+  - `run_lab` serves an HTTP CONNECT/forward proxy (`conflux.core.egress_proxy`) on the controller's 127.0.0.1;
+  - a supervised `gcloud compute ssh -N -R 3128:127.0.0.1:<port>` exposes it as the lab's `127.0.0.1:3128`;
+  - every lab job gets `http(s)_proxy`/`no_proxy` (`PROXY_ENV`), and harness setup sets the apt proxy
+    (`/etc/apt/apt.conf.d/95conflux-proxy`) and sudo `env_keep` (`/etc/sudoers.d/conflux-proxy`);
+  - an egress check (curl github/pypi, `apt-get update`) gates the first model call (`egress_failed`).
+  - Verified in run c3: apt, pip, curl, git, `repo init` and the full qemu_v8 `repo sync` (56 s) all went through it.
+  - Tools that ignore proxy env (raw sockets, `git://`, ping) have no egress.
 
 ## Workers
 

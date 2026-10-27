@@ -316,9 +316,19 @@ def fast_poll(monkeypatch):
     monkeypatch.setattr(core, "POLL_S", 0.1)
 
 
+@pytest.fixture(autouse=True)
+def no_sudo_setup(monkeypatch):
+    """The local seam has no sudo: lab setup and the egress check succeed trivially unless a test says otherwise."""
+    monkeypatch.setattr(core, "LAB_SETUP", "true")
+    monkeypatch.setattr(core, "EGRESS_CHECK", "true")
+
+
 def _run_lab(tmp_path, chat, hours=1.0, tasks=(TOUCH,)):
+    """The tunnel is a long sleep that records its pid, so tests can check it is gone afterwards."""
+    pidfile = tmp_path / "tunnel.pid"
     return core.run_lab(list(tasks), chat, Budget(1.0), tmp_path / "out", "c2", str(tmp_path / "w"), hours,
-                        remote=core.local_remote)
+                        remote=core.local_remote,
+                        tunnel=lambda port: ["bash", "-c", f"echo $$ > {pidfile}; exec sleep 1000"])
 
 
 def test_run_lab_stops_the_lab_after_normal_completion(lab, tmp_path, devbox_lab):
@@ -423,3 +433,122 @@ def test_provider_call_is_bounded_by_the_lab_deadline(tmp_path):
     res = run_task(TOUCH, slow, core.local_shell(tmp_path), Trace(), Budget(1.0),
                    deadline=time.monotonic() + 0.5)
     assert res["reason"] == "lab_deadline" and not (tmp_path / "ran").exists()
+
+
+# ---------------------------------------------------------------- slice 3: lab egress
+
+
+import http.server
+import socket
+import threading
+import urllib.request
+
+
+def _http_server():
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = f"{self.path}|{self.headers.get('Connection')}|{self.headers.get('Proxy-Authorization')}"
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body.encode())
+
+        def log_message(self, *a):
+            pass
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+
+def test_egress_proxy_forwards_absolute_form_http_as_one_closed_request():
+    srv = _http_server()
+    port = core.egress_proxy()
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({"http": f"http://127.0.0.1:{port}"}))
+    req = urllib.request.Request(f"http://127.0.0.1:{srv.server_port}/dists/x?y=1",
+                                 headers={"Proxy-Authorization": "Basic x"})
+    assert opener.open(req, timeout=10).read().decode() == "/dists/x?y=1|close|None"
+    srv.shutdown()
+
+
+def test_egress_proxy_tunnels_connect():
+    echo = socket.create_server(("127.0.0.1", 0))
+
+    def serve():
+        c, _ = echo.accept()
+        c.sendall(c.recv(100).upper())
+        c.close()
+    threading.Thread(target=serve, daemon=True).start()
+    s = socket.create_connection(("127.0.0.1", core.egress_proxy()), timeout=10)
+    s.sendall(f"CONNECT 127.0.0.1:{echo.getsockname()[1]} HTTP/1.1\r\nHost: x\r\n\r\n".encode())
+    assert s.recv(100).startswith(b"HTTP/1.1 200")
+    s.sendall(b"ping")
+    assert s.recv(100) == b"PING"
+    s.close()
+
+
+def test_egress_proxy_answers_502_for_an_unreachable_upstream():
+    dead = socket.create_server(("127.0.0.1", 0))
+    port = dead.getsockname()[1]
+    dead.close()
+    s = socket.create_connection(("127.0.0.1", core.egress_proxy()), timeout=10)
+    s.sendall(f"CONNECT 127.0.0.1:{port} HTTP/1.1\r\n\r\n".encode())
+    assert s.recv(100).startswith(b"HTTP/1.1 502")
+
+
+def test_lab_shell_exports_env_to_every_job(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    sh = core.lab_shell(core.local_remote, str(tmp_path / "w"), poll_s=0.1, env=core.PROXY_ENV)
+    r = sh("echo $https_proxy $no_proxy", 10)
+    assert r["stdout"] == f"http://127.0.0.1:3128 {core.PROXY_ENV['no_proxy']}\n"
+
+
+def test_gcloud_tunnel_reverse_forwards_the_lab_proxy_port():
+    argv = core.gcloud_tunnel("c3")(4567)
+    assert argv[:4] == ["gcloud", "compute", "ssh", "conflux-dev-lab-c3"]
+    assert "--ssh-flag=-R3128:127.0.0.1:4567" in argv and "--ssh-flag=-N" in argv
+    assert "--ssh-flag=-oExitOnForwardFailure=yes" in argv and not any("--command" in a for a in argv)
+
+
+def _tunnel_pid(out):
+    return int((out / "tunnel.pid").read_text())
+
+
+def test_run_lab_egress_failure_makes_no_model_call_and_kills_the_tunnel(lab, tmp_path, devbox_lab,
+                                                                         monkeypatch):
+    monkeypatch.setattr(core, "EGRESS_CHECK", "echo https://github.com 000; exit 1")
+    chat = Scripted()
+    s = _run_lab(tmp_path, chat)
+    assert s["lab"]["stopped_reason"] == "egress_failed" and s["runs"] == [] and chat.seen == []
+    assert s["lab"]["egress"]["exit"] == 1 and s["lab"]["tunnel_starts"] == 1
+    assert devbox_lab() == ["up c2", "stop c2"]
+    assert not _alive(_tunnel_pid(tmp_path))
+
+
+def test_run_lab_sets_up_egress_before_the_first_task(lab, tmp_path, devbox_lab, monkeypatch):
+    monkeypatch.setattr(core, "LAB_SETUP", "echo setup >> order.txt")
+    monkeypatch.setattr(core, "EGRESS_CHECK", "echo egress >> order.txt")
+    chat = Scripted(resp(call("run_shell", {"command": "echo task >> order.txt; echo yes > ok.txt"})),
+                    resp(call("finish", {})))
+    s = _run_lab(tmp_path, chat)
+    assert s["accepted"] == 1 and s["lab"]["egress"]["exit"] == 0
+    assert (tmp_path / "w/order.txt").read_text().split() == ["setup", "egress", "task"]
+    assert not _alive(_tunnel_pid(tmp_path))
+
+
+def test_egress_proxy_keeps_the_response_after_the_client_half_closes():
+    up = socket.create_server(("127.0.0.1", 0))
+
+    def serve():
+        c, _ = up.accept()
+        data = b""
+        while chunk := c.recv(100):  # read to the client's EOF, then answer
+            data += chunk
+        c.sendall(data[::-1])
+        c.close()
+    threading.Thread(target=serve, daemon=True).start()
+    s = socket.create_connection(("127.0.0.1", core.egress_proxy()), timeout=10)
+    s.sendall(f"CONNECT 127.0.0.1:{up.getsockname()[1]} HTTP/1.1\r\n\r\n".encode())
+    assert s.recv(100).startswith(b"HTTP/1.1 200")
+    s.sendall(b"abc")
+    s.shutdown(socket.SHUT_WR)
+    assert s.recv(100) == b"cba"
