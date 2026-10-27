@@ -5,6 +5,25 @@ Keep this short and current. One entry per decision; newest first.
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred to E); B done.
+- **C slice 13 (2026-10-27, demo, $0.001352 metered + $0 GCE): scope framing, a read cap and a pro plan each fail to
+  make flash write b1. All three hypotheses are falsified, and nothing was built.**
+  - The demo replays c11/b1 at k=10/20/30 with 5 samples per cell. The primary outcome is one reply per sample, pooled
+    at k=20/30 (n=10), counting replies with a write/build/`finish` call; plausible counts are hand-labelled:
+    - (i) scope framing (no "overall task" preface, deliverables listed as files): 1/10, 0 plausible (control 0/10).
+    - (ii) read cap, the reply after a denial: 2/10, 0 plausible (matched control: the reply after executed reads, 0/10).
+    - (iii) one `deepseek-v4-pro` file plan injected: 3/10, all `touch` permission probes, 0 plausible.
+  - **The read cap is gamed:** denied, flash writes token files (`notes/session.log`, `echo note > /tmp/…`) next to
+    more reads. `echo … > f` even matches `READ_ONLY`, so a cap built on it would let these through.
+  - **The pro plans are concrete** (`optee_fdt.c`, the `files.fdt` attach line, `device optee: smccc`), and flash
+    still only probes and reads.
+  - **New conditional bottleneck:** all 3 replies that wrote real driver code (whole-file heredocs) hit 8192
+    completion tokens, 6.2–7.4k of them reasoning. The harness would deny each one as `truncated_at_max_tokens`.
+  - **Diagnosis handed to `codex exec`** (contract; Codex subscription): flash stalls between understanding and
+    implementing, and `run_task` gives acceptance feedback only after `finish`, a reply with no tool call, or the cap.
+  - Admission reserved each call's worst case before dispatch. The cap was raised from the plan's $0.10 to $0.30,
+    because pro's bounds ($0.10–0.23) exceeded the planned cap. Billed spend: 92/92 calls export-matched.
+  - Evidence: `~/evidence/b1-arms-demo-2026-10-27/RESULTS.md` (`demo.py`, `samples.jsonl`, `plans.json`,
+    `reconciled.json`, `codex-diagnosis.md`).
 - **C slice 12 (2026-10-27, demo, $0.000084 metered + $0 GCE): telling flash its step budget does not make it write.
   The hypothesis is falsified, and nothing was built.**
   - The demo replays c11/b1's exact prefix at steps 20 and 30 (prompt tokens match c11 exactly) and samples the next
@@ -151,17 +170,14 @@ MISSION-STATUS: ACTIVE
   - Model habits like `cat big | head` now report 141 with `pipestatus=141 0`. That is intended.
   - Evidence: `~/evidence/core-runs/2026-10-27-c6/` (`recheck_goal_a.py`, `recheck.json`). Suite 688 passed, 1 xfailed.
 - **Next action:**
-  1. Demo, with the same replay script (`~/evidence/overexplore-demo-2026-10-27/demo.py`, ≈ $0.0001), one factor per
-     arm against the control:
-     - (i) **scope framing:** b1's goal text without the "Overall task … provide proof" preface, which invites
-       b2/b3 research, plus its deliverables listed as files;
-     - (ii) **deterministic read cap:** from step k, the harness denies read-only commands (`READ_ONLY`) with
-       "write or build next";
-     - (iii) **brief stronger plan:** one `deepseek-v4-pro` call on the prefix writes a file-level plan, injected
-       as a user message.
-     Count writes, and for writes, whether the content is a plausible driver or config. If all three arms fail,
-     hand the diagnosis to `codex exec` (contract).
-  2. If an arm is supported, build it with a regression test, then re-run b1 (c12) on c3.
+  1. Demo codex's hypothesis: once flash starts a write, the limit is completion headroom. Replay the 3 recorded
+     truncated-write inputs (`samples.jsonl`: ii R2 k=20 i=0 and i=3, ii R3 k=30 i=4) at `max_tokens` 8192 vs 16384,
+     1 sample each (6 calls, no lab). Use the slice-13 admission scheme, with a cap sized to the worst-case bound
+     (≈ $0.06 per call). Supported iff ≥ 2 of the 16384 replies are complete, parseable, substantive edits and
+     none of their 8192 controls is.
+  2. That test addresses only the write turn. Flash still does not reach it unaided (c10, c11, slices 12–13). If
+     headroom is supported, next demo feedback before `finish`: from step k, run the acceptance checks after each
+     step and show their failure (`run_task` does not do this today).
   3. For the completion gate, run a1→a4 then b1→b3 unattended from the clean snapshot on a fresh lab. Then delete
      the c3 disk. GCE stockouts happen (c10): retry the lab start, it is not a blocker.
 - **C slice 5 (2026-10-27, executed, $0.000000 metered + $0.05 GCE): default executor is `deepseek-v4.1-flash`; a4 cut.**

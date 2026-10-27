@@ -34,6 +34,11 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
     built or finished. This held with `[step i of 40 used; N remain]` on every tool result, and with a
     "smallest change, then finish" system sentence added. Its reasoning cites "only 10 steps left" and reads on.
     Evidence: `~/evidence/overexplore-demo-2026-10-27/RESULTS.md`.
+  - **Scope framing, a read cap and a pro plan do not fix it either (C slice 13 demo):** 0 plausible writes in
+    any arm (k=20/30, n=10 each). Denied reads, it writes token files (`notes/session.log`, `echo note > /tmp/…`,
+    `touch` probes) next to more reads. Given a concrete `deepseek-v4-pro` file plan, it runs permission probes.
+    The 3 replies that did write real driver code (whole-file heredocs) were cut off at 8192 completion tokens,
+    6.2–7.4k of them reasoning. Evidence: `~/evidence/b1-arms-demo-2026-10-27/RESULTS.md`.
 - **Cheapest billed:** < 1 micro-USD per 2k-token call (2026-10-27); 46 judge calls cost 19 micro-USD.
 - **Strong: command semantics.** "Did this command fail?" 29/30 (28 after the label fix); reasoned
   "grep with no match exits 1" on all three empty-grep items Jev missed. Evidence: Jev fair test above.
