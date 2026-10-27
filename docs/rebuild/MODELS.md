@@ -30,6 +30,10 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
     76 commands were reads (OP-TEE MSG ABI, shared memory, bus_dma, TF-A/QEMU: b2/b3 scope). Write intent appears in
     its reasoning at 9 steps, and the file path was chosen by step 40. No write, no `finish`.
     Evidence: `~/evidence/core-runs/2026-10-27-c11/RESULTS.md`.
+  - **A step budget does not fix it (C slice 12 demo):** replayed at c11 steps 20 and 30, 0/30 next replies wrote,
+    built or finished. This held with `[step i of 40 used; N remain]` on every tool result, and with a
+    "smallest change, then finish" system sentence added. Its reasoning cites "only 10 steps left" and reads on.
+    Evidence: `~/evidence/overexplore-demo-2026-10-27/RESULTS.md`.
 - **Cheapest billed:** < 1 micro-USD per 2k-token call (2026-10-27); 46 judge calls cost 19 micro-USD.
 - **Strong: command semantics.** "Did this command fail?" 29/30 (28 after the label fix); reasoned
   "grep with no match exits 1" on all three empty-grep items Jev missed. Evidence: Jev fair test above.
