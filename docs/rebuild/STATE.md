@@ -4,8 +4,21 @@ Keep this short and current. One entry per decision; newest first.
 
 MISSION-STATUS: ACTIVE
 
-- **Goal:** work item A — reproduce the NetBSD / child-model mapping failure from evidence.
-  T1 and T2 are both fixed offline; A's remaining open point is a live rerun, which is deferred to E.
+- **Goal:** work item B (provider discovery). A is done offline; its live rerun is deferred to E.
+- **B probes (2026-10-27, executed, $0.010881 of which $0.0108 is a labeled estimate):** the matrix is in
+  `docs/rebuild/PROVIDERS.md`, produced by `scripts/provider_probe.py`. Every paid call is admitted beforehand
+  against the $1 run cap and the $50 campaign budget. Covered by `tests/test_provider_probe.py`.
+  - **Verified:**
+    - Tool-call round trip passes 3/3 on both `deepseek-v4-flash` and `deepseek-v4-pro`.
+    - Flash accepts `logprobs` and returns none (3/3).
+    - Jev-1.14 `choice` on `/v1/decisions` returns per-option probabilities (1/1).
+    - All four catalogues and the NanoGPT/Kimi/GLM quota endpoints were read. NanoGPT has 60M per week with 366 used
+      and $0 balance. GLM Lite's long window is at 69% used.
+  - **Stopped by contract:** Jev usage has token counts but no billed cost, which counts as unknown
+    accounting, so all further paid calls stopped. **Not tested (no request sent):** streaming + usage on
+    both DeepSeek models, Jev `score`, v4-pro logprobs.
+  - **Unverified:** Surplus `buyer_cost_micro` is about 1% of list price on v4-pro and 35–45% on flash.
+    There is no balance endpoint to reconcile it with.
 - **T2 fixed (2026-10-27, verified offline, $0):** a soundness check that produced no verdict (checker
   unavailable, provider error such as 402, malformed output across the whole chain, budget
   exhausted) now gives decision/status `unverified`, not `postcheck_failed`. `unverified` is final
@@ -53,8 +66,7 @@ MISSION-STATUS: ACTIVE
   checking that real operands are still scoped.
 - **Known contract violation (2026-10-27, PR #1):** `conflux/verifier.py` `_parse_point` still accepts
   digit scores (`<score>7</score>`); pinned by strict xfail in `tests/test_letter_scale_contract.py`.
-- **Next action:** work item B — provider discovery, mostly at $0. List the authenticated catalogues
-  and the balance/quota endpoints for Surplus, NanoGPT, Kimi Code and GLM. Then run probes capped at
-  $1 on Surplus `deepseek-v4-pro`/`-flash` and `jev-1.14`: a tool-call round trip, streaming, usage
-  and billed cost from the response, and whether logprobs come back (3 samples each). Record them as
-  a sanitized capability matrix.
+- **Next action:** finish B for ≤ $0.10. Add a labeled `derived` cost for Jev to the probe:
+  catalogue input price × `usage.input_tokens`, admitted with the same bounds. Then run the untested probes
+  (DeepSeek streaming + usage, Jev `score` ×3, `choice` ×2 more, v4-pro logprobs). After that, start C
+  (minimal loop: DeepSeek tool proposals → deterministic checks → Jev `choice` gate).
