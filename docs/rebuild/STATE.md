@@ -5,6 +5,18 @@ Keep this short and current. One entry per decision; newest first.
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred to E); B done.
+- **C slice 11 (2026-10-27, executed, $0.000073 metered + $0.19 GCE): b1 re-run with the output-limit fix. The
+  hypothesis "with room to write, flash gets b1 accepted" is falsified. The remaining failure is a model fault.**
+  - Run c11: lab c3, bare `deepseek-v4.1-flash`, 40/40 calls export-matched, 1875 s. Both b1 checks fail, and the
+    model wrote no file again; the NetBSD tree is untouched.
+  - The fix worked: 0 truncations, all calls `finish_reason=tool_calls`, peak completion 7429 of 8192 tokens
+    (11 calls over 2.5k, which c10 would have cut off).
+  - **Model fault, 2nd materially identical failure on b1 (c10, c11):** all 76 commands were reads. They covered
+    OP-TEE MSG/SMC ABI, Linux `smc_abi.c`, shared memory, bus_dma and TF-A/QEMU/DTB, i.e. b3 and b2 scope inside b1.
+    Reasoning states write intent at 9 steps. At step 40 the file and `files.fdt` stanza were already chosen, and
+    the model went on reading. It never called `finish`. The model is never told its step budget.
+  - D1: 1 hit, a true positive (step 8, `cd` to a missing dir in a `;` chain). No harness fault.
+  - Evidence: `~/evidence/core-runs/2026-10-27-c11/RESULTS.md`. c3 stopped, disk kept.
 - **C slice 10 (2026-10-27, executed, $0.000055 metered + $0.23 GCE): first model run on goal (b). b1 `failed` at the
   step cap. Root cause is a harness fault (output limit), now fixed. The hypothesis "flash reaches b1 and b2" is not
   tested yet: confounded.**
@@ -127,12 +139,13 @@ MISSION-STATUS: ACTIVE
   - Model habits like `cat big | head` now report 141 with `pipestatus=141 0`. That is intended.
   - Evidence: `~/evidence/core-runs/2026-10-27-c6/` (`recheck_goal_a.py`, `recheck.json`). Suite 688 passed, 1 xfailed.
 - **Next action:**
-  1. Re-run goal (b) on kept lab c3 with the output-limit fix (same command as c10, `--out …-c11`). Hypothesis: with
-     room to write, flash gets b1 accepted. If b1 again ends with no file written, over-exploration is a model fault:
-     go to 2. Watch for `truncated_at_max_tokens` rows.
-  2. Candidate demo (founder rule cdba530: no code without it): bare flash over-explores and does not call `finish`
-     (c4/a3, c8/a3, c10/b1). On recorded traces, measure the steps before the first write or build and the steps
-     after the checks first pass. Only if those numbers support it, test one bounded intervention.
+  1. Demo (founder rule cdba530; contract: change hypothesis after two identical failures). Bare flash
+     over-explores and does not write or call `finish` (c10/b1, c11/b1; c4/a3 and c8/a3 do not stop). On recorded
+     traces, measure the steps before the first write or build and the steps after the checks first pass. Then
+     run a tiny cost-capped live replay: resume c11/b1 at a fixed step (e.g. 20) with one intervention, such as
+     telling the model its step budget plus "write the minimal driver first", and sample k≈5 next actions against
+     the unchanged control. Count writes. Numbers go to `~/evidence/<demo>/RESULTS.md`. Build only if they support it.
+  2. If the demo supports an intervention, re-run b1 (c12) on c3 with it.
   3. For the completion gate, run a1→a4 then b1→b3 unattended from the clean snapshot on a fresh lab. Then delete the
      c3 disk. GCE stockouts happen (c10): retry the lab start, it is not a blocker.
 - **C slice 5 (2026-10-27, executed, $0.000000 metered + $0.05 GCE): default executor is `deepseek-v4.1-flash`; a4 cut.**
