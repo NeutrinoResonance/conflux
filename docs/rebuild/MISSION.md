@@ -31,6 +31,13 @@ Only then set `MISSION-STATUS: COMPLETE` and open the promotion PR to `main`.
 
 ## Founder decisions (binding; newest first)
 
+- **2026-10-27 — Fix first: the executor masks pipeline failures.** `conflux/core.py` runs model commands
+  as plain `bash -c` (local `execute()` and the lab job launcher), so `make … | tail` reports exit 0 when
+  make fails, and the model acts on false success. The old governor enforced `pipefail`; the rebuild
+  dropped it. The next step fixes this structurally, before any further paid run: every model command
+  (local and lab) runs with `pipefail`, and the observation includes each pipeline stage's exit status
+  (`PIPESTATUS`). Don't fix it in the prompt. Re-validate the acceptance checks harness-only on a real tree,
+  because `pipefail` can turn `… | head` (SIGPIPE, 141) into a false failure. Add regression tests for both.
 - **2026-10-27 — Pick Surplus models by billed price; default executor is `deepseek-v4.1-flash`.**
   `deepseek-v4-flash` only has ~61%-discount offers. On an identical 2k-token request (2026-10-27,
   default `price` routing) it billed $0.000020; `deepseek-v4.1-flash` billed <$0.000001,
