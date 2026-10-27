@@ -57,7 +57,7 @@ SURPLUS = "https://www.surplusintelligence.ai/api/inference/v1"
 EXPORT = "https://api.surplusintelligence.ai/v1/buyer/usage/export"
 
 MODEL = "deepseek-v4.1-flash"
-MAX_TOKENS = 2048          # flash reasoning tokens count against this
+MAX_TOKENS = 8192          # flash reasoning tokens count against this; 2048 cut off 5 tool calls in c10
 PRICE_CEILING = 4e-7       # $/byte of request, admission bound: tokens <= bytes, > v4.1-flash's top input list rate ($3e-7/tok)
 OUTPUT_CEILING = 2.4e-6    # $/output token, admission bound: 2x v4.1-flash's top output list rate ($1.2e-6/tok)
 CAMPAIGN_BUDGET = 50.00
@@ -433,6 +433,19 @@ def run_checks(checks: list[Check], shell: Shell) -> tuple[str | None, list[dict
     return "pass", results
 
 
+TRUNCATED = (f"your reply was cut off at the {MAX_TOKENS}-token output limit (reasoning counts against it); "
+             "write large files in several smaller commands")
+
+
+def _truncated(body: object) -> bool:
+    """The reply hit the output limit: finish_reason "length", or completion tokens at the cap."""
+    choices = body.get("choices") if isinstance(body, dict) else None
+    if choices and choices[0].get("finish_reason") == "length":
+        return True
+    usage = body.get("usage") if isinstance(body, dict) else None
+    return isinstance(usage, dict) and (usage.get("completion_tokens") or 0) >= MAX_TOKENS
+
+
 def policy(call: dict) -> tuple[str, dict, str | None]:
     """Deterministic admission of one tool call: (name, args, deny reason or None)."""
     fn = call.get("function") or {}
@@ -601,6 +614,7 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
                     id=body.get("id") if isinstance(body, dict) else None,
                     latency_s=round(latency, 3), usage=body.get("usage") if isinstance(body, dict) else None,
                     cost_usd=c, cost_kind=kind, bound_usd=bound, message=msg,
+                    finish_reason=choices[0].get("finish_reason") if msg else None,
                     error=None if msg else (body.get("error") if isinstance(body, dict) else str(body)))
         if past_deadline():
             return end("unverified", "lab_deadline")
@@ -609,13 +623,18 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
         calls = msg.get("tool_calls") or []
         messages.append({"role": "assistant", "content": msg.get("content") or "",
                          **({"tool_calls": calls} if calls else {})})
-        finished = not calls
+        truncated = _truncated(body)
+        finished = not calls and not truncated
+        if truncated and not calls:
+            messages.append({"role": "user", "content": TRUNCATED})
         for call in calls:
             name, args, deny = policy(call)
+            if truncated and deny == "bad_arguments":
+                deny = "truncated_at_max_tokens"
             trace.write("policy", task=task.id, step=steps, tool=name, decision="deny" if deny else "allow",
                         reason=deny)
             if deny:
-                content = f"denied: {deny}"
+                content = f"denied: {deny}" + (f"; {TRUNCATED}" if deny == "truncated_at_max_tokens" else "")
             elif name == "finish":
                 finished = True
                 content = "finish recorded; the harness is running the acceptance checks"

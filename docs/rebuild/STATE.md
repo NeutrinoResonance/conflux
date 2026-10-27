@@ -5,6 +5,26 @@ Keep this short and current. One entry per decision; newest first.
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred to E); B done.
+- **C slice 10 (2026-10-27, executed, $0.000055 metered + $0.23 GCE): first model run on goal (b). b1 `failed` at the
+  step cap. Root cause is a harness fault (output limit), now fixed. The hypothesis "flash reaches b1 and b2" is not
+  tested yet: confounded.**
+  - Run c10: lab c3, bare `deepseek-v4.1-flash`, 40/40 calls export-matched. The first lab start failed on a GCE
+    stockout (n2d-standard-8, us-central1-a; $0, VM not started), and a retry 5 min later started it. Wall time 2300 s.
+    Both b1 checks fail: no `optee` line and no diff under `sys`. **The model wrote no file.**
+  - **Harness fault:** `MAX_TOKENS` 2048 counts flash's reasoning tokens. Per-call completion tokens grew with
+    context (157 → 2048), and 5 calls hit the cap with their tool arguments cut off (one was just `{`). The model
+    saw only `denied: bad_arguments`. Late calls had almost no tokens left for a file write. Latent bug, same cause:
+    a truncated reply with no tool call counted as `finish`.
+    - **Fix:** `MAX_TOKENS` is now 8192. Truncation (finish_reason `length` or completion tokens at the cap) is named
+      to the model: the deny reason is `truncated_at_max_tokens` with a hint to write in smaller commands, and a reply
+      with no tool call gets a user message, not a finish. `finish_reason` is now traced. 2 regression tests, red on the base.
+    - The worst-case admission bound per call grows by $0.0147, so caps are raised: b1–b3 to $0.15 and a4 to $0.08.
+      Recorded peaks: b1 $0.076, a4 $0.047. Billed cost is ≈ $0.000003 per call.
+  - **Model fault (record only; demo-first):** all 40 steps were reads, half of them for later sub-goals
+    (TF-A/QEMU/DTB). The design was settled by step 19. The model never called `finish` (same pattern as c4/c8).
+  - D1: 1 hit, a true positive (step 14, `cat` of a missing file in a `;` chain). Evidence:
+    `~/evidence/core-runs/2026-10-27-c10/RESULTS.md`. c3 stopped, disk kept, NetBSD tree untouched.
+    Suite 738 passed, 1 xfailed.
 - **C slice 9 (2026-10-27, executed harness-only, $0 metered + $0.58 GCE): goal (b) is cut into b1–b3, and every
   check is validated on c3. The checks were revised after the critic found 5 holes.**
   - `tests/fixtures/core_loop/optee_goal_b.json`:
@@ -107,14 +127,14 @@ MISSION-STATUS: ACTIVE
   - Model habits like `cat big | head` now report 141 with `pipestatus=141 0`. That is intended.
   - Evidence: `~/evidence/core-runs/2026-10-27-c6/` (`recheck_goal_a.py`, `recheck.json`). Suite 688 passed, 1 xfailed.
 - **Next action:**
-  1. Paid model run on goal (b) with `deepseek-v4.1-flash` on kept lab c3 (goal-(a) tree present): `run --lab c3
-     --tasks tests/fixtures/core_loop/optee_goal_b.json --workdir '~/optee-work'`. Hypothesis: flash reaches b1 and b2;
-     b3 (attach + SMC) is the likely failure point and the first real test of correction (work item D).
-  2. Candidate demo (founder rule cdba530: no code without it): flash does not call `finish` once its own checks
-     pass. c8/a3 used 33 wasted steps. On recorded traces, measure steps
-     spent after the first command that matches an acceptance check and passes. Only if those numbers support it,
-     test a bounded intervention, for example harness-run checks when a model command equals a check.
-  3. For the completion gate, run a1→a4 then b1→b3 unattended from the clean snapshot on a fresh lab. Then delete the c3 disk.
+  1. Re-run goal (b) on kept lab c3 with the output-limit fix (same command as c10, `--out …-c11`). Hypothesis: with
+     room to write, flash gets b1 accepted. If b1 again ends with no file written, over-exploration is a model fault:
+     go to 2. Watch for `truncated_at_max_tokens` rows.
+  2. Candidate demo (founder rule cdba530: no code without it): bare flash over-explores and does not call `finish`
+     (c4/a3, c8/a3, c10/b1). On recorded traces, measure the steps before the first write or build and the steps
+     after the checks first pass. Only if those numbers support it, test one bounded intervention.
+  3. For the completion gate, run a1→a4 then b1→b3 unattended from the clean snapshot on a fresh lab. Then delete the
+     c3 disk. GCE stockouts happen (c10): retry the lab start, it is not a blocker.
 - **C slice 5 (2026-10-27, executed, $0.000000 metered + $0.05 GCE): default executor is `deepseek-v4.1-flash`; a4 cut.**
   - **Offers** (`GET https://api.surplusintelligence.ai/v1/prices`, 09:31Z): at list price v4.1-flash is *not* cheaper
     ($0.14–0.30/M in, $0.42–1.20/M out vs v4-flash $0.05–0.17 / $0.275–0.45). Billed price decides (founder decision).
