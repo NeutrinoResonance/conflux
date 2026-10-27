@@ -12,7 +12,7 @@ MISSION-STATUS: ACTIVE
     - A, control: 0/10 replies contain a write, build or `finish` call.
     - B, `[step i of 40 used; N remain]` on every tool result: 0/10.
     - C, B plus a "smallest change, then finish" system sentence: 0/10.
-    - Hand-checked: all 56 commands are reads.
+    - Hand-checked: all 58 commands (A 20, B 19, C 19) are reads.
   - At k=30, the reasoning of 9 of 10 B/C samples says "only 10 steps left", and every one of them reads on, mostly
     outside b1's scope (OP-TEE SMC return codes, PTA, QEMU `virt.c`). The cause is not missing budget information.
   - Offline: goal (a) traces first write or build at steps 4–21; c10/b1 and c11/b1 never do.
