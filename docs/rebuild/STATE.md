@@ -22,8 +22,8 @@ MISSION-STATUS: ACTIVE
     Debian 12. A cheap Jev `choice` ("blocked by environment / keep trying") after N tool failures is a candidate
     bounded gate.
   - **Infra:** ssh round trip + 5 s poll ≈ 13 s per trivial command; smoke: user `dev`, passwordless sudo, 8 vCPU,
-    80 GB free. Lab deleted at 06:59Z. Evidence: `~/evidence/core-runs/2026-10-27-c2/`. Tests: 39 in
-    `tests/test_core_loop.py`; suite 665 passed, 1 xfailed.
+    80 GB free. Lab deleted at 06:59Z. Evidence: `~/evidence/core-runs/2026-10-27-c2/`. Tests: 44 in
+    `tests/test_core_loop.py`; suite 670 passed, 1 xfailed.
 - **Next action:** give labs egress, then rerun a1 → a3 unchanged. Preferred fix: Cloud NAT on network `conflux-dev`
   (region us-central1). The controller identity cannot create routers, so it is an operator action. Fallback that
   needs no new permission: a reverse SOCKS tunnel over the lab's ssh ControlMaster (`-R 1080`), with apt/git/curl

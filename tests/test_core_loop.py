@@ -27,9 +27,11 @@ class Scripted:
     def __init__(self, *responses):
         self.responses = list(responses)
         self.seen = []
+        self.timeouts = []
 
-    def __call__(self, messages, tools):
+    def __call__(self, messages, tools, timeout=None):
         self.seen.append(json.loads(json.dumps(messages)))
+        self.timeouts.append(timeout)
         return self.responses.pop(0)
 
 
@@ -328,7 +330,7 @@ def test_run_lab_stops_the_lab_after_normal_completion(lab, tmp_path, devbox_lab
 
 
 def test_run_lab_stops_the_lab_when_a_task_raises(lab, tmp_path, devbox_lab):
-    def boom(messages, tools):
+    def boom(messages, tools, timeout=None):
         raise RuntimeError("provider exploded")
     with pytest.raises(RuntimeError):
         _run_lab(tmp_path, boom)
@@ -358,11 +360,66 @@ def test_optee_goal_a_checks_execute_and_reject_an_empty_workdir(tmp_path):
         assert core.run_checks(t.checks, core.local_shell(tmp_path))[0] == "fail"
 
 
-def test_lab_shell_rides_out_a_failed_poll(lab):
+def test_lab_shell_rides_out_transient_poll_failures(lab):
     calls = []
 
     def flaky(script):
         calls.append(script)
-        return ["false"] if len(calls) in (2, 3, 4) else core.local_remote(script)  # first poll: 3 failures
+        return ["false"] if len(calls) in (2, 3) else core.local_remote(script)  # first poll: 2 of 3 attempts
     r = lab(remote=flaky)("sleep 0.5; echo done", 10)
-    assert r["exit"] == 0 and r["stdout"] == "done\n" and len(calls) > 5
+    assert r["exit"] == 0 and r["stdout"] == "done\n"
+
+
+def test_lab_shell_stops_when_poll_retries_are_exhausted(lab, tmp_path):
+    def no_poll(script):
+        return ["false"] if 'cat "$d/rc"' in script else core.local_remote(script)
+    t0 = time.monotonic()
+    r = lab(remote=no_poll)("sleep 30 & echo $! > child.pid; wait", 60)
+    assert r["exit"] is None and r["transport_error"] == "poll" and time.monotonic() - t0 < 6
+    assert not _alive(int((tmp_path / "work/child.pid").read_text()))
+    assert core.run_checks([Check("true")], lab(remote=no_poll))[0] is None
+
+
+def test_lab_shell_retried_launch_does_not_start_the_job_twice(lab, tmp_path):
+    launches = []
+
+    def drops_after_first_launch(script):
+        if "base64 -d" in script and not launches:
+            launches.append(script)
+            return ["bash", "-c", script + "\nexit 255"]  # ran remotely, then the connection dropped
+        return core.local_remote(script)
+    r = lab(remote=drops_after_first_launch)("echo run >> count.txt; sleep 0.3", 10)
+    assert r["exit"] == 0 and launches
+    assert (tmp_path / "work/count.txt").read_text() == "run\n"
+
+
+def test_lab_shell_transport_waits_are_bounded_by_the_command_timeout(lab, monkeypatch):
+    monkeypatch.setattr(core, "GRACE", 0.5)
+    t0 = time.monotonic()
+    r = lab(remote=lambda script: ["sleep", "30"])("echo hi", 1)
+    assert r["exit"] is None and time.monotonic() - t0 < 4
+
+
+def test_unfetched_stdout_gives_no_verdict_for_an_output_check(lab):
+    def no_stdout(script):
+        return ["false"] if 'tail -c' in script and '/out"' in script else core.local_remote(script)
+    r = lab(remote=no_stdout)("echo yes", 10)
+    assert r["exit"] == 0 and r["unavailable"] == ["stdout"]
+    assert core.run_checks([Check("echo yes", expect_stdout="yes")], lab(remote=no_stdout))[0] is None
+    assert core.run_checks([Check("echo yes", expect_stdout="")], lab(remote=no_stdout))[0] is None
+    assert core.run_checks([Check("true")], lab(remote=no_stdout))[0] == "pass"
+
+
+def test_provider_call_is_bounded_by_the_lab_deadline(tmp_path):
+    deadline = time.monotonic() + 30
+    chat = Scripted(resp(call("finish", {})))
+    run_task(Task(id="t", goal="g", checks=[Check("true")]), chat, core.local_shell(tmp_path), Trace(),
+             Budget(1.0), deadline=deadline)
+    assert 0 < chat.timeouts[0] <= 30
+
+    def slow(messages, tools, timeout=None):
+        time.sleep(timeout + 0.1)
+        return resp(call("run_shell", {"command": "touch ran"}))
+    res = run_task(TOUCH, slow, core.local_shell(tmp_path), Trace(), Budget(1.0),
+                   deadline=time.monotonic() + 0.5)
+    assert res["reason"] == "lab_deadline" and not (tmp_path / "ran").exists()

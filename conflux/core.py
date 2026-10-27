@@ -52,11 +52,12 @@ PRICE_CEILING = 4e-7       # $/byte admission bound: tokens <= bytes, ~2x flash'
 CAMPAIGN_BUDGET = 50.00
 RUN_CAP = 0.20
 EXEC_TIMEOUT = 60
+CHAT_TIMEOUT = 180
 MAX_TIMEOUT = 10800
 POLL_S = 5
 TRANSPORT_TIMEOUT = 120    # one ssh round trip
 TRANSPORT_RETRIES = 3
-KILL_GRACE = 30            # a kill may still go out after the deadline
+GRACE = 15                 # kill + output collection after a command's end or the deadline
 SSH_WAIT_TRIES = 10
 LAB_ZONE = "us-central1-a"
 LAB_PREFIX = "conflux-dev-lab-"
@@ -87,7 +88,7 @@ TOOLS = [
                        "additionalProperties": False}}},
 ]
 
-Chat = Callable[[list, list], tuple[int, object, float]]
+Chat = Callable[..., tuple[int, object, float]]  # (messages, tools, timeout=None)
 # (command, timeout_s) -> {exit, stdout, stderr, timed_out, duration_s, ...}; exit None = no verdict.
 Shell = Callable[[str, float], dict]
 
@@ -197,18 +198,18 @@ def lab_shell(remote: Callable[[str], list[str]], workdir: str, deadline: float 
     """Run each command as a detached job on the remote; poll for its exit code.
 
     The job's output lives in `~/.conflux-jobs/<id>/` on the remote, so a dropped ssh session
-    loses nothing. Every wait (command timeout, poll sleep, ssh round trip) is capped by the
-    absolute monotonic `deadline`; when it passes the job's process group is killed and the
-    result carries `deadline: True`.
+    loses nothing. Launch is idempotent: `mkdir` of the job dir is an atomic guard, so a retried
+    launch recovers the running job's pid instead of starting it again. Launch and polls are
+    bounded by `min(command end, deadline)`; killing and collecting output get `GRACE` more.
+    A transport failure that outlasts `TRANSPORT_RETRIES` attempts ends the command with no
+    verdict (`exit: None`). Output that could not be fetched is listed in `unavailable`.
     """
     poll_s = POLL_S if poll_s is None else poll_s
+    lab_end = float("inf") if deadline is None else deadline
 
-    def left() -> float:
-        return float("inf") if deadline is None else deadline - time.monotonic()
-
-    def call(script: str, grace: bool = False) -> subprocess.CompletedProcess | None:
+    def call(script: str, until: float) -> subprocess.CompletedProcess | None:
         for attempt in range(TRANSPORT_RETRIES):
-            limit = min(TRANSPORT_TIMEOUT, KILL_GRACE if grace else left())
+            limit = min(TRANSPORT_TIMEOUT, until - time.monotonic())
             if limit <= 0:
                 return None
             try:
@@ -219,53 +220,67 @@ def lab_shell(remote: Callable[[str], list[str]], workdir: str, deadline: float 
             if p.returncode == 0:
                 return p
             if attempt + 1 < TRANSPORT_RETRIES:
-                time.sleep(max(0.0, min(poll_s, left())))
+                time.sleep(max(0.0, min(poll_s, until - time.monotonic())))
         return None
 
     def shell(command: str, timeout: float) -> dict:
         t0 = time.monotonic()
+        stop_at = min(t0 + timeout, lab_end)
+        collect_by = stop_at + GRACE
         job = f"{time.time_ns():x}"
         d = f'"$HOME"/.conflux-jobs/{job}'
         out = {"exit": None, "stdout": "", "stderr": "", "timed_out": False, "job": job}
 
         def done(**kw) -> dict:
+            kw.setdefault("deadline", time.monotonic() >= lab_end)
             return {**out, **kw, "duration_s": round(time.monotonic() - t0, 3)}
 
-        if left() <= 0:
-            return done(timed_out=True, deadline=True)
+        if stop_at <= t0:
+            return done(timed_out=True)
         b64 = base64.b64encode(command.encode()).decode()
-        launch = (f"set -e; d={d}; w={_remote_path(workdir)}; mkdir -p \"$d\" \"$w\"; "
+        launch = (f"set -e; d={d}; w={_remote_path(workdir)}; mkdir -p \"$HOME/.conflux-jobs\" \"$w\"; "
+                  "if mkdir \"$d\" 2>/dev/null; then "
                   f"echo {b64} | base64 -d > \"$d/cmd.sh\"; cd \"$w\"; "
                   "nohup setsid bash -c 'bash \"$1/cmd.sh\" >\"$1/out\" 2>\"$1/err\"; "
                   "echo $? >\"$1/rc.tmp\"; mv \"$1/rc.tmp\" \"$1/rc\"' _ \"$d\" "
-                  "</dev/null >/dev/null 2>&1 & echo \"PID=$!\"")
-        p = call(launch)
+                  "</dev/null >/dev/null 2>&1 & echo $! > \"$d/pid.tmp\"; mv \"$d/pid.tmp\" \"$d/pid\"; fi; "
+                  "for i in $(seq 50); do [ -f \"$d/pid\" ] && break; sleep 0.1; done; "
+                  "echo \"PID=$(cat \"$d/pid\")\"")
+        p = call(launch, stop_at)
         m = re.search(r"^PID=(\d+)$", p.stdout, re.M) if p else None
         if not m:
-            return done(transport_error="launch", deadline=left() <= 0, timed_out=left() <= 0)
+            # The job may have started before the transport failed: kill it if it did.
+            call(f'd={d}; [ -f "$d/pid" ] && kill -KILL -- -"$(cat "$d/pid")" 2>/dev/null; true', collect_by)
+            return done(transport_error="launch", timed_out=time.monotonic() >= stop_at)
         pid = m.group(1)
-        end = t0 + timeout
         rc = None
-        while rc is None:
-            wait = min(end - time.monotonic(), left())
-            if wait <= 0:
+        transport_error = None
+        while rc is None and time.monotonic() < stop_at:
+            time.sleep(max(0.0, min(poll_s, stop_at - time.monotonic())))
+            p = call(f'd={d}; cat "$d/rc" 2>/dev/null || echo RUNNING', stop_at)
+            if p is None:
+                if time.monotonic() < stop_at:
+                    transport_error = "poll"
                 break
-            time.sleep(min(poll_s, wait))
-            p = call(f'd={d}; cat "$d/rc" 2>/dev/null || echo RUNNING')
-            # A failed poll is retried on the next tick: the job keeps running remotely.
-            last = p.stdout.strip().splitlines()[-1:] if p else []
+            last = p.stdout.strip().splitlines()[-1:]
             if last and last[0].isdigit():
                 rc = int(last[0])
-        if rc is None:  # timeout or deadline: kill the whole process group
+        if rc is None:  # timeout, deadline or lost transport: kill the whole process group
             call(f"kill -TERM -- -{pid} 2>/dev/null; sleep 1; kill -KILL -- -{pid} 2>/dev/null; true",
-                 grace=True)
-        tails = {}
+                 collect_by)
+        tails, unavailable = {}, []
         for stream in ("stdout", "stderr"):
             f = "out" if stream == "stdout" else "err"
-            q = call(f'd={d}; tail -c {TAIL} "$d/{f}" 2>/dev/null; true') if left() > 0 else None
+            q = call(f'd={d}; tail -c {TAIL} "$d/{f}" 2>/dev/null; true', collect_by)
             tails[stream] = q.stdout if q else ""
+            if q is None:
+                unavailable.append(stream)
+        if unavailable:
+            tails["unavailable"] = unavailable
+        if transport_error:
+            return done(**tails, transport_error=transport_error)
         if rc is None:
-            return done(**tails, timed_out=True, deadline=left() <= 0)
+            return done(**tails, timed_out=True)
         return done(**tails, exit=rc)
 
     return shell
@@ -276,7 +291,8 @@ def run_checks(checks: list[Check], shell: Shell) -> tuple[str | None, list[dict
     results = []
     for c in checks:
         r = shell(c.cmd, c.timeout)
-        if r["timed_out"] or r["exit"] is None:
+        if r["timed_out"] or r["exit"] is None or (c.expect_stdout is not None
+                                                     and "stdout" in r.get("unavailable", ())):
             ok = None
         else:
             ok = r["exit"] == 0 and (c.expect_stdout is None or r["stdout"].strip() == c.expect_stdout)
@@ -313,13 +329,15 @@ def policy(call: dict) -> tuple[str, dict, str | None]:
 
 
 def _tool_result(r: dict, timeout: float) -> str:
+    missing = "".join(f"\n({s} could not be fetched)" for s in r.get("unavailable", ()))
     if r["timed_out"]:
         head = f"timed out after {timeout}s (process group killed)"
     elif r["exit"] is None:
-        return f"no result: transport error ({r.get('transport_error')}); the command may not have run"
+        return (f"no result: transport error ({r.get('transport_error')}); the command was stopped and "
+                "may not have run")
     else:
         head = f"exit={r['exit']}"
-    return f"{head}\nstdout:\n{r['stdout']}\nstderr:\n{r['stderr']}"
+    return f"{head}\nstdout:\n{r['stdout']}\nstderr:\n{r['stderr']}{missing}"
 
 
 def _check_feedback(results: list[dict]) -> str:
@@ -374,7 +392,8 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
             return end("unverified", "task_budget")
         if not budget.admit(bound):
             return end("unverified", "run_budget")
-        status, body, latency = chat(messages, TOOLS)
+        status, body, latency = chat(messages, TOOLS,
+                                     timeout=None if deadline is None else deadline - time.monotonic())
         c, kind = billed_cost(body), "billed"
         if c is None:
             c, kind = bound, "bound"
@@ -387,6 +406,8 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
                     latency_s=round(latency, 3), usage=body.get("usage") if isinstance(body, dict) else None,
                     cost_usd=c, cost_kind=kind, bound_usd=bound, message=msg,
                     error=None if msg else (body.get("error") if isinstance(body, dict) else str(body)))
+        if past_deadline():
+            return end("unverified", "lab_deadline")
         if not isinstance(msg, dict):
             return end("unverified", f"provider_{status}")
         calls = msg.get("tool_calls") or []
@@ -441,12 +462,13 @@ def load_key(name: str) -> str:
 
 
 def surplus_chat(key: str, model: str = MODEL, http: httpx.Client | None = None) -> Chat:
-    http = http or httpx.Client(timeout=180)
+    http = http or httpx.Client(timeout=CHAT_TIMEOUT)
 
-    def chat(messages: list, tools: list) -> tuple[int, object, float]:
+    def chat(messages: list, tools: list, timeout: float | None = None) -> tuple[int, object, float]:
         t0 = time.monotonic()
         try:
-            resp = http.post(f"{SURPLUS}/chat/completions",
+            resp = http.post(f"{SURPLUS}/chat/completions", timeout=CHAT_TIMEOUT if timeout is None
+                             else max(0.1, min(CHAT_TIMEOUT, timeout)),
                              # Surplus's compressed bodies break httpx decoding.
                              headers={"Authorization": f"Bearer {key}", "Accept-Encoding": "identity"},
                              json={"model": model, "messages": messages, "tools": tools,
