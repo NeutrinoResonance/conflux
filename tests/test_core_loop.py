@@ -942,3 +942,25 @@ def test_audit_subcommand_needs_no_key(tmp_path, monkeypatch, capsys):
     assert core.main(["audit", str(t)]) == 0
     line = json.loads(capsys.readouterr().out)
     assert line["trace"] == str(t) and [f["step"] for f in line["findings"]] == [D1_CASES[0]["step"]]
+
+
+def test_truncated_reply_is_named_to_the_model_and_is_not_a_finish(tmp_path):
+    # c10/b1 steps 19-37: flash's reasoning filled max_tokens and cut the tool call off (arguments "{").
+    cut = {"id": "c1", "type": "function", "function": {"name": "run_shell", "arguments": "{"}}
+    cut_call = resp(cut, completion=core.MAX_TOKENS)
+    cut_call[1]["choices"][0]["finish_reason"] = "length"
+    cut_plain = resp(completion=core.MAX_TOKENS)  # no tool call at all: not a finish
+    chat = Scripted(cut_call, cut_plain,
+                    resp(call("run_shell", {"command": "echo yes > ok.txt"})), resp(call("finish", {})))
+    res, trace = run(TOUCH, chat, tmp_path)
+    assert res["status"] == "accepted" and res["retries"] == 0 and res["steps"] == 4
+    assert [e["reason"] for e in trace.events if e["event"] == "policy"][0] == "truncated_at_max_tokens"
+    assert "output limit" in chat.seen[1][-1]["content"] and chat.seen[1][-1]["role"] == "tool"
+    assert "output limit" in chat.seen[2][-1]["content"] and chat.seen[2][-1]["role"] == "user"
+    assert [e["step"] for e in trace.events if e["event"] == "acceptance"] == [4]
+    assert [e["finish_reason"] for e in trace.events if e["event"] == "model_call"][0] == "length"
+
+
+def test_output_limit_leaves_room_for_reasoning_and_a_file_write():
+    # c10/b1: up to 2017 reasoning tokens per call; a write may be MAX_COMMAND chars (>= 1 token per 4 chars).
+    assert core.MAX_TOKENS >= 2048 + core.MAX_COMMAND // 4 + 2048

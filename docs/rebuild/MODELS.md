@@ -21,6 +21,11 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
 - Responses carry token usage but no cost field (bill from the usage export).
 
 ## deepseek-v4.1-flash (Surplus chat; reasoning model; default executor since PR #12)
+- **Weak: reads instead of writing (c10/b1, NetBSD driver).** 40/40 steps were reads (config(5) grammar sources,
+  majors, smccc, OP-TEE headers, and TF-A/QEMU/qemu_v8 files for *later* sub-goals). Its reasoning had settled the
+  design by step 19, yet it never wrote a file or called `finish`. Confounded by a harness fault: reasoning grew to
+  1500–2048 tokens per call and hit `max_tokens` 2048 five times (fixed: 8192, truncation named to the model).
+  Evidence: `~/evidence/core-runs/2026-10-27-c10/RESULTS.md`.
 - **Cheapest billed:** < 1 micro-USD per 2k-token call (2026-10-27); 46 judge calls cost 19 micro-USD.
 - **Strong: command semantics.** "Did this command fail?" 29/30 (28 after the label fix); reasoned
   "grep with no match exits 1" on all three empty-grep items Jev missed. Evidence: Jev fair test above.
