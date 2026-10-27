@@ -39,7 +39,20 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
     `touch` probes) next to more reads. Given a concrete `deepseek-v4-pro` file plan, it runs permission probes.
     The 3 replies that did write real driver code (whole-file heredocs) were cut off at 8192 completion tokens,
     6.2–7.4k of them reasoning. Evidence: `~/evidence/b1-arms-demo-2026-10-27/RESULTS.md`.
+  - **More output headroom does not fix it (C slice 14 demo):** the 3 slice-13 truncated-write inputs were replayed
+    at max_tokens 8192 vs 16384, 3× each. Complete, admissible, substantive edits: **8192 2/9, 16384 0/9**.
+    Median reasoning was 4244 vs 9919 tokens: reasoning grows to fill the limit. At 16384, 4/9 replies started
+    whole-file heredocs; 2 exceeded `MAX_COMMAND` (8642, 9628 chars) and 2 truncated again (13.6k and 15.4k
+    reasoning). 12/18 replies were reads or probes.
+    - Example: k30-i4-R3 at 16384, j=0. "I've hit the read budget; time to write code", then an 8642-char
+      `cat > …/optee_fdtvar.h` heredoc, denied `command_too_long`. Its 8192 sibling j=0 wrote a complete
+      3239-char `opteevar.h` via `sudo tee`.
+    - Whether flash splits the file after `command_too_long`/`truncated_at_max_tokens` is **unverified** (not
+      sampled). Evidence: `~/evidence/headroom-demo-2026-10-27/RESULTS.md`.
 - **Cheapest billed:** < 1 micro-USD per 2k-token call (2026-10-27); 46 judge calls cost 19 micro-USD.
+  - **Seller variance:** in slice 14, 2 of 18 identical 45k-token calls (661 s and 713 s latency) billed $0.005739
+    and $0.002307, against ≤ $0.000023 for the rest. Default routing sometimes lands on a slow, list-priced seller.
+    Latency that evening: 10/18 calls took over 180 s (`core.CHAT_TIMEOUT`).
 - **Strong: command semantics.** "Did this command fail?" 29/30 (28 after the label fix); reasoned
   "grep with no match exits 1" on all three empty-grep items Jev missed. Evidence: Jev fair test above.
 - **Weak: does not stop when the work is done (n=1 run).** On c8/a3-build, with the qemu_v8 tree already built,
