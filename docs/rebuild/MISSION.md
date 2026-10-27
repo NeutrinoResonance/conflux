@@ -166,7 +166,8 @@ Demo before build: `~/evidence/self-audit-demo-2026-10-27/RESULTS.md` (17 real t
   case in c3). Run it after every run; a hit is a harness fault and gets a structural fix + regression test.
   Fix its known false positives (read-only command parsing) first. Grade on the demo's traces.
 - Failing acceptance checks on objects the model kept inspecting are flagged for review only. Cheap
-  classification of "check wrong vs work incomplete" failed in the demo (v4.1-flash 1/3, Jev 0/5): build no
+  classification of "check wrong vs work incomplete" failed in the demo (v4.1-flash 1/3; Jev wrong on the one
+  case, 5 repeats, near-chance confidence; see `docs/rebuild/MODELS.md` for its measured strengths): build no
   model-based classifier unless a new demo, on recorded traces, beats those numbers.
 - Any further self-improvement mechanism follows the same rule: a throwaway demo on recorded traces with
   its numbers in `~/evidence/`, before code lands. No new layer without demo evidence.

@@ -8,6 +8,8 @@
   model/route, prompt, policy, critic/decider wiring) first gets a throwaway, cost-capped demo on
   recorded traces with numbers in `~/evidence/<demo>/RESULTS.md`. Build only what it supports; cite it
   in the PR. See the 2026-10-27 founder decision in `docs/rebuild/MISSION.md`.
+- When a run, probe or demo measures a model strength or weakness, add it with numbers, one example and the
+  evidence path to `docs/rebuild/MODELS.md`. Read it before choosing a model for a role.
 - Tests: `python -m pytest tests -q`. CI runs the same on every PR.
 - Verifier scores must use the letter scale (A–T), never digits.
 - Never print or commit provider keys; read them from `~/.config/devbox/secrets/` at runtime.

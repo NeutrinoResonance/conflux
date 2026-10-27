@@ -96,6 +96,7 @@ gcloud compute instances stop  conflux-dev-worker-1 --zone us-central1-a
 - Current per-seller offers: `GET https://api.surplusintelligence.ai/v1/prices` (same key; `models[].providers[].pricing`
   in $/M tokens). List price ≠ billed: v4.1-flash lists above v4-flash, but it billed < 1 micro-USD per call on 2026-10-27.
 - Executed capability matrix: `docs/rebuild/PROVIDERS.md`.
+- Measured model strengths/weaknesses with examples: `docs/rebuild/MODELS.md` (append new findings there).
 
 Catalogue snapshot 2026-10-26: Surplus lists 489 models incl. `deepseek-v4-pro`, `deepseek-v4-flash`,
 `deepseek-v4.1-flash`, `jev-1.13`, `jev-1.14`, `kimi-k3`, `kimi-k3.1-pro`, `glm-5.3`; Kimi Code lists

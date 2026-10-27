@@ -24,6 +24,8 @@ USD comes from provider responses or documented prices — never estimated silen
 | 2026-10-27 | Surplus chat | `deepseek-v4-flash` | 880640 | 10802 | 0.011158 | — | C slice 4 run c4 (lab c3, kept disk): a2 accepted (12 calls, $0.00052), a3 built the full tree but failed at the step cap on a wrong check (40 calls, $0.010638); 52/52 export-matched |
 | 2026-10-27 | Surplus chat | `deepseek-v4.1-flash` | 16167 | 2799 | 0.000000 | — | C slice 5 tuning run c5: 3 tasks × 2, 20 calls, 6/6 accepted; 20/20 export-matched, each `buyer_cost_usd` 0.000000 (< 1 micro-USD; `direct_cost_usd` sum $0.002887) |
 | 2026-10-27 | Surplus `GET /v1/prices` | — | 0 | 0 | 0 | — | C slice 5 offers snapshot (no export row) |
+| 2026-10-27 | Surplus chat | `deepseek-v4.1-flash` | 12019 | 21749 | 0.000019 | — | operator Jev fair test: 46 judge calls (MODELS.md) |
+| 2026-10-27 | Surplus `/v1/decisions` | `jev-1.14` | 23470 | 1570 | ≈0.00028 (46 × documented $0.000006; no cost field) | — | operator Jev fair test: 46 decisions (MODELS.md) |
 
 C slice 1 rows are reconciled with the export by `python -m conflux.core reconcile` (`~/evidence/core-runs/2026-10-27-c1*/reconciled.json`;
 export total for 2026-10-27: 83 rows, $0.001372).
