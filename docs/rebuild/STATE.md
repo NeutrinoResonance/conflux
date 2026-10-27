@@ -4,7 +4,31 @@ Keep this short and current. One entry per decision; newest first.
 
 MISSION-STATUS: ACTIVE
 
-- **Goal:** work item C (minimal replacement core). A is done offline (live rerun deferred to E); B is done.
+- **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred to E); B done.
+- **C slice 2 (2026-10-27, executed, $0.00293 metered + $0.10 GCE):** `conflux/core.py` now runs commands through a
+  `Shell`. `lab_shell` runs each command as a detached job on a `devbox-lab` VM (`~/.conflux-jobs/<id>/`), polled over
+  `gcloud compute ssh`. Waits are capped by one deadline that starts at lab startup. `run --lab` owns up → smoke →
+  tasks → stop, and always stops the lab. `run_shell` takes `timeout_s` (1..10800). Run-12 goal (a) is cut into
+  a1 host prerequisites / a2 sources / a3 build (`tests/fixtures/core_loop/optee_goal_a.json`, executed checks).
+  `PRICE_CEILING` was lowered to 4e-7 $/byte (≈2× flash's list rate) because the old bound refused long-context calls.
+  - **Hypothesis falsified, by the environment rather than the model:** a1 `failed` at step cap (30 steps, 850 s,
+    $0.00293, 30/30 export-matched). **Labs have no internet egress.** They have no external IP, the project has
+    no Cloud NAT router (`gcloud compute routers list`: 0), and the subnet only has Private Google Access.
+    Independent check (`egress-check.txt`): github.com, deb.debian.org and pypi.org time out; Google endpoints answer.
+    Run 12 ran on `conflux-optee-lab`, which had egress. Goal (a) needs GitHub, so no sub-goal can pass on today's labs.
+  - **Model failure modes seen (bare flash):** it spent 26/30 steps probing mirrors, IPs and caches. It never stated
+    the blocker or gave up (no `finish`), so the step cap ended the run. It used `sudo` inconsistently
+    (`apt-get download` without sudo hit dpkg lock errors). It also asked for `python3-crypto`, which does not exist on
+    Debian 12. A cheap Jev `choice` ("blocked by environment / keep trying") after N tool failures is a candidate
+    bounded gate.
+  - **Infra:** ssh round trip + 5 s poll ≈ 13 s per trivial command; smoke: user `dev`, passwordless sudo, 8 vCPU,
+    80 GB free. Lab deleted at 06:59Z. Evidence: `~/evidence/core-runs/2026-10-27-c2/`. Tests: 39 in
+    `tests/test_core_loop.py`; suite 665 passed, 1 xfailed.
+- **Next action:** give labs egress, then rerun a1 → a3 unchanged. Preferred fix: Cloud NAT on network `conflux-dev`
+  (region us-central1). The controller identity cannot create routers, so it is an operator action. Fallback that
+  needs no new permission: a reverse SOCKS tunnel over the lab's ssh ControlMaster (`-R 1080`), with apt/git/curl
+  proxied through `socks5h://localhost:1080`. Build that fallback in the next step unless NAT has appeared
+  (`gcloud compute routers list`). Then measure a1–a3 on bare flash, ≤ $0.20 metered, ≤ 4 h lab.
 - **C slice 1 done (2026-10-27, executed, $0.000848 billed this step):** `conflux/core.py` is one explicit loop.
   `deepseek-v4-flash` proposes `run_shell`/`finish` calls through Surplus chat. Deterministic code does budget
   admission, a permissive policy (tool name, arguments, command size; no path scope), execution, and acceptance.
@@ -20,14 +44,6 @@ MISSION-STATUS: ACTIVE
   - **Caveat:** the tasks are easy tuning tasks, so the ceiling effect says nothing about harder work.
     Evidence: `~/evidence/core-runs/2026-10-27-c1{,b}/`. Replay fixture: `tests/fixtures/core_loop/recorded_fix-mean.json`.
     Tests: `tests/test_core_loop.py` (17). Suite: 643 passed, 1 xfailed.
-- **Next action:** C slice 2 aims at the completion gate (MISSION.md: full run-12 task unattended on a lab VM).
-  The toy tasks saturate, so: (1) give the loop a lab-VM execution backend (`devbox-lab ssh`, long commands
-  with timeouts and checkpointed output); (2) cut run-12 goal (a) (`~/evidence/optee-ctl-runs/run12/task.txt`) into
-  sub-goals with executed checks (build artefacts exist, QEMU boot markers in the serial log); (3) run bare flash on
-  the first sub-goal, ≤ $0.20 metered, and stop/delete the lab afterwards. Record failure modes; add the Jev
-  `choice` gate only at a decision those failures show to be bounded. Admission reads the cumulative ledger
-  total, which is ≥ this ISO week's spend, so it is conservative under the weekly cap. Legacy
-  `scripts/direct_vm_tool_loop.py` stays until its GCE/durable-job features are replaced.
 - **T2 fixed (2026-10-27, verified offline, $0):** a soundness check that produced no verdict (checker
   unavailable, provider error such as 402, malformed output across the whole chain, budget
   exhausted) now gives decision/status `unverified`, not `postcheck_failed`. `unverified` is final
