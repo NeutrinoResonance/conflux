@@ -10,7 +10,7 @@ MISSION-STATUS: ACTIVE
   - Run c11: lab c3, bare `deepseek-v4.1-flash`, 40/40 calls export-matched, 1875 s. Both b1 checks fail, and the
     model wrote no file again; the NetBSD tree is untouched.
   - The fix worked: 0 truncations, all calls `finish_reason=tool_calls`, peak completion 7429 of 8192 tokens
-    (11 calls over 2.5k, which c10 would have cut off).
+    (12 calls over 2.5k completion tokens, which c10 would have cut off).
   - **Model fault, 2nd materially identical failure on b1 (c10, c11):** all 76 commands were reads. They covered
     OP-TEE MSG/SMC ABI, Linux `smc_abi.c`, shared memory, bus_dma and TF-A/QEMU/DTB, i.e. b3 and b2 scope inside b1.
     Reasoning states write intent at 9 steps. At step 40 the file and `files.fdt` stanza were already chosen, and
