@@ -49,6 +49,12 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
       3239-char `opteevar.h` via `sudo tee`.
     - Whether flash splits the file after `command_too_long`/`truncated_at_max_tokens` is **unverified** (not
       sampled). Evidence: `~/evidence/headroom-demo-2026-10-27/RESULTS.md`.
+  - **Failing-check feedback before `finish` does not fix it (C slice 15 demo):** the real failing b1 check output
+    was appended to the last tool result of step k (Flast) or of every step 1..k (Fevery), k = 20, 30 of c11. Writes,
+    builds or finishes: **0/10 Flast, 0/10 Fevery, 0/10 control**; all 59 commands were reads. It reads the
+    feedback and discounts it: 6/10 Flast reasonings say "The harness ran the acceptance checks already (they failed
+    as expected since no work yet)". Prompt-level nudges to bare flash on b1 are exhausted.
+    Evidence: `~/evidence/feedback-demo-2026-10-27/RESULTS.md`.
 - **Cheapest billed:** < 1 micro-USD per 2k-token call (2026-10-27); 46 judge calls cost 19 micro-USD.
   - **Seller variance:** in slice 14, 2 of 18 identical 45k-token calls (661 s and 713 s latency) billed $0.005739
     and $0.002307, against ≤ $0.000023 for the rest. Default routing sometimes lands on a slow, list-priced seller.
