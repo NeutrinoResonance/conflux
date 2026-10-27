@@ -837,7 +837,7 @@ def _strip_fd_prefixes(command: str) -> str:
 
     An fd prefix never changes which file a redirect touches; `cat 2 >x`
     keeps its operand because the digit is not adjacent to the redirect."""
-    out, quote, i = [], None, 0
+    out, quote, i, boundary = [], None, 0, True
     while i < len(command):
         ch = command[i]
         if quote == "'":
@@ -845,16 +845,19 @@ def _strip_fd_prefixes(command: str) -> str:
         elif ch == "\\":
             out.append(command[i:i + 2])
             i += 2
+            boundary = False  # an escaped separator is part of the word
             continue
         elif quote == '"':
             quote = None if ch == '"' else quote
         elif ch in "'\"":
             quote = ch
-        elif ch.isdigit() and (i == 0 or command[i - 1] in " \t\n;|&()"):
+        elif ch.isdigit() and boundary:
             fd = re.match(r"\d+(?=[<>])", command[i:])
             if fd:
                 i += fd.end()
+                boundary = False
                 continue
+        boundary = quote is None and ch in " \t\n;|&()"
         out.append(ch)
         i += 1
     return "".join(out)
@@ -868,6 +871,8 @@ def _getopt(words: list[str], value_letters: str) -> tuple[list[tuple[str, str |
     for word in rest:
         if word == "--":
             operands.extend(rest)
+        elif word == "-":
+            operands.append(word)  # stdin, or grep's pattern
         elif word.startswith("--"):
             name, eq, value = word.partition("=")
             options.append((name, value if eq else None))
@@ -997,6 +1002,9 @@ def _shell_effects(command: str, cwd: str | None, *, read_only: bool = False,
             options, operands = _getopt(words[1:], _VALUE_OPTIONS[program])
             if program == "grep":
                 # A pattern comes from -e/-f, else the first operand; -f names a file.
+                # getopt_long accepts unambiguous abbreviations: --reg means --regexp.
+                options = [("--regexp" if len(o) >= 5 and "--regexp".startswith(o) else o, v)
+                           for o, v in options]
                 given = any(o in {"-e", "--regexp", "-f", "--file"} for o, _ in options)
                 files = [v for o, v in options if v and (
                     o in {"-f", "--file"}
@@ -1006,7 +1014,7 @@ def _shell_effects(command: str, cwd: str | None, *, read_only: bool = False,
             operands = [w for w in words[1:] if not w.startswith("-")]
         else:
             operands = [p for w in words[1:] for p in paths_in(w)]
-        operands = [p for p in operands if p not in _DEVICES and p not in {"]", "]]"}]
+        operands = [p for p in operands if p not in _DEVICES and p not in {"]", "]]", "-"}]
         if "/" in words[0] and not words[0].startswith(_SYSTEM_PREFIXES):
             add(words[0], "execute")
         if program in {"cp", "mv", "install", "rsync", "ln"} and operands:

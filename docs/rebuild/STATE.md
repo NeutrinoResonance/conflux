@@ -11,7 +11,7 @@ MISSION-STATUS: ACTIVE
   The two left are not T1, both still fail closed: `case` patterns in `act_df85b83b994640ac`, qemu
   `-serial file:PATH` in `act_527d9183f574432e`. Old-vs-new effect diff: 0 real paths lost. 20 more
   actions lose phantom reads under a `cd` dir (e.g. `/tmp/conflux-agent/1`), so T1 affected ≥58
-  actions, not 39. Suite: 585 passed, 1 xfailed (letter scale).
+  actions, not 39. Suite: 592 passed, 1 xfailed (letter scale).
 - **Finding (2026-10-27, verified offline, $0):** run 12 never launched the NetBSD clone (0 clone
   proposals reached governance). The stall comes from two deterministic transformations, both in code:
   1. **T1 — first incorrect transformation:** `conflux/decider.py` `_shell_effects()` turns non-path
