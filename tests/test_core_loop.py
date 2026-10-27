@@ -434,6 +434,98 @@ def test_optee_a4_boot_check_runs_only_a_pristine_upstream_evaluator(tmp_path, m
     assert verdict() == "fail"
 
 
+def _goal_b():
+    return {t.id: t for t in map(Task.from_dict, json.loads((FIXTURES / "optee_goal_b.json").read_text()))}
+
+
+def _netbsd_root(tmp_path, monkeypatch):
+    """A stand-in NetBSD project: a git source tree with the driver enabled, a built kernel, a tooldir nm."""
+    nb = tmp_path / "nb"
+    conf, kdir, tools = (nb / "netbsd-src/sys/arch/evbarm/conf", nb / "netbsd-obj/sys/arch/evbarm/compile/GENERIC64",
+                         nb / "netbsd-obj/tooldir.Linux-x/bin")
+    for d in (conf, kdir, tools):
+        d.mkdir(parents=True)
+    (conf / "GENERIC64").write_text("simplebus*\tat fdt? pass 0\n")
+    src = nb / "netbsd-src"
+    for args in (["init", "-q"], ["add", "."], ["commit", "-q", "-m", "base"]):
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=src, check=True,
+                       capture_output=True)
+    (conf / "GENERIC64").write_text("simplebus*\tat fdt? pass 0\noptee*\t\tat fdt? pass 0\n")
+    (src / "sys/arch/evbarm/optee.c").write_text("/* driver */\n")
+    os.utime(conf / "GENERIC64", (1_000, 1_000))
+    os.utime(src / "sys/arch/evbarm/optee.c", (1_000, 1_000))
+    (kdir / "netbsd").write_text("kernel")
+    (kdir / "netbsd.img").write_text("image")
+    (tools / "aarch64--netbsd-nm").write_text("#!/bin/sh\necho 'ffffc00001234567 D optee_cd'\n")
+    (tools / "aarch64--netbsd-nm").chmod(0o755)
+    monkeypatch.setenv("NETBSD_ROOT", str(nb))
+    return src, kdir
+
+
+def test_optee_goal_b_checks_execute_and_reject_an_empty_workdir(tmp_path, monkeypatch):
+    tasks = _goal_b()
+    assert list(tasks) == ["b1-driver-build", "b2-firmware-boot", "b3-driver-proof"]
+    monkeypatch.setenv("NETBSD_ROOT", str(tmp_path / "absent"))
+    for t in tasks.values():
+        assert core.run_checks(t.checks, core.local_shell(tmp_path))[0] == "fail"
+
+
+def test_optee_goal_b_kernel_must_be_newer_than_the_driver_source(tmp_path, monkeypatch):
+    src, kdir = _netbsd_root(tmp_path, monkeypatch)
+    b1, fresh = _goal_b()["b1-driver-build"].checks, _goal_b()["b3-driver-proof"].checks[0]
+    work = tmp_path / "w"
+    (work / "netbsd-optee").mkdir(parents=True)
+    (work / "netbsd-optee/qemu_fw.bios").write_text("fw")
+
+    def verdict(checks):
+        return core.run_checks(checks, core.local_shell(work))[0]
+
+    def at(path, t):
+        os.utime(path, (t, t))
+    at(kdir / "netbsd.img", 2_000)  # sources at 1_000
+    at(work / "netbsd-optee/qemu_fw.bios", 2_500)
+    assert verdict(b1) == "pass" and verdict([fresh]) == "pass"
+    at(src / "sys/arch/evbarm/optee.c", 3_000)  # driver edited after the build
+    assert verdict(b1) == "fail" and verdict([fresh]) == "fail"
+    at(kdir / "netbsd.img", 4_000)  # kernel rebuilt, firmware not
+    assert verdict(b1) == "pass" and verdict([fresh]) == "fail"
+    at(work / "netbsd-optee/qemu_fw.bios", 5_000)  # firmware rebuilt
+    assert verdict([fresh]) == "pass"
+    (tmp_path / "nb/netbsd-obj/tooldir.Linux-x/bin/aarch64--netbsd-nm").write_text("#!/bin/sh\necho 'x D other_cd'\n")
+    assert verdict(b1) == "fail"  # kernel without the optee cfdriver
+
+
+def test_optee_goal_b_uid_guard_rejects_a_hard_coded_uid(tmp_path, monkeypatch):
+    src, _ = _netbsd_root(tmp_path, monkeypatch)
+    guard = _goal_b()["b3-driver-proof"].checks[1]
+    assert core.run_checks([guard], core.local_shell(tmp_path))[0] == "pass"
+    (src / "sys/arch/evbarm/optee.c").write_text('printf("optee0: UID 0x384FB3E0 ...\\n");\n')  # untracked
+    assert core.run_checks([guard], core.local_shell(tmp_path))[0] == "fail"
+    monkeypatch.setenv("NETBSD_ROOT", str(tmp_path / "absent"))  # git error is not "no match"
+    assert core.run_checks([guard], core.local_shell(tmp_path))[0] == "fail"
+
+
+def test_optee_goal_b_boot_rejects_a_qemu_that_fabricates_the_logs(tmp_path):
+    # The harness owns the boot, and only a built (ELF) QEMU may run it: a script that writes the expected
+    # serial logs passes every grep, so the ELF guard alone must reject it.
+    b = _goal_b()
+    boots = [b["b2-firmware-boot"].checks[0], b["b3-driver-proof"].checks[2]]
+    assert boots[0].cmd.split(" && grep")[0] == boots[1].cmd.split(" && grep")[0]  # one shared boot command
+    qemu = tmp_path / "optee/qemu/build/qemu-system-aarch64"
+    qemu.parent.mkdir(parents=True)
+    (tmp_path / "netbsd-optee").mkdir()
+    (tmp_path / "netbsd-optee/qemu_fw.bios").write_text("fw")
+    qemu.write_text("#!/bin/sh\necho 'I/TC: Primary CPU switching to normal world boot' > netbsd-optee/serial1.log\n"
+                    "printf 'The NetBSD Foundation\\noptee0 at simplebus0\\noptee0: UID 0x384fb3e0\\n' "
+                    "> netbsd-optee/serial0.log\n")
+    qemu.chmod(0o755)
+    for c in boots:
+        assert core.run_checks([c], core.local_shell(tmp_path))[0] == "fail"
+        unguarded = Check(c.cmd.removeprefix("head -c 4 optee/qemu/build/qemu-system-aarch64 | grep -q ELF && "))
+        assert unguarded.cmd != c.cmd
+        assert core.run_checks([unguarded], core.local_shell(tmp_path))[0] == "pass"  # the guard is what rejects
+
+
 def test_admission_bound_covers_the_top_output_list_price(tmp_path):
     chat = Scripted(resp(call("run_shell", {"command": "echo yes > ok.txt"}), micro=None), resp(call("finish", {})))
     _, trace = run(TOUCH, chat, tmp_path)

@@ -1,0 +1,50 @@
+[
+ {
+  "id": "b1-driver-build",
+  "max_steps": 40,
+  "max_usd": 0.08,
+  "goal": "Overall task (run 12, goal b): on the NetBSD project on this machine, create a NetBSD driver that is capable of initializing / communicating with OP-TEE, and provide proof that the driver does work. Goal (a) is done: the OP-TEE qemu_v8 setup is built in ./optee (OP-TEE OS in optee/optee_os, TF-A in optee/trusted-firmware-a, QEMU at optee/qemu/build/qemu-system-aarch64). The NetBSD project: source tree /home/darrenhidalgo/netbsd-src (git) and object directory /home/darrenhidalgo/netbsd-obj, which already holds the NetBSD tool directory (tooldir.*) and a built evbarm-aarch64 GENERIC64 kernel; build with the source tree's ./build.sh -m evbarm -a aarch64 -U -O /home/darrenhidalgo/netbsd-obj -T <that tool directory> (it was built on an older host kernel, so without -T build.sh rebuilds all tools). Both trees belong to user darrenhidalgo; you may use sudo -n. Work in the current directory otherwise. The work is split into sub-goals; this one is: write a NetBSD kernel driver for OP-TEE's SMC interface whose config(5) device name is `optee` (NetBSD already has sys/arch/arm/arm/smccc.{c,h}), attach it through FDT, enable it in sys/arch/evbarm/conf/GENERIC64, and build the GENERIC64 kernel into the object directory (sys/arch/evbarm/compile/GENERIC64/netbsd and netbsd.img). Do not build firmware or boot yet.",
+  "checks": [
+   {
+    "cmd": "NB=${NETBSD_ROOT:-/home/darrenhidalgo}; K=$NB/netbsd-obj/sys/arch/evbarm/compile/GENERIC64; grep -Eq '^[[:space:]]*optee[0-9*]*[[:space:]]+at[[:space:]]' $NB/netbsd-src/sys/arch/evbarm/conf/GENERIC64 && test -n \"$(git -c safe.directory='*' -C $NB/netbsd-src status --porcelain -- sys)\"",
+    "timeout": 120
+   },
+   {
+    "cmd": "NB=${NETBSD_ROOT:-/home/darrenhidalgo}; K=$NB/netbsd-obj/sys/arch/evbarm/compile/GENERIC64; test -s $K/netbsd.img && stale=$(git -c safe.directory='*' -C $NB/netbsd-src ls-files -m -o --exclude-standard --full-name -- sys | while IFS= read -r f; do if [ -e \"$NB/netbsd-src/$f\" ] && [ \"$NB/netbsd-src/$f\" -nt $K/netbsd.img ]; then echo \"$f\"; fi; done) && { [ -z \"$stale\" ] || { echo \"kernel older than: $stale\"; exit 1; }; } && set -- $NB/netbsd-obj/tooldir.*/bin/aarch64--netbsd-nm && \"$1\" $K/netbsd | grep -c -w optee_cd >/dev/null",
+    "timeout": 300
+   }
+  ]
+ },
+ {
+  "id": "b2-firmware-boot",
+  "max_steps": 30,
+  "max_usd": 0.06,
+  "goal": "Overall task (run 12, goal b): on the NetBSD project on this machine, create a NetBSD driver that is capable of initializing / communicating with OP-TEE, and provide proof that the driver does work. Goal (a) is done: the OP-TEE qemu_v8 setup is built in ./optee (OP-TEE OS in optee/optee_os, TF-A in optee/trusted-firmware-a, QEMU at optee/qemu/build/qemu-system-aarch64). The NetBSD project: source tree /home/darrenhidalgo/netbsd-src (git) and object directory /home/darrenhidalgo/netbsd-obj, which already holds the NetBSD tool directory (tooldir.*) and a built evbarm-aarch64 GENERIC64 kernel; build with the source tree's ./build.sh -m evbarm -a aarch64 -U -O /home/darrenhidalgo/netbsd-obj -T <that tool directory> (it was built on an older host kernel, so without -T build.sh rebuilds all tools). Both trees belong to user darrenhidalgo; you may use sudo -n. Work in the current directory otherwise. The work is split into sub-goals; this one is: build Arm Trusted Firmware from optee/trusted-firmware-a for QEMU with OP-TEE (the images in optee/optee_os/out/arm/core) as BL32 and the GENERIC64 NetBSD kernel (netbsd.img) as BL33, and put the resulting QEMU firmware at netbsd-optee/qemu_fw.bios. OP-TEE must start in the secure world (secure console on the second serial port) and the NetBSD kernel must start in the normal world (console on the first serial port). The harness boots exactly `optee/qemu/build/qemu-system-aarch64 -machine virt,secure=on,gic-version=3,acpi=off,virtualization=off -cpu max -smp 2 -m 2G -bios netbsd-optee/qemu_fw.bios -display none -monitor none -serial file:netbsd-optee/serial0.log -serial file:netbsd-optee/serial1.log` from the current directory (firmware alone, no -kernel), kills it after 150 s and reads the two serial logs.",
+  "checks": [
+   {
+    "cmd": "head -c 4 optee/qemu/build/qemu-system-aarch64 | grep -q ELF && test -s netbsd-optee/qemu_fw.bios && rm -f netbsd-optee/serial0.log netbsd-optee/serial1.log && { timeout 150 optee/qemu/build/qemu-system-aarch64 -machine virt,secure=on,gic-version=3,acpi=off,virtualization=off -cpu max -smp 2 -m 2G -bios netbsd-optee/qemu_fw.bios -display none -monitor none -serial file:netbsd-optee/serial0.log -serial file:netbsd-optee/serial1.log </dev/null >/dev/null 2>&1; rc=$?; [ $rc = 0 ] || [ $rc = 124 ]; } && grep -q 'Primary CPU switching to normal world boot' netbsd-optee/serial1.log && grep -q 'The NetBSD Foundation' netbsd-optee/serial0.log",
+    "timeout": 240
+   }
+  ]
+ },
+ {
+  "id": "b3-driver-proof",
+  "max_steps": 30,
+  "max_usd": 0.06,
+  "goal": "Overall task (run 12, goal b): on the NetBSD project on this machine, create a NetBSD driver that is capable of initializing / communicating with OP-TEE, and provide proof that the driver does work. Goal (a) is done: the OP-TEE qemu_v8 setup is built in ./optee (OP-TEE OS in optee/optee_os, TF-A in optee/trusted-firmware-a, QEMU at optee/qemu/build/qemu-system-aarch64). The NetBSD project: source tree /home/darrenhidalgo/netbsd-src (git) and object directory /home/darrenhidalgo/netbsd-obj, which already holds the NetBSD tool directory (tooldir.*) and a built evbarm-aarch64 GENERIC64 kernel; build with the source tree's ./build.sh -m evbarm -a aarch64 -U -O /home/darrenhidalgo/netbsd-obj -T <that tool directory> (it was built on an older host kernel, so without -T build.sh rebuilds all tools). Both trees belong to user darrenhidalgo; you may use sudo -n. Work in the current directory otherwise. The work is split into sub-goals; this one is: make the optee driver attach when NetBSD boots under OP-TEE with netbsd-optee/qemu_fw.bios and, at attach, query OP-TEE through SMC calls and print to the console the OP-TEE API UID (OPTEE_SMC_CALLS_UID, as four 32-bit hex words on an `optee0:` line), the API revision and the OP-TEE OS revision. The values must come from the SMC calls, never from constants. Rebuild the kernel and then netbsd-optee/qemu_fw.bios after any driver change. The harness boots exactly `optee/qemu/build/qemu-system-aarch64 -machine virt,secure=on,gic-version=3,acpi=off,virtualization=off -cpu max -smp 2 -m 2G -bios netbsd-optee/qemu_fw.bios -display none -monitor none -serial file:netbsd-optee/serial0.log -serial file:netbsd-optee/serial1.log` from the current directory (firmware alone, no -kernel), kills it after 150 s and reads the two serial logs.",
+  "checks": [
+   {
+    "cmd": "NB=${NETBSD_ROOT:-/home/darrenhidalgo}; K=$NB/netbsd-obj/sys/arch/evbarm/compile/GENERIC64; test -s $K/netbsd.img && stale=$(git -c safe.directory='*' -C $NB/netbsd-src ls-files -m -o --exclude-standard --full-name -- sys | while IFS= read -r f; do if [ -e \"$NB/netbsd-src/$f\" ] && [ \"$NB/netbsd-src/$f\" -nt $K/netbsd.img ]; then echo \"$f\"; fi; done) && { [ -z \"$stale\" ] || { echo \"kernel older than: $stale\"; exit 1; }; } && { [ netbsd-optee/qemu_fw.bios -nt $K/netbsd.img ] || { echo 'firmware older than kernel'; exit 1; }; }",
+    "timeout": 120
+   },
+   {
+    "cmd": "NB=${NETBSD_ROOT:-/home/darrenhidalgo}; K=$NB/netbsd-obj/sys/arch/evbarm/compile/GENERIC64; git -c safe.directory='*' -C $NB/netbsd-src grep -q -i --untracked 384fb3e0; [ $? = 1 ]",
+    "timeout": 300
+   },
+   {
+    "cmd": "head -c 4 optee/qemu/build/qemu-system-aarch64 | grep -q ELF && test -s netbsd-optee/qemu_fw.bios && rm -f netbsd-optee/serial0.log netbsd-optee/serial1.log && { timeout 150 optee/qemu/build/qemu-system-aarch64 -machine virt,secure=on,gic-version=3,acpi=off,virtualization=off -cpu max -smp 2 -m 2G -bios netbsd-optee/qemu_fw.bios -display none -monitor none -serial file:netbsd-optee/serial0.log -serial file:netbsd-optee/serial1.log </dev/null >/dev/null 2>&1; rc=$?; [ $rc = 0 ] || [ $rc = 124 ]; } && grep -Eq '(^|[] ])optee0 at ' netbsd-optee/serial0.log && grep -Eiq 'optee0.*384fb3e0' netbsd-optee/serial0.log",
+    "timeout": 240
+   }
+  ]
+ }
+]

@@ -5,6 +5,28 @@ Keep this short and current. One entry per decision; newest first.
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred to E); B done.
+- **C slice 9 (2026-10-27, executed harness-only, $0 metered + $0.16 GCE): goal (b) is cut into b1–b3. Every check is
+  validated on c3 against an untouched tree, a reference answer, and three tampering cases.**
+  - `tests/fixtures/core_loop/optee_goal_b.json`:
+    - **b1-driver-build:** the `optee` driver is enabled in GENERIC64, and the kernel is newer than every changed
+      file under `sys/` and has `optee_cd`.
+    - **b2-firmware-boot:** TF-A + OP-TEE with NetBSD as BL33 at `netbsd-optee/qemu_fw.bios`.
+    - **b3-driver-proof:** the attach line, plus OP-TEE's runtime-only API UID `384fb3e0` on an `optee0` line.
+    - The harness owns the QEMU command and runs it only from a real (ELF) binary. b3 rechecks
+      source→kernel→firmware freshness, and any `384fb3e0` literal in the tree fails it.
+    - The tree lives at the snapshot's `/home/darrenhidalgo/netbsd-{src,obj}` (`NETBSD_ROOT` overrides it in tests).
+  - **Hypothesis supported (every result as expected, `~/evidence/core-runs/2026-10-27-c9/RESULTS.md`):**
+    - untouched tree: b1/b2/b3 fail;
+    - legacy reference driver (3 files) + scripted kernel/TF-A build: b1/b2/b3 pass on the first attempt. The boot
+      log prints the real UID, and the OP-TEE 4.11 secure log is present;
+    - planted UID literal: fail;
+    - driver edited after the build: b1/b3 fail, still fail after a kernel-only rebuild, pass after the firmware rebuild;
+    - QEMU replaced by a script that writes the expected logs: b2/b3 fail;
+    - after reset: b1 fails again.
+  - **Environment fact:** labs run kernel 6.1.0-54, but the snapshot tooldirs are for -50/-51. Plain `build.sh`
+    would rebuild every tool, so the goal text says to pass `-T`. With `-T`, the kernel rebuild takes about 1 min.
+  - c3 is reset to its untouched NetBSD state (kernel dir restored, mtimes kept) and stopped with its disk kept.
+    Tests: +4 in `test_core_loop.py`; suite 735 passed, 1 xfailed.
 - **C slice 8 (2026-10-27, executed, $0.000034 metered + $0.25 GCE): flash is accepted on a3 and a4. Every goal-(a)
   sub-goal now has a model-accepted run, but a1–a4 have not yet run as one unattended run.**
   - Run c8 on kept lab `c3`, `--only a3-build,a4-boot`, `deepseek-v4.1-flash`, 1 tunnel start, lab stopped at 12:30Z.
@@ -77,14 +99,14 @@ MISSION-STATUS: ACTIVE
   - Model habits like `cat big | head` now report 141 with `pipestatus=141 0`. That is intended.
   - Evidence: `~/evidence/core-runs/2026-10-27-c6/` (`recheck_goal_a.py`, `recheck.json`). Suite 688 passed, 1 xfailed.
 - **Next action:**
-  1. Cut goal (b) (NetBSD driver work, `~/evidence/optee-ctl-runs/run12/task.txt`) into sub-goals. Mine run 12 and
-     `~/evidence/legacy-optee-vms/` for its NetBSD edits. Validate every check harness-only on a real tree before any
-     paid run.
+  1. Paid model run on goal (b) with `deepseek-v4.1-flash` on kept lab c3 (goal-(a) tree present): `run --lab c3
+     --tasks tests/fixtures/core_loop/optee_goal_b.json --workdir '~/optee-work'`. Hypothesis: flash reaches b1 and b2;
+     b3 (attach + SMC) is the likely failure point and the first real test of correction (work item D).
   2. Candidate demo (founder rule cdba530: no code without it): flash does not call `finish` once its own checks
      pass. c8/a3 used 33 wasted steps. On recorded traces, measure steps
      spent after the first command that matches an acceptance check and passes. Only if those numbers support it,
      test a bounded intervention, for example harness-run checks when a model command equals a check.
-  3. For the completion gate, run a1→a4 unattended from the clean snapshot on a fresh lab. Then delete the c3 disk.
+  3. For the completion gate, run a1→a4 then b1→b3 unattended from the clean snapshot on a fresh lab. Then delete the c3 disk.
 - **C slice 5 (2026-10-27, executed, $0.000000 metered + $0.05 GCE): default executor is `deepseek-v4.1-flash`; a4 cut.**
   - **Offers** (`GET https://api.surplusintelligence.ai/v1/prices`, 09:31Z): at list price v4.1-flash is *not* cheaper
     ($0.14–0.30/M in, $0.42–1.20/M out vs v4-flash $0.05–0.17 / $0.275–0.45). Billed price decides (founder decision).
