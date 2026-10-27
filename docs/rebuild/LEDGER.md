@@ -56,5 +56,6 @@ Rate: n2d-standard-8 ≈ $0.338/h running (GCE list price, us-central1) + 100 GB
 | 2026-10-27 | `conflux-dev-lab-c3` | 11:19:13–11:25:50 | 0.11 | 0.04 | C slice 7 harness-only probes (ERR trap keeps PIPESTATUS, `failed_cmds`) + a1–a4 recheck: 4/4 pass; stopped, disk kept |
 | 2026-10-27 | `conflux-dev-lab-c3` | 11:45:57–12:30:55 | 0.75 | 0.25 | C slice 8 model run c8 (a3 + a4, both accepted); stopped, disk kept |
 | 2026-10-27 | `conflux-dev-lab-c3` | 12:44:46–12:47:46, 12:55:01–13:18:59, 13:19:06–13:19:59 | 0.47 | 0.16 | C slice 9 snapshot NetBSD inspection + model-free goal-(b) check validation (5 controls, all as expected); stopped, disk kept |
+| 2026-10-27 | `conflux-dev-lab-c3` | 13:30:48–13:32:06, 13:35:24–14:23:16, 14:23:39–14:49:13 | 1.25 | 0.42 | C slice 9 critic round: revised goal-(b) checks re-validated (numeric fake UID, staged/committed edits, native fake QEMU, no-SPD TF-A boot); stopped, disk kept |
 
-**GCE lab total: $1.12** (plus the c3 disk while it exists)
+**GCE lab total: $1.54** (plus the c3 disk while it exists)

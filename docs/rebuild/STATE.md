@@ -5,28 +5,36 @@ Keep this short and current. One entry per decision; newest first.
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred to E); B done.
-- **C slice 9 (2026-10-27, executed harness-only, $0 metered + $0.16 GCE): goal (b) is cut into b1–b3. Every check is
-  validated on c3 against an untouched tree, a reference answer, and three tampering cases.**
+- **C slice 9 (2026-10-27, executed harness-only, $0 metered + $0.58 GCE): goal (b) is cut into b1–b3, and every
+  check is validated on c3. The checks were revised after the critic found 5 holes.**
   - `tests/fixtures/core_loop/optee_goal_b.json`:
-    - **b1-driver-build:** the `optee` driver is enabled in GENERIC64, and the kernel is newer than every changed
-      file under `sys/` and has `optee_cd`.
-    - **b2-firmware-boot:** TF-A + OP-TEE with NetBSD as BL33 at `netbsd-optee/qemu_fw.bios`.
-    - **b3-driver-proof:** the attach line, plus OP-TEE's runtime-only API UID `384fb3e0` on an `optee0` line.
-    - The harness owns the QEMU command and runs it only from a real (ELF) binary. b3 rechecks
-      source→kernel→firmware freshness, and any `384fb3e0` literal in the tree fails it.
-    - The tree lives at the snapshot's `/home/darrenhidalgo/netbsd-{src,obj}` (`NETBSD_ROOT` overrides it in tests).
-  - **Hypothesis supported (every result as expected, `~/evidence/core-runs/2026-10-27-c9/RESULTS.md`):**
-    - untouched tree: b1/b2/b3 fail;
-    - legacy reference driver (3 files) + scripted kernel/TF-A build: b1/b2/b3 pass on the first attempt. The boot
-      log prints the real UID, and the OP-TEE 4.11 secure log is present;
+    - **b1-driver-build:** the `optee` driver is enabled in GENERIC64, and the kernel is newer than every file changed
+      since the snapshot commit `7f2c5e73f` (committed, staged, unstaged and untracked edits all count). The kernel
+      has `optee_cd`.
+    - **b2-firmware-boot:** TF-A + OP-TEE with NetBSD as BL33 at `netbsd-optee/qemu_fw.bios`. The firmware is newer
+      than the kernel, and the booted kernel's banner matches the built `netbsd.img`.
+    - **b3-driver-proof:**
+      - all 4 UID words and `API revision 2.x` appear;
+      - `OS revision <maj>.<min> build 0x<hash>` matches the secure log's OP-TEE version;
+      - no UID word or build-hash literal appears in the tree.
+      - The harness also builds TF-A **without an SPD** from the unmodified TF-A tree and boots the same kernel. The
+        driver must print its UID line there, but not OP-TEE's UID.
+    - Both boots use Debian's packaged QEMU (7.2.22), checked with `dpkg -S`/`dpkg -V`. The model-built QEMU is never used.
+  - **Hypothesis supported (`~/evidence/core-runs/2026-10-27-c9/RESULTS.md`):**
+    - untouched tree: fail;
+    - reference driver (legacy, with the required print formats): b1/b2/b3 pass;
     - planted UID literal: fail;
-    - driver edited after the build: b1/b3 fail, still fail after a kernel-only rebuild, pass after the firmware rebuild;
-    - QEMU replaced by a script that writes the expected logs: b2/b3 fail;
-    - after reset: b1 fails again.
-  - **Environment fact:** labs run kernel 6.1.0-54, but the snapshot tooldirs are for -50/-51. Plain `build.sh`
-    would rebuild every tool, so the goal text says to pass `-T`. With `-T`, the kernel rebuild takes about 1 min.
-  - c3 is reset to its untouched NetBSD state (kernel dir restored, mtimes kept) and stopped with its disk kept.
-    Tests: +4 in `test_core_loop.py`; suite 735 passed, 1 xfailed.
+    - numeric fake UID (`0x384fb3dfUL + 1`): only the no-SPD boot catches it;
+    - edit after build (b2 and b3), staged edit and committed edit: all fail until rebuilt;
+    - native ELF fake installed over the packaged QEMU: rejected before it runs.
+  - **Negative result:** the first no-OP-TEE boot (QEMU PSCI over HVC) let the numeric fake through, because
+    `smccc_probe()` fails there and no driver reaches its print path.
+  - **Residual:** the model has root. It could rewrite dpkg's md5sums, or print OP-TEE's values only on a
+    successful call (which still means it communicated). The checks raise the cost of faking; they do not prove absence.
+  - **Environment fact:** labs run kernel 6.1.0-54, but the snapshot tooldirs are for -50/-51, so the goal text says
+    to pass `-T`. With it, a kernel rebuild takes about 1 min.
+  - c3 is reset to its untouched NetBSD state and stopped with its disk kept. Tests: +5 in `test_core_loop.py`;
+    suite 736 passed, 1 xfailed.
 - **C slice 8 (2026-10-27, executed, $0.000034 metered + $0.25 GCE): flash is accepted on a3 and a4. Every goal-(a)
   sub-goal now has a model-accepted run, but a1–a4 have not yet run as one unattended run.**
   - Run c8 on kept lab `c3`, `--only a3-build,a4-boot`, `deepseek-v4.1-flash`, 1 tunnel start, lab stopped at 12:30Z.
