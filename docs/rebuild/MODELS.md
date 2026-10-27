@@ -105,6 +105,14 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   5–10 s. Both accept flash's history and `core.TOOLS`.
   Evidence: `~/evidence/stronger-executor-demo-2026-10-27/RESULTS.md`.
 
+## `deepseek-v4-pro` as the b1 executor, multi-step (C slice 18, lab c3, 40 steps)
+- **Writes where flash never did, but slowly.** 61 reads (all b1 scope) before the first write at step 26 (a
+  261-line `sys/dev/fdt/optee.c`), then `files.fdt` + GENERIC64; check 1 passed, but the step cap hit before any
+  `build.sh`. 6 of its 14 write-phase steps repaired its own edits (`sed -i '$d'` deleted its stanza; `cat >>`
+  without sudo, Permission denied — it read the error and switched to sudo). Flash in the same seat (c10, c11): 0 writes.
+- Billed $0.001838 / 40 calls (≈ $0.000046/call, ≈ 25× flash), 1.08M in / 25.7k out, median 8 s, max 71 s (flash up
+  to 713 s). Evidence: `~/evidence/pro-b1-run-2026-10-27/RESULTS.md`.
+
 ## Cheap baselines to beat
 - Keyword failure rule (`error|failed|fatal|…`): "did this command fail?" 23/30 (catches no silent failures,
   never false-alarms on writes); acceptance 14/16 by always saying pass. A model judge must beat this.

@@ -35,6 +35,7 @@ USD comes from provider responses or documented prices — never estimated silen
 | 2026-10-27 | Surplus chat | `deepseek-v4.1-flash` 18 calls (2 slow-seller calls billed $0.008046) | 619944 | 135106 | 0.008170 | — | C slice 14 headroom demo: 3 slice-13 truncated-write inputs × max_tokens 8192/16384 × 3, no lab; 18/18 export-matched |
 | 2026-10-27 | Surplus chat | `deepseek-v4.1-flash` 30 calls | 1236830 | 99359 | 0.000074 | — | C slice 15 feedback-before-finish demo: c11/b1 replay at k=20/30, control vs failing-check feedback (last / every step), no lab; 30/30 export-matched |
 | 2026-10-27 | Surplus chat | `deepseek-v4-pro` 16 calls ($0.000909), `glm-5.3` 7 ($0.000171), `kimi-k3` 7 ($0.000192) | 897465 | 11746 | 0.001272 | — | C slice 16 stronger-executor demo: one next reply per model on replayed c11/b1 prefixes (3 smoke + 27 outcome), no lab; 30/30 export-matched |
+| 2026-10-27 | Surplus chat | `deepseek-v4-pro` 40 calls | 1080051 | 25684 | 0.001838 | — | C slice 18 pro b1 run on lab c3 (failed at step cap; wrote driver, never built); 40/40 export-matched |
 
 C slice 1 rows are reconciled with the export by `python -m conflux.core reconcile` (`~/evidence/core-runs/2026-10-27-c1*/reconciled.json`;
 export total for 2026-10-27: 83 rows, $0.001372).
@@ -47,7 +48,7 @@ charge-bound estimates) are only admission-time bounds. They are replaced by bil
 $0.0108 Jev and $0.0207 rejected-request estimates were billed $0.000006 and $0. Account credit after these runs
 is $9.369476 (`/v1/buyer/me`).
 
-**Metered total: $0.030978** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
+**Metered total: $0.032816** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
 
 ## GCE lab VMs (week 2026-W44 cap $60)
 
@@ -67,5 +68,6 @@ Rate: n2d-standard-8 ≈ $0.338/h running (GCE list price, us-central1) + 100 GB
 | 2026-10-27 | `conflux-dev-lab-c3` | 13:30:48–13:32:06, 13:35:24–14:23:16, 14:23:39–14:49:13 | 1.25 | 0.42 | C slice 9 critic round: revised goal-(b) checks re-validated (numeric fake UID, staged/committed edits, native fake QEMU, no-SPD TF-A boot); stopped, disk kept |
 | 2026-10-27 | `conflux-dev-lab-c3` | 15:08:26–15:48:27 | 0.67 | 0.23 | C slice 10 run c10 (b1, failed at the step cap); first start 15:02Z failed on a GCE stockout ($0, VM not started); stopped, disk kept |
 | 2026-10-27 | `conflux-dev-lab-c3` | 16:02:24–16:35:13 | 0.55 | 0.19 | C slice 11 run c11 (b1, failed at the step cap, model fault); stopped, disk kept |
+| 2026-10-27 | `conflux-dev-lab-c3` | 22:37:58–23:10:03 | 0.53 | 0.18 | C slice 18 pro b1 run (failed at step cap); 2 starts 22:32Z/22:33Z failed on GCE stockouts ($0); stopped, disk kept (holds pro's b1 edits) |
 
-**GCE lab total: $1.96** (plus the c3 disk while it exists)
+**GCE lab total: $2.14** (plus the c3 disk while it exists)
