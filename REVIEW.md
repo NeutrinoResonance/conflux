@@ -9,8 +9,8 @@ Contract: `docs/rebuild/MISSION.md`. Integration base: `rebuild/conflux-core-202
   stay distinct from a check that ran and failed.
 - **Probabilities.** Fabricated, defaulted or digit-scale "probabilities" are Important. Logprob-based
   scoring uses the letter scale (A–T); grounded criticism must not be presented as a probability.
-- **Budget and permission authority.** Model output must never grant permissions, raise budgets or
-  accept work. Changes that let a model (including Jev) decide these are Important.
+- **Budget and acceptance authority.** Model output must never raise budgets or accept work. Changes
+  that let a model (including Jev) decide these are Important.
 - **Execution model routing.** Changes that silently move ordinary execution off DeepSeek to a more
   expensive model, or route development tools (Claude Code/Codex) through Surplus, are Important.
 - **Secrets.** Keys, tokens, credential-bearing logs or raw private traces in the diff are Important.
@@ -27,3 +27,7 @@ Contract: `docs/rebuild/MISSION.md`. Integration base: `rebuild/conflux-core-202
 - Deleting legacy implementation files is expected on this branch (preserved at tag
   `conflux-baseline-20261026`). Review the replacement, not the deletion.
 - `artifacts/` evidence is retained outside Git; do not request committing it.
+- File-access scope is not a security boundary (founder decision 2026-10-27: agents run on disposable
+  scratch VMs). File-access scope, scope-check bypasses, sandbox escapes and path-permission
+  precision are not blocking — Nit at most. Over-holding harmless actions is the bug class this
+  rebuild fixes.
