@@ -1,6 +1,7 @@
 # Spend ledger
 
-Metered budget for the initial 48 h campaign: **$50** (Surplus + any paid overflow).
+Weekly caps (ISO week, Monday 00:00 UTC; founder decision 2026-10-27): **$50** metered model spend
+(Surplus + any paid overflow, billed values from the usage export) and **$60** GCE including lab VM hours.
 Subscription usage (Claude, Codex, NanoGPT, Kimi, GLM) is tracked in its own column, not as cash.
 USD comes from provider responses or documented prices — never estimated silently.
 

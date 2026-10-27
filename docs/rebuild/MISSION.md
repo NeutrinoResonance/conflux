@@ -19,8 +19,26 @@ Make inexpensive DeepSeek execution achieve the best **reliable work per dollar*
 - The project discovers good model/supervision configurations itself; do not ask the founder to
   guess them.
 
+## Completion gate (founder decision 2026-10-27)
+
+The endeavor is done when **Conflux, driving DeepSeek as its normal executor, completes the full
+run-12 task unattended from the clean OP-TEE snapshot** — goal (a) OP-TEE build + QEMU boot of the
+secure world and Linux, then goal (b) the NetBSD driver work — with every goal's success
+independently verified by executed checks (not model self-grades), within the weekly budgets below.
+Task text: `~/evidence/optee-ctl-runs/run12/task.txt`. Run it on a lab VM (`devbox-lab`). Held-out
+comparisons against bare DeepSeek and the baseline (item E) remain required supporting evidence.
+Only then set `MISSION-STATUS: COMPLETE` and open the promotion PR to `main`.
+
 ## Founder decisions (binding; newest first)
 
+- **2026-10-27 — Lab VMs.** The controller creates its own `conflux-dev-lab-*` VMs with
+  `devbox-lab up|ssh|stop|delete|list <name>` (n2d-standard-8, 31 GB RAM, from snapshot
+  `conflux-optee-baseline-clean-20261021`; one at a time; self-stops after 24 h). Stop or delete a lab
+  when its job ends. The old `conflux-optee-*` VMs are not yours to use or change.
+- **2026-10-27 — Weekly budgets replace the 48 h campaign.** Per ISO week (Monday 00:00 UTC): $50
+  metered model spend and $60 GCE (lab hours included). On hitting a cap: checkpoint, set
+  `MISSION-STATUS: PAUSED` plus `RESUME-AFTER: <next Monday>T00:00Z`; the keeper resumes after it.
+  Time passing is never by itself a reason to pause.
 - **2026-10-27 — Billed cost is known; read it, don't estimate it.** Surplus responses (including
   `/v1/decisions`) may omit cost. The authoritative per-request charge is `GET /v1/buyer/usage/export`
   (`buyer_cost_usd` per `request_id`; follow its 302 without the Authorization header) and
@@ -103,9 +121,10 @@ Make inexpensive DeepSeek execution achieve the best **reliable work per dollar*
 
 | Item | Limit | On exhaustion |
 |---|---|---|
-| New metered model spend (Surplus + any paid overflow) | **$50** for the first 48 h campaign | checkpoint, pause paid work, notify |
-| GCE (controller + workers) | $15 hard for 48 h; $100/month budget alert | stop workers, notify |
+| New metered model spend (Surplus + any paid overflow) | **$50 per ISO week** (billed, from the usage export) | checkpoint, PAUSED + RESUME-AFTER next Monday |
+| GCE (controller + workers + labs) | **$60 per ISO week**; $100/month alert is informational | stop labs/workers, PAUSED + RESUME-AFTER |
 | Workers | max 2 (`conflux-dev-worker-1/2`), e2-medium Spot, 2 h per start | checkpoint long jobs; restart within budget |
+| Labs | 1 at a time (`conflux-dev-lab-*`), n2d-standard-8, self-stop after 24 h | checkpoint; restart within budget |
 | Concurrency | 1 implementation session + independent reviewer | parallelize only independent work |
 | Plan review / code review rounds | 2 / 2 | then one fresh diagnosis with new evidence |
 
@@ -115,7 +134,7 @@ Make inexpensive DeepSeek execution achieve the best **reliable work per dollar*
 - A genuinely nonrecoverable blocker: checkpoint, record precise evidence in `STATE.md`, notify.
   Never mark blocked or unverified work successful.
 - `main` stays the preserved baseline. Work merges into `rebuild/conflux-core-20261026`. Open a
-  promotion PR to `main` only when the new core meets its comparison gates; do not merge it — the
+  promotion PR to `main` only when the completion gate above is met; do not merge it — the
   founder authorizes promotion. Waiting for that does not block further work on the rebuild branch.
 
 ## Engineering discipline
