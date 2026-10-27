@@ -6,13 +6,23 @@ USD comes from provider responses or documented prices — never estimated silen
 
 | Date (UTC) | Route | Model | Input tok | Output tok | USD (metered) | Subscription usage | Purpose |
 |---|---|---|---|---|---|---|---|
-| 2026-10-27 | Surplus chat | `deepseek-v4-flash` | 2629 | 278 | 0.000063 | — | B probes: 3 tool round trips + 3 logprobs requests (9 calls) |
-| 2026-10-27 | Surplus chat | `deepseek-v4-pro` | 1991 | 299 | 0.000018 | — | B probes: 3 tool round trips (6 calls) |
-| 2026-10-27 | Surplus `/v1/decisions` | `jev-1.14` | 355 | 32 | 0.010800 est. | — | B probe: 1 `choice` decision. The response has no billed cost, so this is the charge bound (list price × input ≈ $0.000015) |
+| 2026-10-27 | Surplus chat | 9 models (`deepseek-v4-pro`/`-flash`, `qwen3*`, `glm-5.3`, `glm-4.7-flash`, `deepseek-v3.2`, `kimi-k2`) | 1204 | 1215 | 0.000295 | — | operator logprobs probe 04:29–04:31Z (21 calls) |
+| 2026-10-27 | Surplus `/v1/decisions` | `jev-1.14` | 655 | 57 | 0.000011 | — | operator Jev shape probe 04:40Z (2 billed calls) |
+| 2026-10-27 | Surplus chat | `deepseek-v4-flash` | 2629 | 278 | 0.000063 | — | B probes run 1: 3 tool round trips + 3 logprobs (9 calls) |
+| 2026-10-27 | Surplus chat | `deepseek-v4-pro` | 1991 | 299 | 0.000018 | — | B probes run 1: 3 tool round trips (6 calls) |
+| 2026-10-27 | Surplus `/v1/decisions` | `jev-1.14` | 355 | 32 | 0.000006 | — | B probes run 1: 1 `choice` |
+| 2026-10-27 | Surplus `/v1/decisions` | `jev-1.14` | 2073 | 150 | 0.000036 | — | B probes run b2: 3 `choice` + 3 `score` |
+| 2026-10-27 | Surplus chat | `deepseek-v4-pro` | — | — | 0 | — | B probe run b2: 1 logprobs request, HTTP 400 (no export row, so not billed) |
+| 2026-10-27 | Surplus chat (stream) | `deepseek-v4-flash` | 282 | 1119 | 0.000090 | — | B probes run b3: 3 streams |
+| 2026-10-27 | Surplus chat (stream) | `deepseek-v4-pro` | 45 | 393 | 0.000005 | — | B probes run b3: 3 streams |
 | 2026-10-27 | NanoGPT / Kimi Code / GLM | — | 0 | 0 | 0 | catalogue + quota GETs only | B discovery |
 
-The chat USD figures are `buyer_cost_micro` from the responses. They are not reconciled with the account,
-because no Surplus balance endpoint exists (see `PROVIDERS.md`). The operator probe before the campaign
-cost < $0.001 and is not itemized.
+**Accounting source:** the Surplus buyer usage export (`GET https://api.surplusintelligence.ai/v1/buyer/usage/export`,
+`buyer_cost_usd` per request; see `RESOURCES.md`). All rows above are reconciled with the export of 2026-10-27
+(`~/evidence/provider-probes/2026-10-27-reconcile/usage.csv`: 51 rows, all `accrued`, total $0.000524). Rows were
+matched on timestamp, model and token counts. The probe's in-flight figures (`buyer_cost_micro`, derived Jev,
+charge-bound estimates) are only admission-time bounds. They are replaced by billed values here: the earlier
+$0.0108 Jev and $0.0207 rejected-request estimates were billed $0.000006 and $0. Account credit after these runs
+is $9.369476 (`/v1/buyer/me`).
 
-**Metered total: $0.010881**
+**Metered total: $0.000524**

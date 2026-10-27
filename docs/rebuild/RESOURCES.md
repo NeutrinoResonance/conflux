@@ -49,7 +49,14 @@ gcloud compute instances stop  conflux-dev-worker-1 --zone us-central1-a
   per-option `probabilities` and token usage, but no billed cost.
 - **Surplus chat returns no logprobs.** `deepseek-v4-pro` rejects the parameter with 400. Flash and the other models accept it and return
   nothing, even though the catalogue lists `logprobs`.
-- Surplus chat usage reports the charge as `buyer_cost_micro` (micro-USD). There is no balance endpoint.
+- Surplus chat usage reports the charge as `buyer_cost_micro` (micro-USD). Jev decisions carry no cost field.
+- **Accounting source (authoritative):** the Surplus buyer API on `https://api.surplusintelligence.ai`, with the same key.
+  - `GET /v1/buyer/usage/export?format=csv&from=YYYY-MM-DD&to=YYYY-MM-DD` returns a 302 to a pre-signed URL. Follow it
+    **without** the Authorization header. The CSV columns are `request_id, created_at, model, input_tokens,
+    output_tokens, buyer_cost_usd, direct_cost_usd, settlement_status, …`.
+  - `GET /v1/buyer/me` gives `credit_balance_usdc` (micro-USD) and `model_breakdown`.
+  - Jev-1.14 bills about $0.000006 per decision.
+  - The inference host has no balance endpoint.
 - Surplus `/models` needs `Accept-Encoding: identity` (its compressed body breaks httpx).
 - Quota endpoints:
   - NanoGPT: `POST /api/check-balance` and `GET /api/subscription/v1/usage`.

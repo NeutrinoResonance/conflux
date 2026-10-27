@@ -7,14 +7,16 @@ Paid probes (Surplus only): tool-call round trip, logprobs request and streaming
 DeepSeek V4 flash/pro, and Jev-1.14 `choice`/`score` decisions. Every paid request is
 admitted beforehand against a conservative charge bound: it must fit both the per-run
 experiment cap and what is left of the campaign budget in docs/rebuild/LEDGER.md. The
-provider's billed cost replaces the bound afterwards; a response without a billed cost
-(or one billed above its bound) stops all further paid calls.
+provider's billed cost replaces the bound afterwards. Jev decisions carry no billed cost,
+so theirs is derived from catalogue price x reported usage and labeled `derived`. Any
+other response without a cost (or one above its bound) stops all further paid calls.
 
 Keys are read from ~/.config/devbox/secrets/ at runtime. Request headers are never
 recorded, and every written line is scrubbed of key strings.
 
 Usage:
   python scripts/provider_probe.py --out ~/evidence/provider-probes/2026-10-27
+  python scripts/provider_probe.py --out DIR --cap 0.10 --only decision_score,deepseek-v4-pro:logprobs
 """
 
 from __future__ import annotations
@@ -83,6 +85,21 @@ def billed_cost(body: object) -> float | None:
     return None
 
 
+def derived_cost(body: object, pricing: dict | None, min_input: int = 0) -> float | None:
+    """USD from catalogue price x reported usage; None when usage or price is missing."""
+    usage = body.get("usage") if isinstance(body, dict) else None
+    if not isinstance(usage, dict):
+        return None
+    try:
+        tokens_in = int(usage["input_tokens"])
+        tokens_out = int(usage.get("output_tokens") or 0)
+        prompt = float((pricing or {})["prompt"])
+        completion = float((pricing or {}).get("completion") or 0)
+    except (KeyError, TypeError, ValueError):
+        return None
+    return max(tokens_in, min_input) * prompt + tokens_out * completion
+
+
 class Budget:
     """Pre-request admission plus settlement against actual billed cost."""
 
@@ -92,13 +109,14 @@ class Budget:
         self.cap = cap
         self.campaign = campaign
         self.actual = 0.0
+        self.derived = 0.0
         self.estimated = 0.0
         self.reserved = 0.0
         self.stop_reason: str | None = None
 
     @property
     def spent(self) -> float:
-        return self.actual + self.estimated
+        return self.actual + self.derived + self.estimated
 
     def admit(self, bound: float) -> tuple[bool, str | None]:
         if self.stop_reason:
@@ -117,17 +135,20 @@ class Budget:
     def release(self, bound: float) -> None:
         self.reserved -= bound
 
-    def settle(self, bound: float, cost: float | None) -> str:
-        """Replace a reservation with what was billed. Returns 'actual' or 'estimate'."""
+    def settle(self, bound: float, cost: float | None, kind: str = "actual") -> str:
+        """Replace a reservation with the billed (or derived) cost; returns the cost kind."""
         self.reserved -= bound
         if cost is None:
             self.estimated += bound
             self.stop_reason = self.stop_reason or "unknown_accounting"
             return "estimate"
-        self.actual += cost
+        if kind == "derived":
+            self.derived += cost
+        else:
+            self.actual += cost
         if cost > bound:
             self.stop_reason = self.stop_reason or "cost_exceeded_bound"
-        return "actual"
+        return kind
 
     def paused(self) -> bool:
         return (self.stop_reason == "campaign_budget"
@@ -137,6 +158,7 @@ class Budget:
         return {
             "ledger_total_before": round(self.ledger_total, 6),
             "actual_usd": round(self.actual, 6),
+            "derived_usd": round(self.derived, 6),
             "estimated_usd": round(self.estimated, 6),
             "spent_usd": round(self.spent, 6),
             "stop_reason": self.stop_reason,
@@ -364,16 +386,17 @@ def discover(http: httpx.Client, keys: dict, rec: Recorder) -> dict:
 
 class PaidProber:
     def __init__(self, http: httpx.Client, key: str, budget: Budget, rec: Recorder,
-                 pricing: dict):
+                 pricing: dict, only: list[str] | None = None):
         self.http = http
         self.headers = {"Authorization": f"Bearer {key}"}
         self.budget = budget
         self.rec = rec
         self.pricing = pricing
+        self.only = only
         self.results: dict = {}
 
     def _post(self, url: str, payload: dict, bound: float, label: dict,
-              stream: bool = False) -> tuple[int | None, object]:
+              stream: bool = False, derive_min_input: int | None = None) -> tuple[int | None, object]:
         """One admitted-already paid request; settles the reservation."""
         t0 = time.monotonic()
         try:
@@ -389,10 +412,13 @@ class PaidProber:
             else:
                 r = self.http.post(url, json=payload, headers=self.headers)
                 status, body = r.status_code, _json(r)
-            cost = billed_cost(body)
+            cost, kind = billed_cost(body), "actual"
+            if cost is None and derive_min_input is not None and status == 200:
+                cost = derived_cost(body, self.pricing.get(label["model"]), derive_min_input)
+                kind = "derived"
         except httpx.HTTPError as e:
-            status, body, cost = None, {"_transport_error": type(e).__name__}, None
-        kind = self.budget.settle(bound, cost)
+            status, body, cost, kind = None, {"_transport_error": type(e).__name__}, None, "actual"
+        kind = self.budget.settle(bound, cost, kind)
         usage = body.get("usage") if isinstance(body, dict) else None
         self.rec.write(phase="paid", event="response", **label, status=status,
                        latency_s=round(time.monotonic() - t0, 2), bound_usd=bound,
@@ -510,31 +536,37 @@ class PaidProber:
                          min_input=JEV_MIN_INPUT)
         if not self._admit(b, label):
             return
-        status, body = self._post(DECISIONS, p, b, label)
+        status, body = self._post(DECISIONS, p, b, label, derive_min_input=JEV_MIN_INPUT)
         self._record(model, cap, classify_decision(status or 0, body, kind),
                      {"status": status, "error": _err(body) if status != 200 else None,
                       "billed": billed_cost(body) is not None})
 
-    def run(self) -> None:
-        # Known-risky probes last: any response without billed cost stops paid work.
+    def plan(self) -> list[tuple[str, str, object, int]]:
+        """(model, capability, probe, max_tokens), filtered by `only` selectors.
+
+        A selector is `cap` (every model) or `model:cap`. Probes that may return no
+        cost (and so stop paid work) go late, losing only the probes after them.
+        """
         plan = [
-            ("deepseek-v4-flash", self.tool_round_trip, 512),
-            ("deepseek-v4-flash", self.logprobs, 256),
-            ("deepseek-v4-pro", self.tool_round_trip, 1024),
-            ("jev-1.14", lambda m, t, i: self.decision("choice", i), 0),
-            ("jev-1.14", lambda m, t, i: self.decision("score", i), 0),
-            ("deepseek-v4-flash", self.stream, 512),
-            ("deepseek-v4-pro", self.stream, 1024),
-            ("deepseek-v4-pro", self.logprobs, 512),
+            ("deepseek-v4-flash", "tool_round_trip", self.tool_round_trip, 512),
+            ("deepseek-v4-flash", "logprobs", self.logprobs, 256),
+            ("deepseek-v4-pro", "tool_round_trip", self.tool_round_trip, 1024),
+            ("jev-1.14", "decision_choice", lambda m, t, i: self.decision("choice", i), 0),
+            ("jev-1.14", "decision_score", lambda m, t, i: self.decision("score", i), 0),
+            ("deepseek-v4-pro", "logprobs", self.logprobs, 512),
+            ("deepseek-v4-flash", "stream_usage", self.stream, 512),
+            ("deepseek-v4-pro", "stream_usage", self.stream, 1024),
         ]
-        names = {self.tool_round_trip: "tool_round_trip", self.logprobs: "logprobs",
-                 self.stream: "stream_usage"}
-        for model, fn, max_tokens in plan:
-            cap = names.get(fn)
+        if self.only is None:
+            return plan
+        return [p for p in plan if p[1] in self.only or f"{p[0]}:{p[1]}" in self.only]
+
+    def run(self) -> None:
+        for model, cap, fn, max_tokens in self.plan():
             for i in range(SAMPLES):
                 if self.budget.stop_reason:
                     return
-                if cap and self._skip(model, cap):
+                if self._skip(model, cap):
                     break
                 fn(model, max_tokens, i)
 
@@ -543,6 +575,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--no-paid", action="store_true")
+    ap.add_argument("--cap", type=float, default=EXPERIMENT_CAP, help="experiment cap in USD")
+    ap.add_argument("--only", help="comma-separated selectors: `cap` or `model:cap`")
     args = ap.parse_args()
 
     keys = {"surplus": load_key("surplus.key"), "nanogpt": load_key("nanogpt.key"),
@@ -559,9 +593,10 @@ def main() -> int:
             summary["paid"] = {"skipped": f"ledger unreadable: {e}"}
             ledger_total = None
         if ledger_total is not None and not args.no_paid:
-            budget = Budget(ledger_total)
+            budget = Budget(ledger_total, cap=args.cap)
+            only = [s.strip() for s in args.only.split(",") if s.strip()] if args.only else None
             prober = PaidProber(http, keys["surplus"], budget, rec,
-                                summary["discovery"]["surplus_pricing"])
+                                summary["discovery"]["surplus_pricing"], only)
             prober.run()
             summary["paid"] = {"results": prober.results, "budget": budget.report()}
     rec.fh.close()
