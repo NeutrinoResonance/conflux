@@ -94,6 +94,17 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
 - **Weak: step caps on long tasks.** c3/a2 and c4/a3 ended `step_cap` (30 and 40 steps); c4/a3 spent its tail
   re-reading Makefiles around a wrong acceptance check (`bl32_extra2.bin`).
 
+## Stronger executors on b1 (C slice 16, Surplus chat; one next reply on flash's c11/b1 history)
+- **`deepseek-v4-pro`: stays on scope but still reads (0/15 writes).** At k=20/30, 9/10 reads are b1 files (FDT
+  template drivers, `files.fdt`, GENERIC64) and most reasonings state the file plan (`sys/dev/fdt/optee_fdt.c`,
+  `optee* at fdt?`). Example (k=30): "Now I have a good understanding of the codebase. Let me create the OP-TEE
+  driver … Let me look at a few more references first." Billed ≈ $0.000057/call at 17–45k input tokens; 4.7–81 s.
+  Accepts flash-authored assistant turns without `reasoning_content`.
+- **`glm-5.3`, `kimi-k3`: follow the history's drift (0/6 writes each).** At k=30 all 6 replies continue flash's
+  b3-scope reads (`pmap_kenter_pa`, `bus_dma`, `fdt_machdep.c`). glm ≈ $0.000024/call, 2–4 s; kimi ≈ $0.000027/call,
+  5–10 s. Both accept flash's history and `core.TOOLS`.
+  Evidence: `~/evidence/stronger-executor-demo-2026-10-27/RESULTS.md`.
+
 ## Cheap baselines to beat
 - Keyword failure rule (`error|failed|fatal|…`): "did this command fail?" 23/30 (catches no silent failures,
   never false-alarms on writes); acceptance 14/16 by always saying pass. A model judge must beat this.

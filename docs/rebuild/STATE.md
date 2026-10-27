@@ -7,19 +7,20 @@ MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred
   to E); B done. Goal (a) a1–a4 each model-accepted (not yet as one run); goal (b) b1 not yet accepted.
-- **C slice 15 (2026-10-27, demo, $0.000074 metered + $0 GCE): failing-check feedback before `finish` does not make
-  flash write b1. Hypothesis falsified; nothing built.**
-  - Replayed c11/b1 at k=20/30 (prompt_tokens match c11 exactly), 5 samples per cell. Arms: control; the verbatim
-    `_check_feedback` of c11's failing b1 checks appended to the last tool result of step k (Flast) or of every
-    step 1..k (Fevery). Writes/builds/finishes: **control 0/10, Flast 0/10, Fevery 0/10**; all 59 commands are reads.
-  - Flash reads the feedback and discounts it: 6/10 Flast reasonings say the checks "failed as expected since no
-    work yet". Fevery reasonings restate what the checks need, then read b3-scope material.
-  - With slices 12–14: budget, scope, read cap, pro plan, headroom and check feedback all fail. **Prompt-level nudges
-    to bare flash on b1 are exhausted** (codex's main diagnosis is tested and rejected).
-  - All 30 calls took 4–39 s (none > `CHAT_TIMEOUT` 180 s); slice 14's slow seller did not recur, the risk stands.
-  - Admission reserved every call's worst-case bound before dispatch under a $3.00 cap (bounds sum $1.99). 30/30
-    export-matched. Evidence: `~/evidence/feedback-demo-2026-10-27/RESULTS.md` (`demo.py`, `samples.jsonl`,
-    `reconciled.json`).
+- **C slice 16 (2026-10-27, demo, $0.001272 metered + $0 GCE): a stronger executor in flash's seat also reads.
+  Hypothesis falsified; nothing built.**
+  - Replayed c11/b1 (flash's history) at k=10/20/30 and sampled one next reply from `deepseek-v4-pro` (n=5 per k),
+    `glm-5.3` and `kimi-k3` (n=3 at k=20/30), all via Surplus. Plausible admissible writes: **pro 0/15, glm 0/6,
+    kimi 0/6** (flash 0/20). All 50 commands are reads; no denial, truncation or `finish`.
+  - Scope separates them: pro's reads stay on b1 (9/10 at k=20/30; it names `sys/dev/fdt/optee_fdt.c`, `files.fdt`,
+    GENERIC64) yet opens "a few more references first"; glm/kimi follow flash's b3 drift at k=30 (0/6 b1).
+  - The one-step measure is saturated (0/47 over four models): it cannot tell "writes at k+3" from "never writes".
+    Whether pro finishes b1 needs a multi-step live run. Pro billed ≈ $0.000057/call; max latency 81 s.
+  - Evidence: `~/evidence/stronger-executor-demo-2026-10-27/RESULTS.md` (`demo.py`, `samples.jsonl`, `labels.json`,
+    `reconciled.json`; 30/30 export-matched).
+- **C slice 15 (demo, $0.000074): failing-check feedback before `finish` does not make flash write b1** (control,
+  last-step and every-step feedback each 0/10; 6/10 reasonings dismiss the checks as "failed as expected since no
+  work yet"). Prompt-level nudges to flash on b1 are exhausted. Evidence: `~/evidence/feedback-demo-2026-10-27/`.
 - **C slice 14 (demo, $0.008170): more output headroom does not make flash's truncated driver writes executable.**
   Complete admissible edits at max_tokens 8192 2/9 vs 16384 0/9; reasoning grows to fill the limit; 2 heredocs hit
   `MAX_COMMAND`. `MAX_TOKENS` stays 8192. **Live-run risk:** 10/18 calls took > 180 s (max 713 s); in `run_task` one
@@ -65,11 +66,9 @@ MISSION-STATUS: ACTIVE
   1. Harness fault before the next live run: reproduce the chat-timeout risk (a reply slower than `CHAT_TIMEOUT`
      ends the task `unverified provider_0`) in a regression test, then fix it structurally (e.g. a longer timeout
      or one retry). $0.
-  2. Changed hypothesis for b1 (prompt nudges exhausted; work item D): demo a localized stronger-model step. From
-     replayed c11/b1 prefixes, have `deepseek-v4-pro` (or a Kimi/GLM route) produce the next reply as executor and
-     count plausible, executable, size-admissible writes against flash's 0/20, with billed cost per write. Reserve
-     worst-case bounds before dispatch (pro bounds ≈ $0.10–0.23/call).
-  3. If a stronger model writes: demo deny recovery (split after `command_too_long`/`truncated_at_max_tokens`) and
-     a flash-builds/pro-writes hand-off on c3.
-  4. For the completion gate, run a1→a4 then b1→b3 unattended from the clean snapshot on a fresh lab, then delete
+  2. Then a multi-step b1 demo run with `--model deepseek-v4-pro` on lab c3 (fresh b1 attempt, cap ≈ $0.10 metered,
+     ≈ $0.25 GCE; `PRICE_CEILING`/`OUTPUT_CEILING` are flash rates, so set pro's bound): does pro write, build
+     and get accepted where flash failed twice? If yes, demo a flash-builds / pro-writes hand-off for cost; if no,
+     re-cut b1 into smaller sub-goals (driver file + config, then build).
+  3. For the completion gate, run a1→a4 then b1→b3 unattended from the clean snapshot on a fresh lab, then delete
      the c3 disk.

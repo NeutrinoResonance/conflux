@@ -34,6 +34,7 @@ USD comes from provider responses or documented prices — never estimated silen
 | 2026-10-27 | Codex CLI (`codex exec`, read-only) | Codex default | — | — | — | Codex subscription: 2 invocations (1 hung on stdin, 1 answered) | C slice 13: diagnosis hand-off after all 3 arms failed (`codex-diagnosis.md`) |
 | 2026-10-27 | Surplus chat | `deepseek-v4.1-flash` 18 calls (2 slow-seller calls billed $0.008046) | 619944 | 135106 | 0.008170 | — | C slice 14 headroom demo: 3 slice-13 truncated-write inputs × max_tokens 8192/16384 × 3, no lab; 18/18 export-matched |
 | 2026-10-27 | Surplus chat | `deepseek-v4.1-flash` 30 calls | 1236830 | 99359 | 0.000074 | — | C slice 15 feedback-before-finish demo: c11/b1 replay at k=20/30, control vs failing-check feedback (last / every step), no lab; 30/30 export-matched |
+| 2026-10-27 | Surplus chat | `deepseek-v4-pro` 16 calls ($0.000909), `glm-5.3` 7 ($0.000171), `kimi-k3` 7 ($0.000192) | 897465 | 11746 | 0.001272 | — | C slice 16 stronger-executor demo: one next reply per model on replayed c11/b1 prefixes (3 smoke + 27 outcome), no lab; 30/30 export-matched |
 
 C slice 1 rows are reconciled with the export by `python -m conflux.core reconcile` (`~/evidence/core-runs/2026-10-27-c1*/reconciled.json`;
 export total for 2026-10-27: 83 rows, $0.001372).
@@ -46,7 +47,7 @@ charge-bound estimates) are only admission-time bounds. They are replaced by bil
 $0.0108 Jev and $0.0207 rejected-request estimates were billed $0.000006 and $0. Account credit after these runs
 is $9.369476 (`/v1/buyer/me`).
 
-**Metered total: $0.029706** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
+**Metered total: $0.030978** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
 
 ## GCE lab VMs (week 2026-W44 cap $60)
 
