@@ -26,6 +26,7 @@ USD comes from provider responses or documented prices — never estimated silen
 | 2026-10-27 | Surplus `GET /v1/prices` | — | 0 | 0 | 0 | — | C slice 5 offers snapshot (no export row) |
 | 2026-10-27 | Surplus chat | `deepseek-v4.1-flash` | 12019 | 21749 | 0.000019 | — | operator Jev fair test: 46 judge calls (MODELS.md) |
 | 2026-10-27 | Surplus `/v1/decisions` | `jev-1.14` | 23470 | 1570 | ≈0.00028 (46 × documented $0.000006; no cost field) | — | operator Jev fair test: 46 decisions (MODELS.md) |
+| 2026-10-27 | Surplus chat | `deepseek-v4.1-flash` | 1162291 | 38398 | 0.000034 | — | C slice 8 run c8 (lab c3, kept disk): a3 accepted at the step cap (40 calls, $0.000025), a4 accepted (24 calls, $0.000009); 64/64 export-matched |
 
 C slice 1 rows are reconciled with the export by `python -m conflux.core reconcile` (`~/evidence/core-runs/2026-10-27-c1*/reconciled.json`;
 export total for 2026-10-27: 83 rows, $0.001372).
@@ -38,7 +39,7 @@ charge-bound estimates) are only admission-time bounds. They are replaced by bil
 $0.0108 Jev and $0.0207 rejected-request estimates were billed $0.000006 and $0. Account credit after these runs
 is $9.369476 (`/v1/buyer/me`).
 
-**Metered total: $0.019565**
+**Metered total: $0.019898** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
 
 ## GCE lab VMs (week 2026-W44 cap $60)
 
@@ -53,5 +54,6 @@ Rate: n2d-standard-8 ≈ $0.338/h running (GCE list price, us-central1) + 100 GB
 | 2026-10-27 | `conflux-dev-lab-c3` | 09:49:42–09:53:36 | 0.07 | 0.02 | C slice 5 critic fix: pristine-evaluator a4 check passes, tampered `qemu_v8.mk` fails; stopped, disk kept |
 | 2026-10-27 | `conflux-dev-lab-c3` | 10:20:19–10:25:23 | 0.08 | 0.03 | C slice 6 harness-only a1–a4 recheck under pipefail: 4/4 pass; stopped, disk kept |
 | 2026-10-27 | `conflux-dev-lab-c3` | 11:19:13–11:25:50 | 0.11 | 0.04 | C slice 7 harness-only probes (ERR trap keeps PIPESTATUS, `failed_cmds`) + a1–a4 recheck: 4/4 pass; stopped, disk kept |
+| 2026-10-27 | `conflux-dev-lab-c3` | 11:45:57–12:30:55 | 0.75 | 0.25 | C slice 8 model run c8 (a3 + a4, both accepted); stopped, disk kept |
 
-**GCE lab total: $0.71** (plus the c3 disk while it exists)
+**GCE lab total: $0.96** (plus the c3 disk while it exists)

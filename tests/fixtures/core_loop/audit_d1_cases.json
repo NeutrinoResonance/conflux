@@ -112,6 +112,22 @@
     "stdout": "exit=1",
     "stderr": "Traceback (most recent call last):\n  File \"/home/dev/evidence/core-runs/2026-10-27-c5/tuning/fix-mean-1/work/check_calc.py\", line 3, in <module>\n    assert mean([1, 2]) == 1.5, mean([1, 2])\n           ^^^^^^^^^^^^^^^^^^^\nAssertionError: 1"
    }
+  },
+  {
+   "trace": "2026-10-27-c8/a3-build/trace.jsonl",
+   "sha256": "a1e83d00fb952c8d12c89ecf869c50e222f7e762628a70b77e6f4a19637888ed",
+   "step": 27,
+   "expect": "none",
+   "why": "strings/objdump print binary content; error strings embedded in fip.bin are not a failure",
+   "row": {
+    "event": "exec",
+    "source": "model",
+    "step": 27,
+    "command": "cd optee && ls -l trusted-firmware-a/build/qemu/release/fip.bin; ./toolchains/aarch64/bin/aarch64-linux-gnu-objdump -h trusted-firmware-a/build/qemu/release/bl31/bl31.elf | head -10; strings trusted-firmware-a/build/qemu/release/fip.bin | grep -i optee | head",
+    "exit": 0,
+    "stdout": "The load address in optee header %p - %p is not in reserved area: %p - %p.\nParse optee image failed.\nOPTEE header parse error.\nNo OPTEE provided by BL2 boot loader, Booting device without OPTEE initialization. SMC`s destined for OPTEE will return SMC_UNK\nopteed_std\nopteed_fast\ncore/arch/arm/kernel/thread_optee_smc.c\n/firmware/optee\nlinaro,optee-tz\noptee_core",
+    "stderr": ""
+   }
   }
  ]
 }
