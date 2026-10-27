@@ -5,6 +5,33 @@ Keep this short and current. One entry per decision; newest first.
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred to E); B done.
+- **C slice 5 (2026-10-27, executed, $0.000000 metered + $0.05 GCE): default executor is `deepseek-v4.1-flash`; a4 cut.**
+  - **Offers** (`GET https://api.surplusintelligence.ai/v1/prices`, 09:31Z): at list price v4.1-flash is *not* cheaper
+    ($0.14–0.30/M in, $0.42–1.20/M out vs v4-flash $0.05–0.17 / $0.275–0.45). Billed price decides (founder decision).
+  - **H5a supported:** tuning run c5 (3 tasks × 2) gave **6/6 accepted**, 2–5 steps, 0 retries, 20 calls, 20/20
+    export-matched on tokens. Every call billed `buyer_cost_usd` 0.000000, below the export's 1 micro-USD resolution
+    (v4-flash c1b: $0.000116 per accepted run). `direct_cost_usd` (list) sum: $0.002887. `MODEL` switched.
+  - **Admission bound fixed:** the old `(bytes + MAX_TOKENS) × 4e-7` was below v4.1-flash's top output list rate
+    ($1.2e-6/tok). The bound is now `bytes × 4e-7 + MAX_TOKENS × 2.4e-6` (≈ +$0.0049 per call). The new test is red
+    under the old formula.
+  - **a4-boot cut and harness-validated (H5b supported):** the check runs upstream's `make check-only CHECK_TESTS=xtest
+    XTEST_ARGS=1001` (no rebuild) after deleting the old logs, then greps the regenerated logs. Try 1 failed with
+    `expect: command not found`: a1 never installs `expect`, so the check now installs it if missing (the committed form runs `cd optee/build` first). Try 2: **pass
+    in 54 s**. Log markers: `I/TC: OP-TEE version: 4.11.0`, `Primary CPU switching to normal world boot`, `Linux version
+    7.3.0`, `optee: revision 4.11`, `Status: PASS (10 test cases)`. This is a harness pass, not a model-accepted run.
+    The logs were reset afterwards; c3 is stopped with its disk kept.
+  - **Critic fix (the evaluator is model-editable):** before booting, the check requires `optee/build` (the Makefile and
+    expect drivers) to be clean, with HEAD in the history of the freshly fetched `OP-TEE/build` master, and QEMU to be
+    an ELF binary. On c3: pristine tree → pass (55 s); appending to `qemu_v8.mk` → fail. The regression test rejects a
+    fabricated echo target, a dirty tree, a fake QEMU and stale logs. Trust boundary: built images are the work under
+    test.
+  - Evidence: `~/evidence/core-runs/2026-10-27-c5/` (`offers.json`, `tuning/reconciled.json`, `recheck_a4.try{1,2}.json`).
+    Tests: 55 in `tests/test_core_loop.py`; suite 681 passed, 1 xfailed.
+- **Next action:**
+  1. Run `--only a3-build,a4-boot --lab c3 --workdir '~/optee-work'` on the new default. Expected: a3 accepts at once
+     (its tree is built), and a4 accepts within its 25-step cap.
+  2. Then cut goal (b) (NetBSD driver) sub-goals from run-12 / `lab/` evidence, with checks validated harness-only first.
+  - Delete the c3 disk once goal (a) is done or abandoned.
 - **C slice 4 (2026-10-27, executed, $0.011158 metered + $0.36 GCE): bare flash builds the full qemu_v8 tree.**
   Run c4 on kept lab `c3`, `--only a2-sources,a3-build`, 1 tunnel start, 0 restarts.
   - **a2 accepted** in 12 steps / 256 s / $0.00052. That is more than the predicted ≤ 5: flash re-installed `repo`
@@ -26,14 +53,6 @@ MISSION-STATUS: ACTIVE
     model run.
   - 52/52 calls export-matched. Lab `c3` is stopped with its disk kept (built tree).
     Evidence: `~/evidence/core-runs/2026-10-27-c4/`. Tests: 53 in `tests/test_core_loop.py`.
-- **Next action:**
-  1. Apply the founder decision (MISSION.md, 2026-10-27): switch `conflux.core.MODEL` to `deepseek-v4.1-flash` after
-     comparing current offers. Re-check the 3 tuning tasks and reconcile billing.
-  2. Cut a4 (boot QEMU with OP-TEE + Linux). Take its acceptance check from `optee/build/qemu_v8.mk`'s `check`
-     target, which boots via expect and writes `serial0.log`/`serial1.log`, plus run-12 evidence. Validate the
-     check harness-only on the kept `c3` disk first (e.g. `make check-only` with no model).
-  3. Run `--only a3-build,a4-boot --lab c3` on the new default model: a3 should accept at once.
-  - Delete the c3 disk once goal (a) is done or abandoned.
 - **C slice 3 (2026-10-27, executed, $0.004105 metered + $0.13 GCE): labs have egress.** No Cloud NAT exists (0 routers).
   - **How:** `run_lab` serves a stdlib HTTP CONNECT/forward proxy on the controller (`egress_proxy`). A supervised
     `gcloud compute ssh -N -R 3128:…` reverse-tunnels it to the lab. Every lab job gets `PROXY_ENV`. Harness setup

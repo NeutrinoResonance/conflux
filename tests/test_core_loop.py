@@ -1,6 +1,8 @@
 """Offline tests of the slice-1 execution loop in conflux/core.py (scripted provider responses)."""
 
 import json
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -365,8 +367,8 @@ def test_run_lab_stops_after_the_first_non_accepted_task(lab, tmp_path, devbox_l
 
 def test_optee_goal_a_checks_execute_and_reject_an_empty_workdir(tmp_path):
     tasks = [Task.from_dict(d) for d in json.loads((FIXTURES / "optee_goal_a.json").read_text())]
-    assert [t.id for t in tasks] == ["a1-host-prereqs", "a2-sources", "a3-build"]
-    for t in tasks[1:]:  # a1 depends on the host; a2/a3 cannot pass without a tree
+    assert [t.id for t in tasks] == ["a1-host-prereqs", "a2-sources", "a3-build", "a4-boot"]
+    for t in tasks[1:]:  # a1 depends on the host; a2-a4 cannot pass without a tree
         assert core.run_checks(t.checks, core.local_shell(tmp_path))[0] == "fail"
 
 
@@ -381,6 +383,62 @@ def test_optee_a3_image_check_accepts_the_empty_pageable_image(tmp_path):
     assert core.run_checks([image_check], core.local_shell(tmp_path))[0] == "pass"
     (out / "bl32_extra1.bin").write_bytes(b"")
     assert core.run_checks([image_check], core.local_shell(tmp_path))[0] == "fail"
+
+
+def test_optee_a4_boot_check_runs_only_a_pristine_upstream_evaluator(tmp_path, monkeypatch):
+    # The harness reruns upstream's `make check-only` (no rebuild) itself, and only from a clean optee/build whose
+    # HEAD is in upstream history: a model-written Makefile target or a fake QEMU cannot fabricate the boot.
+    a4 = {t.id: t for t in map(Task.from_dict, json.loads((FIXTURES / "optee_goal_a.json").read_text()))}["a4-boot"]
+    assert "make check-only " in a4.checks[0].cmd and a4.checks[0].timeout > 1500
+
+    def git(*args, cwd):
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=cwd, check=True,
+                       capture_output=True)
+    fake = "check-only:\n\techo 'I/TC: Primary CPU switching to normal world boot' > ../out/bin/serial1.log\n" \
+           "\techo 'Linux version 6.x' > ../out/bin/serial0.log\n"
+    seed, upstream = tmp_path / "seed", tmp_path / "upstream.git"
+    seed.mkdir()
+    (seed / "Makefile").write_text(fake)  # stands in for upstream's evaluator
+    git("init", "-q", "-b", "master", cwd=seed)
+    git("add", "Makefile", cwd=seed)
+    git("commit", "-q", "-m", "upstream", cwd=seed)
+    git("clone", "-q", "--bare", str(seed), str(upstream), cwd=tmp_path)
+    work = tmp_path / "w"
+    build, out, qemu, bin_ = work / "optee/build", work / "optee/out/bin", work / "optee/qemu/build", tmp_path / "bin"
+    for d in (out, qemu, bin_):
+        d.mkdir(parents=True)
+    git("clone", "-q", str(upstream), str(build), cwd=tmp_path)
+    (qemu / "qemu-system-aarch64").write_bytes(b"\x7fELF")
+    (bin_ / "expect").write_text("#!/bin/sh\n")  # present, so the check does not apt-get it
+    (bin_ / "expect").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_}:{os.environ['PATH']}")
+    monkeypatch.setenv("OPTEE_BUILD_UPSTREAM", str(upstream))
+
+    def verdict():
+        return core.run_checks(a4.checks, core.local_shell(work))[0]
+    assert verdict() == "pass"
+    (build / "Makefile").write_text(fake + "# edited\n")  # dirty tree
+    assert verdict() == "fail"
+    git("commit", "-q", "-am", "fabricated target", cwd=build)  # clean, but not upstream history
+    assert verdict() == "fail"
+    git("reset", "-q", "--hard", "origin/master", cwd=build)
+    (qemu / "qemu-system-aarch64").write_text("#!/bin/sh\necho QEMU\n")  # not a built QEMU
+    assert verdict() == "fail"
+    (qemu / "qemu-system-aarch64").write_bytes(b"\x7fELF")
+    (seed / "Makefile").write_text("check-only:\n\ttrue\n")  # upstream boot that writes no logs
+    git("commit", "-q", "-am", "no logs", cwd=seed)
+    git("push", "-q", str(upstream), "master", cwd=seed)
+    git("pull", "-q", cwd=build)
+    (out / "serial1.log").write_text("I/TC: Primary CPU switching to normal world boot\n")  # stale
+    (out / "serial0.log").write_text("Linux version 6.x\n")
+    assert verdict() == "fail"
+
+
+def test_admission_bound_covers_the_top_output_list_price(tmp_path):
+    chat = Scripted(resp(call("run_shell", {"command": "echo yes > ok.txt"}), micro=None), resp(call("finish", {})))
+    _, trace = run(TOUCH, chat, tmp_path)
+    mc = [e for e in trace.events if e["event"] == "model_call"][0]
+    assert mc["bound_usd"] >= core.MAX_TOKENS * 1.2e-6  # deepseek-v4.1-flash, priciest seller, 2026-10-27
 
 
 def test_lab_shell_rides_out_transient_poll_failures(lab):
