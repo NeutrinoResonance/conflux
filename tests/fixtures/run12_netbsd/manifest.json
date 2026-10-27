@@ -1,0 +1,97 @@
+{
+  "description": "Run 12 (OP-TEE/NetBSD live repro, 2026-10-24) stall at goal (b): read-only checks misscoped by conflux.decider._shell_effects. Sanitized: commands and false-path tokens only; full traces stay in evidence.",
+  "evidence_root": "~/evidence/optee-ctl-runs/run12",
+  "evidence_sha256": {
+    "task.txt": "81461707c220fdf0ce26b0efbaa85f1fd7bd8ab4df848feac921a93524aee979",
+    "transcript.json": "d4fa53630adf873bac56f7b31df5595112964692343608b49421aec71a299b32",
+    "senate.jsonl": "6d0df0e4fef7d265a788d079ba498c55ce66868ac6c7edf71c888ed1cf903a5e",
+    "runner.log": "21abff4df1d42fec4a7d851955a7a1c3681a066363c08f738d165bc24b0f2037",
+    "proxy.log": "2e73590d6d9ab802d1c4db3a64238c136f78a250e441e6c025a3afdf7fa8e1d2",
+    "traces.db": "671df4f211bd083c758bf1b2b672fac4c789ceb0da97d6b52e58d23a8c8f7b46"
+  },
+  "analysis_outputs": "~/evidence/analysis/run12-netbsd/ (actions.json, replay.txt, chain.txt)",
+  "counts": {
+    "governed_actions": 308,
+    "with_false_relative_path": 39,
+    "soundness_checks": 60,
+    "soundness_failed_closed_http_402": 26,
+    "first_http_402_soundness_check": "act_92241593456e411d 2026-10-24T10:29:09Z",
+    "goal_a_verified": "act_b5b9add8426e4a9f 2026-10-24T17:02:39Z",
+    "netbsd_clone_launch_proposals_reaching_governance": 0
+  },
+  "actions": [
+    {
+      "action_id": "act_716b22ec52c6403b",
+      "utc": "2026-10-24T03:24:42Z",
+      "risk": "high",
+      "status": "completed",
+      "verdict": "approve",
+      "false_relative_paths": [
+        "1",
+        "2"
+      ],
+      "command": "set -e; uname -s >/dev/null; cat /etc/os-release >/dev/null; test -r /proc/cpuinfo; test -r /proc/meminfo || true; ls -l /dev/kvm >/dev/null 2>&1 || true; for c in qemu-system-aarch64 qemu-img git make gcc python3 curl repo pkg-config; do command -v \"$c\" >/dev/null 2>&1 && echo \"$c=found\" || echo \"$c=missing\"; done; echo CENSUS_CHECK_OK",
+      "note": "first false-path occurrence in run 12 (fd numbers of 2>&1)"
+    },
+    {
+      "action_id": "act_40f7d6d6a49345c3",
+      "utc": "2026-10-24T17:02:39Z",
+      "risk": "medium",
+      "status": "postcheck_failed",
+      "verdict": "human",
+      "false_relative_paths": [
+        "I/TC:"
+      ],
+      "command": "/usr/bin/test -s /tmp/conflux-agent/optee-run-serial-sw.log && /usr/bin/grep -q 'I/TC:' /tmp/conflux-agent/optee-run-serial-sw.log && /usr/bin/grep -qx 'OPTEE_BOOT_OBSERVED=yes' /tmp/conflux-agent/optee-run.log && echo OPTEE_BOOT_EVIDENCE_OK",
+      "note": "first after goal (a); medium only from the false path, soundness check then failed closed on HTTP 402"
+    },
+    {
+      "action_id": "act_c64ca4d4a70d4832",
+      "utc": "2026-10-24T17:21:44Z",
+      "risk": "medium",
+      "status": "postcheck_failed",
+      "verdict": "human",
+      "false_relative_paths": [
+        "I/TC:"
+      ],
+      "command": "/usr/bin/grep -q '^qemu_system_aarch64=QEMU emulator version' /tmp/conflux-agent/baseline-env.txt && /usr/bin/grep -qx 'netbsd_src=none' /tmp/conflux-agent/baseline-env.txt && /usr/bin/grep -qx 'optee_dirs=none' /tmp/conflux-agent/baseline-env.txt && /usr/bin/grep -qx 'sentinel=TOOLCHAIN_SETUP_OK' /tmp/conflux-agent/toolchain-env.txt && /usr/bin/grep -qx 'smoke_test=PASS' /tmp/conflux-agent/toolchain-env.txt && /usr/bin/grep -qx 'SOURCE_SYNC_OK' /tmp/conflux-agent/source-manifest.txt && /usr/bin/grep -Eq '^optee_os_head=[0-9a-f]{40}$' /tmp/conflux-agent/source-manifest.txt && /usr/bin/grep -Eq '^qemu_head=[0-9a-f]{40}$' /tmp/conflux-agent/source-manifest.txt && /usr/bin/grep -qx 'sentinel=HOST_BUILD_DEPS_OK' /tmp/conflux-agent/host-build-deps.txt && /usr/bin/grep -q '^swig_version=SWIG Version' /tmp/conflux-agent/host-build-deps.txt && /usr/bin/grep -qx 'BUILD3_REAL_EXIT=0' /tmp/conflux-agent/optee-build3.log && /usr/bin/grep -qx 'OPTEE_BOOT_OBSERVED=yes' /tmp/conflux-agent/optee-run.log && /usr/bin/grep -qx 'LINUX_BOOT_OBSERVED=yes' /tmp/conflux-agent/optee-run.log && /usr/bin/grep -q 'I/TC:' /tmp/conflux-agent/optee-run-serial-sw.log && /usr/bin/grep -q 'Starting kernel' /tmp/conflux-agent/optee-run-serial.log && echo GOAL_A_EVIDENCE_UNCHANGED",
+      "note": "output GOAL_A_EVIDENCE_UNCHANGED, exit 0; medium from false path; soundness HTTP 402 -> postcheck_failed"
+    },
+    {
+      "action_id": "act_36ddd48525f642fb",
+      "utc": "2026-10-24T17:40:21Z",
+      "risk": "high",
+      "status": "postcheck_failed",
+      "verdict": "approve",
+      "false_relative_paths": [
+        "1"
+      ],
+      "command": "if /usr/bin/test -s /tmp/conflux-agent/netbsd-clone.log; then echo NETBSD_CLONE_LOG_STATUS=present; else echo NETBSD_CLONE_LOG_STATUS=absent_or_empty; fi; if /usr/bin/test -s /tmp/conflux-agent/netbsd-sync.log; then echo NETBSD_SYNC_LOG_STATUS=present; else echo NETBSD_SYNC_LOG_STATUS=absent_or_empty; fi; if /usr/bin/test -s /tmp/conflux-agent/netbsd-src-state.txt; then echo NETBSD_SRC_STATE_STATUS=present; else echo NETBSD_SRC_STATE_STATUS=absent_or_empty; fi; if /usr/bin/test -x /tmp/conflux-agent/netbsd/src/build.sh && /usr/bin/test -f /tmp/conflux-agent/netbsd/src/sys/arch/evbarm/conf/GENERIC64 && /usr/bin/test -d /tmp/conflux-agent/netbsd/src/sys/arch/arm; then echo NETBSD_SRC_TREES_STATUS=ok; else echo NETBSD_SRC_TREES_STATUS=not_ok; fi; /usr/bin/df -B1G /tmp/conflux-agent | /usr/bin/tail -n 1 >/dev/null && echo DISK_LINE_PRESENT; echo NETBSD_STATE_DIAG_DONE",
+      "note": "executor's NetBSD state diagnostic; soundness HTTP 402 -> postcheck_failed"
+    },
+    {
+      "action_id": "act_94d8ee95c80346c8",
+      "utc": "2026-10-24T17:44:56Z",
+      "risk": "medium",
+      "status": "postcheck_failed",
+      "verdict": "human",
+      "false_relative_paths": [
+        "1"
+      ],
+      "command": "/usr/bin/df -B1G /tmp/conflux-agent | /usr/bin/tail -n 1 >/dev/null && echo DISK_LINE_PRESENT",
+      "note": "re-check held: 'same exact non-idempotent call previously ran but failed its postcondition'"
+    },
+    {
+      "action_id": "act_f2e51f2cc42840a1",
+      "utc": "2026-10-24T17:44:56Z",
+      "risk": "medium",
+      "status": "postcheck_failed",
+      "verdict": "human",
+      "false_relative_paths": [
+        "I/TC:"
+      ],
+      "command": "/usr/bin/grep -q '^qemu_system_aarch64=QEMU emulator version' /tmp/conflux-agent/baseline-env.txt && /usr/bin/grep -qx 'netbsd_src=none' /tmp/conflux-agent/baseline-env.txt && /usr/bin/grep -qx 'optee_dirs=none' /tmp/conflux-agent/baseline-env.txt && /usr/bin/grep -qx 'sentinel=TOOLCHAIN_SETUP_OK' /tmp/conflux-agent/toolchain-env.txt && /usr/bin/grep -qx 'smoke_test=PASS' /tmp/conflux-agent/toolchain-env.txt && /usr/bin/grep -qx 'SOURCE_SYNC_OK' /tmp/conflux-agent/source-manifest.txt && /usr/bin/grep -Eq '^optee_os_head=[0-9a-f]{40}$' /tmp/conflux-agent/source-manifest.txt && /usr/bin/grep -Eq '^qemu_head=[0-9a-f]{40}$' /tmp/conflux-agent/source-manifest.txt && /usr/bin/grep -qx 'sentinel=HOST_BUILD_DEPS_OK' /tmp/conflux-agent/host-build-deps.txt && /usr/bin/grep -q '^swig_version=SWIG Version' /tmp/conflux-agent/host-build-deps.txt && /usr/bin/grep -qx 'BUILD3_REAL_EXIT=0' /tmp/conflux-agent/optee-build3.log && /usr/bin/grep -qx 'OPTEE_BOOT_OBSERVED=yes' /tmp/conflux-agent/optee-run.log && /usr/bin/grep -qx 'LINUX_BOOT_OBSERVED=yes' /tmp/conflux-agent/optee-run.log && /usr/bin/grep -q 'I/TC:' /tmp/conflux-agent/optee-run-serial-sw.log && /usr/bin/grep -q 'Starting kernel' /tmp/conflux-agent/optee-run-serial.log && echo GOAL_A_EVIDENCE_UNCHANGED",
+      "note": "identical re-run of act_c64ca4d4a70d4832 held for a human"
+    }
+  ]
+}
