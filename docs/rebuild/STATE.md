@@ -5,22 +5,29 @@ Keep this short and current. One entry per decision; newest first.
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core). A is done offline (live rerun deferred to E); B is done.
-- **B finished (2026-10-27, executed, $0.000131 billed this step):** `docs/rebuild/PROVIDERS.md` has no capability
-  left "not tested". The ledger is reconciled with the Surplus buyer usage export (the accounting source; see
-  `RESOURCES.md`): total **$0.000524 of $50**, all 51 rows billed. Credit is $9.37.
-  - **Verified:**
-    - Both DeepSeek models: tool round trip 3/3, and streaming + usage 3/3 with `buyer_cost_micro` in the final chunk.
-    - Jev-1.14 `choice` 4/4 and `score` 3/3 return normalized probabilities in ~0.25 s.
-    - No Surplus chat model returns logprobs. v4-pro rejects the parameter with 400; flash accepts it and returns none.
-  - **Decision (founder-approved):** Surplus accounting is **known**. The billed source is
-    `GET /v1/buyer/usage/export`. In flight, `scripts/provider_probe.py` settles Jev at a `derived` bound
-    (`derived_cost()`: catalogue price × tokens, about 2.4× billed), so Jev no longer stops paid work.
-  - A 4xx with no usage still stops a probe run. It was not billed, though: the export has no row for it. That stop is
-    why the streams ran in a second run (b3). The earlier $0.0108 and $0.0207 estimates are replaced by billed $0.000006 and $0.
-- **Next action:** start C with a single explicit loop. It needs task acceptance criteria; DeepSeek-flash tool
-  proposals through Surplus (plain OpenAI `tools`); deterministic policy/scope checks reusing the T1/T2 fixes;
-  a Jev `choice` accept/retry gate on bounded decisions; and per-call cost from `buyer_cost_micro` (derived for Jev), reconciled after each run from the export.
-  The first slice is the loop and its trace/cost record, with an offline test on recorded responses. Cap it at ≤ $0.20 live.
+- **C slice 1 done (2026-10-27, executed, $0.000848 billed this step):** `conflux/core.py` is one explicit loop.
+  `deepseek-v4-flash` proposes `run_shell`/`finish` calls through Surplus chat. Deterministic code does budget
+  admission, a permissive policy (tool name, arguments, command size; no path scope), execution, and acceptance.
+  Acceptance is the task's own shell checks, run by the harness; on failure their evidence goes back to the model.
+  Statuses: `accepted` / `failed` / `unverified` (no verdict, T2 semantics). Per-call cost is `buyer_cost_micro`, or the
+  admission bound when it is missing. `reconcile` matches every call to the usage export.
+  - **Hypothesis supported:** ≥ 4/6 accepted at ≤ $0.005 each. Result: **6/6 accepted** on 3 tuning tasks × 2
+    (run c1b), 0 acceptance retries, 3–6 steps, 9–39 s. Cost: **$0.000116 billed per accepted run**
+    ($0.000696 / 26 calls), and all 26 calls were export-matched on tokens with billed = in-flight.
+  - **Failure found and fixed:** run c1 (6 calls) failed with `DecodingError` because Surplus chat compresses the body
+    and needs `Accept-Encoding: identity`. Those calls were billed ($0.000152). Calls with no usage now
+    reconcile by time.
+  - **Caveat:** the tasks are easy tuning tasks, so the ceiling effect says nothing about harder work.
+    Evidence: `~/evidence/core-runs/2026-10-27-c1{,b}/`. Replay fixture: `tests/fixtures/core_loop/recorded_fix-mean.json`.
+    Tests: `tests/test_core_loop.py` (17). Suite: 643 passed, 1 xfailed.
+- **Next action:** C slice 2 aims at the completion gate (MISSION.md: full run-12 task unattended on a lab VM).
+  The toy tasks saturate, so: (1) give the loop a lab-VM execution backend (`devbox-lab ssh`, long commands
+  with timeouts and checkpointed output); (2) cut run-12 goal (a) (`~/evidence/optee-ctl-runs/run12/task.txt`) into
+  sub-goals with executed checks (build artefacts exist, QEMU boot markers in the serial log); (3) run bare flash on
+  the first sub-goal, ≤ $0.20 metered, and stop/delete the lab afterwards. Record failure modes; add the Jev
+  `choice` gate only at a decision those failures show to be bounded. Admission reads the cumulative ledger
+  total, which is ≥ this ISO week's spend, so it is conservative under the weekly cap. Legacy
+  `scripts/direct_vm_tool_loop.py` stays until its GCE/durable-job features are replaced.
 - **T2 fixed (2026-10-27, verified offline, $0):** a soundness check that produced no verdict (checker
   unavailable, provider error such as 402, malformed output across the whole chain, budget
   exhausted) now gives decision/status `unverified`, not `postcheck_failed`. `unverified` is final

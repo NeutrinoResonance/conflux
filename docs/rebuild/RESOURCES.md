@@ -57,7 +57,10 @@ gcloud compute instances stop  conflux-dev-worker-1 --zone us-central1-a
   - `GET /v1/buyer/me` gives `credit_balance_usdc` (micro-USD) and `model_breakdown`.
   - Jev-1.14 bills about $0.000006 per decision.
   - The inference host has no balance endpoint.
-- Surplus `/models` needs `Accept-Encoding: identity` (its compressed body breaks httpx).
+- Surplus `/models` **and chat completions** need `Accept-Encoding: identity`: the compressed body breaks httpx
+  (`DecodingError`), and those requests are still billed.
+- The export's `request_id` (a ULID) is not the chat response `id` (`gen-…`). Match on model, token counts and time
+  (`conflux.core.reconcile`).
 - Quota endpoints:
   - NanoGPT: `POST /api/check-balance` and `GET /api/subscription/v1/usage`.
   - Kimi Code: `GET /coding/v1/usages`.
