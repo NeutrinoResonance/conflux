@@ -43,6 +43,21 @@ gcloud compute instances stop  conflux-dev-worker-1 --zone us-central1-a
 | Kimi Code | `https://api.kimi.com/coding/v1` | OpenAI-compatible | Kimi Code plan (coding-tool use) |
 | GLM Coding Plan | `https://api.z.ai/api/coding/paas/v4` | OpenAI-compatible | Lite plan (coding-tool use) |
 
+- **Jev is a decisions model, not chat.** Use `POST https://api.surplusintelligence.ai/v1/decisions`, JEV format only:
+  `{"model","state","questions":{"<id>":{"type":"choice"|"score",...}}}`. Chat/completions return 503
+  `no_healthy_sellers`, `noul` returns 502, and the OpenAI-format `questions` array returns 400. The response carries
+  per-option `probabilities` and token usage, but no billed cost.
+- **Surplus chat returns no logprobs.** `deepseek-v4-pro` rejects the parameter with 400. Flash and the other models accept it and return
+  nothing, even though the catalogue lists `logprobs`.
+- Surplus chat usage reports the charge as `buyer_cost_micro` (micro-USD). There is no balance endpoint.
+- Surplus `/models` needs `Accept-Encoding: identity` (its compressed body breaks httpx).
+- Quota endpoints:
+  - NanoGPT: `POST /api/check-balance` and `GET /api/subscription/v1/usage`.
+  - Kimi Code: `GET /coding/v1/usages`.
+  - GLM: `GET https://api.z.ai/api/monitor/usage/quota/limit`.
+  - The Kimi and GLM endpoints are undocumented.
+- Executed capability matrix: `docs/rebuild/PROVIDERS.md`.
+
 Catalogue snapshot 2026-10-26: Surplus lists 489 models incl. `deepseek-v4-pro`, `deepseek-v4-flash`,
 `deepseek-v4.1-flash`, `jev-1.13`, `jev-1.14`, `kimi-k3`, `kimi-k3.1-pro`, `glm-5.3`; Kimi Code lists
 `kimi-for-coding`, `k3`, `k3.1-pro`; NanoGPT serves `deepseek/deepseek-v4-pro`, `z-ai/glm-5.3`,
