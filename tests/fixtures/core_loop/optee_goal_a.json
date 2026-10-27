@@ -26,7 +26,7 @@
   "goal": "Overall task (run 12, goal a): on this Linux machine, get QEMU set up with OP-TEE, i.e. build OP-TEE for QEMU Armv8-A (qemu_v8) from the official OP-TEE manifest and build repositories, and later boot it in QEMU. Work in the current directory; the OP-TEE source tree must live in ./optee (the repo client root). You may use sudo -n if it is available. The work is split into sub-goals; this one is: fetch the complete OP-TEE qemu_v8 source tree into ./optee with the official manifest (repo init + repo sync).",
   "checks": [
    {
-    "cmd": "test -f optee/build/qemu_v8.mk && test -f optee/optee_os/core/arch/arm/plat-qemu/conf.mk"
+    "cmd": "grep -q 'OPTEE_OS_PLATFORM = vexpress-qemu_armv8a' optee/build/qemu_v8.mk && test -f optee/optee_os/core/arch/arm/plat-vexpress/conf.mk"
    },
    {
     "cmd": "for p in optee_os trusted-firmware-a u-boot linux qemu buildroot; do test -e optee/$p/.git || { echo missing $p; exit 1; }; done"

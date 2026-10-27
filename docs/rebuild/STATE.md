@@ -5,6 +5,32 @@ Keep this short and current. One entry per decision; newest first.
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred to E); B done.
+- **C slice 3 (2026-10-27, executed, $0.004105 metered + $0.13 GCE): labs have egress.** No Cloud NAT exists (0 routers).
+  - **How:** `run_lab` serves a stdlib HTTP CONNECT/forward proxy on the controller (`egress_proxy`). A supervised
+    `gcloud compute ssh -N -R 3128:…` reverse-tunnels it to the lab. Every lab job gets `PROXY_ENV`. Harness setup
+    adds the apt proxy and sudo `env_keep`. An egress check gates the first model call (`egress_failed`, $0).
+    Tests: 52 in `tests/test_core_loop.py`; suite 678 passed, 1 xfailed.
+  - **Hypothesis supported:** slice 2's a1 failure was caused by the environment. Run c3 (bare flash, fixture
+    unchanged): egress check passed (github 200, pypi 200, `APT_OK`), 1 tunnel start, 0 restarts.
+    - **a1 accepted** in 19 steps / 470 s / $0.00126.
+    - **a2 `failed` at the step cap** (30 steps, $0.002845). Its *check* was wrong: it required
+      `optee_os/core/arch/arm/plat-qemu/conf.mk`, which OP-TEE does not have (qemu_v8 builds `plat-vexpress`,
+      `vexpress-qemu_armv8a`). Flash had already fetched the tree correctly: it found that `-b qemu_v8` is not a
+      branch and recovered with `-m qemu_v8.xml`, then `repo sync` OK in 56 s by step 15. It spent the remaining
+      15 steps chasing the impossible check.
+    - Check fixed in `optee_goal_a.json`. A post-hoc harness recheck on the kept disk (no model) gives a2 `pass` on
+      all 3 checks (`recheck_a2.json`). That pass is not a model-accepted run. The a3 check paths
+      (`out/bin`, `qemu/build`) match `qemu_v8.mk`.
+  - **Model behaviour:** flash corrected itself on tool errors (PEP 668 pip → apt `python3-pycryptodome` →
+    `Cryptodome` vs `Crypto` → pip `--break-system-packages`; wrong manifest branch). It never called `finish`
+    early. A wrong acceptance check costs a whole sub-goal: checks need an executed validation against a real tree.
+  - The proxy's EOF handling became a half-close after run c3 had started (c3 ran commit `6bce1ef`); covered by a test.
+  - 49/49 calls export-matched. Lab `conflux-dev-lab-c3` is **stopped with its disk kept** (a1 + a2 state).
+    Evidence: `~/evidence/core-runs/2026-10-27-c3/`.
+- **Next action:** on lab `c3` (kept disk), run `--only a2-sources,a3-build --lab c3 --lab-hours 4`. a2 should
+  accept at once; a3 is the first real build measurement on bare flash, ≤ $0.10 metered, ≤ 4 h lab. Then a4: boot
+  QEMU, with a serial-log check for OP-TEE + Linux, to be added to the fixture. Delete the c3 disk once goal (a) is
+  done or abandoned.
 - **C slice 2 (2026-10-27, executed, $0.00293 metered + $0.10 GCE):** `conflux/core.py` now runs commands through a
   `Shell`. `lab_shell` runs each command as a detached job on a `devbox-lab` VM (`~/.conflux-jobs/<id>/`), polled over
   `gcloud compute ssh`. Waits are capped by one deadline that starts at lab startup. `run --lab` owns up → smoke →
@@ -24,11 +50,6 @@ MISSION-STATUS: ACTIVE
   - **Infra:** ssh round trip + 5 s poll ≈ 13 s per trivial command; smoke: user `dev`, passwordless sudo, 8 vCPU,
     80 GB free. Lab deleted at 06:59Z. Evidence: `~/evidence/core-runs/2026-10-27-c2/`. Tests: 44 in
     `tests/test_core_loop.py`; suite 670 passed, 1 xfailed.
-- **Next action:** give labs egress, then rerun a1 → a3 unchanged. Preferred fix: Cloud NAT on network `conflux-dev`
-  (region us-central1). The controller identity cannot create routers, so it is an operator action. Fallback that
-  needs no new permission: a reverse SOCKS tunnel over the lab's ssh ControlMaster (`-R 1080`), with apt/git/curl
-  proxied through `socks5h://localhost:1080`. Build that fallback in the next step unless NAT has appeared
-  (`gcloud compute routers list`). Then measure a1–a3 on bare flash, ≤ $0.20 metered, ≤ 4 h lab.
 - **C slice 1 done (2026-10-27, executed, $0.000848 billed this step):** `conflux/core.py` is one explicit loop.
   `deepseek-v4-flash` proposes `run_shell`/`finish` calls through Surplus chat. Deterministic code does budget
   admission, a permissive policy (tool name, arguments, command size; no path scope), execution, and acceptance.

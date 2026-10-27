@@ -20,6 +20,7 @@ USD comes from provider responses or documented prices — never estimated silen
 | 2026-10-27 | Surplus chat | `deepseek-v4-flash` | 3284 | 815 | 0.000152 | — | C slice 1 run c1: 6 calls whose compressed bodies failed to decode (billed; export-matched by time) |
 | 2026-10-27 | Surplus chat | `deepseek-v4-flash` | 19992 | 3304 | 0.000696 | — | C slice 1 run c1b: 6 loop runs, 26 calls, 6/6 accepted |
 | 2026-10-27 | Surplus chat | `deepseek-v4-flash` | 231998 | 4812 | 0.002930 | — | C slice 2 run c2: a1 on lab VM, 30 calls, failed (step cap; lab has no internet egress) |
+| 2026-10-27 | Surplus chat | `deepseek-v4-flash` | 334697 | 13408 | 0.004105 | — | C slice 3 run c3 (lab with tunnelled egress): a1 accepted (19 calls, $0.00126), a2 failed at the step cap because its check was wrong (30 calls, $0.002845); 49/49 export-matched |
 
 C slice 1 rows are reconciled with the export by `python -m conflux.core reconcile` (`~/evidence/core-runs/2026-10-27-c1*/reconciled.json`;
 export total for 2026-10-27: 83 rows, $0.001372).
@@ -32,7 +33,7 @@ charge-bound estimates) are only admission-time bounds. They are replaced by bil
 $0.0108 Jev and $0.0207 rejected-request estimates were billed $0.000006 and $0. Account credit after these runs
 is $9.369476 (`/v1/buyer/me`).
 
-**Metered total: $0.004302**
+**Metered total: $0.008407**
 
 ## GCE lab VMs (week 2026-W44 cap $60)
 
@@ -41,5 +42,6 @@ Rate: n2d-standard-8 ≈ $0.338/h running (GCE list price, us-central1) + 100 GB
 | Date (UTC) | Lab | Running (UTC) | Hours | USD | Purpose |
 |---|---|---|---|---|---|
 | 2026-10-27 | `conflux-dev-lab-c2` | 06:42:57–06:58:07, 06:58:30–06:59:50 | 0.28 | 0.10 | C slice 2 run c2 + egress check; deleted 06:59Z |
+| 2026-10-27 | `conflux-dev-lab-c3` | 07:36:02–07:55:35, 07:56:26–07:58:08 | 0.35 | 0.13 | C slice 3 run c3 + a2 recheck; stopped, disk kept (≈ $0.014/h, $0.34/day) for a3 |
 
-**GCE lab total: $0.10**
+**GCE lab total: $0.23** (plus the c3 disk while it exists)

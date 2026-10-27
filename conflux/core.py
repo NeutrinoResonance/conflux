@@ -9,7 +9,9 @@ matches the calls against the Surplus buyer usage export, the authoritative bill
 
 Commands run through a `Shell`: `local_shell` (a subprocess in a workdir) or `lab_shell`
 (a detached job on a `devbox-lab` VM, polled over ssh, all waits capped by one deadline that
-starts when the lab comes up).
+starts when the lab comes up). Labs have no internet egress, so `run_lab` serves an HTTP proxy
+on the controller (`egress_proxy`), reverse-tunnels it to the lab's 127.0.0.1:3128 over ssh, and
+exports `PROXY_ENV` to every lab command; an egress check gates the first model call.
 
 Terminal statuses: `accepted` (all checks pass), `failed` (checks ran and failed when
 steps ran out), `unverified` (no verdict: provider error, budget refusal, check timeout,
@@ -25,14 +27,18 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import base64
 import csv
 import io
 import json
+import os
 import re
 import shlex
+import signal
 import subprocess
 import sys
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -61,6 +67,8 @@ GRACE = 15                 # kill + output collection after a command's end or t
 SSH_WAIT_TRIES = 10
 LAB_ZONE = "us-central1-a"
 LAB_PREFIX = "conflux-dev-lab-"
+LAB_PROXY_PORT = 3128
+TUNNEL_RESTART_S = 5
 TAIL = 4096
 MAX_COMMAND = 8192
 MATCH_WINDOW_S = 120
@@ -188,13 +196,98 @@ def gcloud_remote(name: str) -> Callable[[str], list[str]]:
         f"--command=bash -c {shlex.quote(script)}"]
 
 
+_PROXY = f"http://127.0.0.1:{LAB_PROXY_PORT}"
+_NO_PROXY = "localhost,127.0.0.1,169.254.169.254,metadata.google.internal"
+PROXY_ENV = {"http_proxy": _PROXY, "https_proxy": _PROXY, "HTTP_PROXY": _PROXY, "HTTPS_PROXY": _PROXY,
+             "no_proxy": _NO_PROXY, "NO_PROXY": _NO_PROXY}
+_KEEP = " ".join(PROXY_ENV)
+# Harness-owned lab setup: apt and sudo'd commands use the proxy too. The model is not told.
+LAB_SETUP = (
+    f"echo 'Acquire::http::Proxy \"{_PROXY}\"; Acquire::https::Proxy \"{_PROXY}\";' "
+    "| sudo -n tee /etc/apt/apt.conf.d/95conflux-proxy >/dev/null && "
+    f"echo 'Defaults env_keep += \"{_KEEP}\"' > /tmp/conflux-proxy.sudoers && "
+    "sudo -n install -m 0440 /tmp/conflux-proxy.sudoers /etc/sudoers.d/conflux-proxy && "
+    "{ sudo -n visudo -cf /etc/sudoers.d/conflux-proxy || { sudo -n rm -f /etc/sudoers.d/conflux-proxy; false; }; }")
+EGRESS_CHECK = (  # waits for the tunnel's listener first
+    f"for i in $(seq 30); do (exec 3<>/dev/tcp/127.0.0.1/{LAB_PROXY_PORT}) 2>/dev/null && break; sleep 2; done; "
+    "for u in https://github.com https://pypi.org/simple/pip/; do "
+    "c=$(curl -sS -o /dev/null -m 30 -w '%{http_code}' \"$u\"); echo \"$u $c\"; "
+    "case $c in 2??|3??) ;; *) exit 1;; esac; done; sudo -n apt-get update -q >/dev/null && echo APT_OK")
+
+
+async def _pipe(r: asyncio.StreamReader, w: asyncio.StreamWriter) -> None:
+    """Copy until EOF, then half-close `w` so the other direction can still finish."""
+    try:
+        while data := await r.read(65536):
+            w.write(data)
+            await w.drain()
+        if w.can_write_eof():
+            w.write_eof()
+    except (ConnectionError, OSError):
+        w.close()
+
+
+async def _proxy_client(cr: asyncio.StreamReader, cw: asyncio.StreamWriter) -> None:
+    """One proxied request: `CONNECT host:port` pipes bytes; absolute-form HTTP is forwarded as one
+    request (`Connection: close`, `Proxy-*` headers dropped) and the response piped back."""
+    try:
+        head = await asyncio.wait_for(cr.readuntil(b"\r\n\r\n"), 60)
+        line, *headers = head.decode("latin-1").split("\r\n")[:-2]
+        method, target, version = line.split(" ")
+        if method == "CONNECT":
+            host, _, port = target.rpartition(":")
+            ur, uw = await asyncio.wait_for(asyncio.open_connection(host.strip("[]"), int(port)), 30)
+            cw.write(b"HTTP/1.1 200 Connection established\r\n\r\n")
+            await cw.drain()
+        else:
+            m = re.match(r"http://([^/:]+)(?::(\d+))?(/.*)?$", target)
+            if not m:
+                raise ValueError(target)
+            ur, uw = await asyncio.wait_for(asyncio.open_connection(m[1], int(m[2] or 80)), 30)
+            keep = [h for h in headers if not re.match(r"(proxy-|connection:)", h, re.I)]
+            uw.write("\r\n".join([f"{method} {m[3] or '/'} {version}", *keep, "Connection: close", "", ""])
+                     .encode("latin-1"))
+    except (OSError, ValueError, asyncio.IncompleteReadError, asyncio.LimitOverrunError, asyncio.TimeoutError):
+        cw.write(b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n")
+        cw.close()
+        return
+    await asyncio.gather(_pipe(cr, uw), _pipe(ur, cw))
+    cw.close()
+    uw.close()
+
+
+def egress_proxy() -> int:
+    """Start the HTTP proxy on 127.0.0.1 in a daemon thread; return its port."""
+    loop = asyncio.new_event_loop()
+    server = loop.run_until_complete(asyncio.start_server(_proxy_client, "127.0.0.1", 0))
+    threading.Thread(target=loop.run_forever, daemon=True).start()
+    return server.sockets[0].getsockname()[1]
+
+
+def gcloud_tunnel(name: str) -> Callable[[int], list[str]]:
+    """argv that holds lab `name`'s 127.0.0.1:3128 forwarded to the controller's proxy `port`."""
+    return lambda port: [
+        "gcloud", "compute", "ssh", f"{LAB_PREFIX}{name}", f"--zone={LAB_ZONE}", "--internal-ip", "--quiet",
+        "--strict-host-key-checking=no", "--ssh-flag=-N",
+        f"--ssh-flag=-R{LAB_PROXY_PORT}:127.0.0.1:{port}", "--ssh-flag=-oExitOnForwardFailure=yes",
+        "--ssh-flag=-oControlPath=none", "--ssh-flag=-oServerAliveInterval=30"]
+
+
+def _supervise(argv: list[str], log: Path) -> subprocess.Popen:
+    """Rerun `argv` whenever it exits, in its own session; every (re)start appends to `log`."""
+    script = (f"while :; do echo \"TUNNEL-START $(date -u +%FT%TZ)\" >> {shlex.quote(str(log))}; "
+              f"{shlex.join(argv)} >> {shlex.quote(str(log))} 2>&1; sleep {TUNNEL_RESTART_S}; done")
+    return subprocess.Popen(["bash", "-c", script], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL, start_new_session=True)
+
+
 def _remote_path(p: str) -> str:
     """Shell word for a remote path; a leading `~/` expands on the remote."""
     return '"$HOME"/' + shlex.quote(p[2:]) if p.startswith("~/") else shlex.quote(p)
 
 
 def lab_shell(remote: Callable[[str], list[str]], workdir: str, deadline: float | None = None,
-              poll_s: float | None = None) -> Shell:
+              poll_s: float | None = None, env: dict[str, str] | None = None) -> Shell:
     """Run each command as a detached job on the remote; poll for its exit code.
 
     The job's output lives in `~/.conflux-jobs/<id>/` on the remote, so a dropped ssh session
@@ -203,8 +296,10 @@ def lab_shell(remote: Callable[[str], list[str]], workdir: str, deadline: float 
     bounded by `min(command end, deadline)`; killing and collecting output get `GRACE` more.
     A transport failure that outlasts `TRANSPORT_RETRIES` attempts ends the command with no
     verdict (`exit: None`). Output that could not be fetched is listed in `unavailable`.
+    `env` is exported to every job.
     """
     poll_s = POLL_S if poll_s is None else poll_s
+    exports = "".join(f"export {k}={shlex.quote(v)}; " for k, v in (env or {}).items())
     lab_end = float("inf") if deadline is None else deadline
 
     def call(script: str, until: float) -> subprocess.CompletedProcess | None:
@@ -240,7 +335,7 @@ def lab_shell(remote: Callable[[str], list[str]], workdir: str, deadline: float 
         b64 = base64.b64encode(command.encode()).decode()
         launch = (f"set -e; d={d}; w={_remote_path(workdir)}; mkdir -p \"$HOME/.conflux-jobs\" \"$w\"; "
                   "if mkdir \"$d\" 2>/dev/null; then "
-                  f"echo {b64} | base64 -d > \"$d/cmd.sh\"; cd \"$w\"; "
+                  f"echo {b64} | base64 -d > \"$d/cmd.sh\"; cd \"$w\"; {exports}"
                   "nohup setsid bash -c 'bash \"$1/cmd.sh\" >\"$1/out\" 2>\"$1/err\"; "
                   "echo $? >\"$1/rc.tmp\"; mv \"$1/rc.tmp\" \"$1/rc\"' _ \"$d\" "
                   "</dev/null >/dev/null 2>&1 & echo $! > \"$d/pid.tmp\"; mv \"$d/pid.tmp\" \"$d/pid\"; fi; "
@@ -561,25 +656,37 @@ def _utc() -> str:
 
 
 def run_lab(tasks: list[Task], chat: Chat, budget: Budget, out: Path, name: str, workdir: str,
-            hours: float, model: str = MODEL,
-            remote: Callable[[str], list[str]] | None = None) -> dict:
-    """Own one lab's lifecycle: up, smoke, tasks in order (stop at the first non-accepted one), stop.
+            hours: float, model: str = MODEL, remote: Callable[[str], list[str]] | None = None,
+            tunnel: Callable[[int], list[str]] | None = None) -> dict:
+    """Own one lab's lifecycle: up, egress tunnel, smoke, setup + egress check, tasks in order (stop at
+    the first non-accepted one), stop.
 
-    The deadline starts when `devbox-lab up` is issued; `devbox-lab stop` runs on every exit path.
+    The deadline starts when `devbox-lab up` is issued; the tunnel is killed and `devbox-lab stop`
+    runs on every exit path. A failed egress check ends the run before any model call.
     """
     out.mkdir(parents=True, exist_ok=True)
     lab = {"name": name, "workdir": workdir, "hours": hours, "started": _utc()}
     deadline = time.monotonic() + hours * 3600
     results: list[dict] = []
+    tunnel_proc: subprocess.Popen | None = None
+    tunnel_log = out / "tunnel.log"
     try:
         subprocess.run(["devbox-lab", "up", name], check=True, capture_output=True, text=True, timeout=600)
-        shell = lab_shell(remote or gcloud_remote(name), workdir, deadline)
+        shell = lab_shell(remote or gcloud_remote(name), workdir, deadline, env=PROXY_ENV)
         for _ in range(SSH_WAIT_TRIES):  # a fresh VM takes a while to accept ssh
             if shell("true", 60)["exit"] == 0 or time.monotonic() >= deadline:
                 break
+        tunnel_proc = _supervise((tunnel or gcloud_tunnel(name))(egress_proxy()), tunnel_log)
         lab["smoke"] = shell("whoami && nproc && df -h ~ | tail -n 1 && "
                              "{ sudo -n true && echo SUDO_OK || echo SUDO_NO; }", 120)
         if lab["smoke"]["exit"] == 0:
+            lab["setup"] = shell(LAB_SETUP, 120)
+            lab["egress"] = shell(EGRESS_CHECK, 300)
+        if lab["smoke"]["exit"] != 0:
+            lab["stopped_reason"] = "smoke_failed"
+        elif lab["setup"]["exit"] != 0 or lab["egress"]["exit"] != 0:
+            lab["stopped_reason"] = "egress_failed"
+        else:
             for task in tasks:
                 if time.monotonic() >= deadline:
                     lab["stopped_reason"] = "lab_deadline"
@@ -592,9 +699,18 @@ def run_lab(tasks: list[Task], chat: Chat, budget: Budget, out: Path, name: str,
                 if res["status"] != "accepted":
                     lab["stopped_reason"] = f"{task.id}:{res['reason']}"
                     break
-        else:
-            lab["stopped_reason"] = "smoke_failed"
     finally:
+        if tunnel_proc is not None:
+            for sig in (signal.SIGTERM, signal.SIGKILL):
+                try:
+                    os.killpg(tunnel_proc.pid, sig)
+                    tunnel_proc.wait(timeout=30)
+                    break
+                except ProcessLookupError:
+                    break
+                except subprocess.TimeoutExpired:
+                    continue
+            lab["tunnel_starts"] = tunnel_log.read_text().count("TUNNEL-START") if tunnel_log.exists() else 0
         try:
             stop_exit = subprocess.run(["devbox-lab", "stop", name], capture_output=True, text=True,
                                        timeout=600).returncode
