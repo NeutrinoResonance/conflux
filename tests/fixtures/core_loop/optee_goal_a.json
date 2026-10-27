@@ -1,0 +1,55 @@
+[
+ {
+  "id": "a1-host-prereqs",
+  "max_steps": 30,
+  "max_usd": 0.06,
+  "goal": "Overall task (run 12, goal a): on this Linux machine, get QEMU set up with OP-TEE, i.e. build OP-TEE for QEMU Armv8-A (qemu_v8) from the official OP-TEE manifest and build repositories, and later boot it in QEMU. Work in the current directory; the OP-TEE source tree must live in ./optee (the repo client root). You may use sudo -n if it is available. The work is split into sub-goals; this one is: install the host prerequisites that the OP-TEE documentation lists for building and running the qemu_v8 setup, including the `repo` tool. Do not fetch the OP-TEE sources yet.",
+  "checks": [
+   {
+    "cmd": "PATH=$HOME/bin:/usr/local/bin:$PATH; head -n 1 \"$(command -v repo)\" | grep -q python"
+   },
+   {
+    "cmd": "python3 -c 'import elftools, Crypto, cryptography, serial'"
+   },
+   {
+    "cmd": "command -v ninja && command -v dtc && command -v bison && command -v flex && command -v cpio && command -v rsync && command -v unzip && command -v make && command -v git"
+   },
+   {
+    "cmd": "pkg-config --exists glib-2.0 pixman-1"
+   }
+  ]
+ },
+ {
+  "id": "a2-sources",
+  "max_steps": 30,
+  "max_usd": 0.06,
+  "goal": "Overall task (run 12, goal a): on this Linux machine, get QEMU set up with OP-TEE, i.e. build OP-TEE for QEMU Armv8-A (qemu_v8) from the official OP-TEE manifest and build repositories, and later boot it in QEMU. Work in the current directory; the OP-TEE source tree must live in ./optee (the repo client root). You may use sudo -n if it is available. The work is split into sub-goals; this one is: fetch the complete OP-TEE qemu_v8 source tree into ./optee with the official manifest (repo init + repo sync).",
+  "checks": [
+   {
+    "cmd": "test -f optee/build/qemu_v8.mk && test -f optee/optee_os/core/arch/arm/plat-qemu/conf.mk"
+   },
+   {
+    "cmd": "for p in optee_os trusted-firmware-a u-boot linux qemu buildroot; do test -e optee/$p/.git || { echo missing $p; exit 1; }; done"
+   },
+   {
+    "cmd": "cd optee && PATH=$HOME/bin:/usr/local/bin:$PATH repo status >/dev/null",
+    "timeout": 900
+   }
+  ]
+ },
+ {
+  "id": "a3-build",
+  "max_steps": 40,
+  "max_usd": 0.08,
+  "goal": "Overall task (run 12, goal a): on this Linux machine, get QEMU set up with OP-TEE, i.e. build OP-TEE for QEMU Armv8-A (qemu_v8) from the official OP-TEE manifest and build repositories, and later boot it in QEMU. Work in the current directory; the OP-TEE source tree must live in ./optee (the repo client root). You may use sudo -n if it is available. The work is split into sub-goals; this one is: build the complete qemu_v8 setup (toolchains, OP-TEE OS, TF-A, U-Boot, Linux, buildroot rootfs and QEMU) in optee/build. Do not boot it yet.",
+  "checks": [
+   {
+    "cmd": "cd optee/out/bin && for f in bl1.bin bl2.bin bl31.bin bl32.bin bl32_extra1.bin bl32_extra2.bin Image rootfs.cpio.gz; do test -s $f || { echo missing $f; exit 1; }; done"
+   },
+   {
+    "cmd": "optee/qemu/build/qemu-system-aarch64 --version | head -n 1 | grep -q 'QEMU emulator version'",
+    "timeout": 60
+   }
+  ]
+ }
+]
