@@ -31,10 +31,9 @@ Only then set `MISSION-STATUS: COMPLETE` and open the promotion PR to `main`.
 
 ## Founder decisions (binding; newest first)
 
-- **2026-10-27 — Self-improvement is in scope (work item F).** Conflux must detect harness and
-  supervision faults from its own traces and admit fixes only on measured improvement. Schedule F
-  alongside C: its first deliverable (deterministic trace audit graded on the c4 trace) comes before
-  the next long lab run.
+- **2026-10-27 — Self-improvement is in scope (work item F), demo first.** New mechanisms (detectors,
+  classifiers, supervision layers) need a throwaway demo on recorded traces with measured results
+  before implementation. The founder has seen layer-on-layer abstraction drive costs up.
 - **2026-10-27 — Fix first: the executor masks pipeline failures.** `conflux/core.py` runs model commands
   as plain `bash -c` (local `execute()` and the lab job launcher), so `make … | tail` reports exit 0 when
   make fails, and the model acts on false success. The old governor enforced `pipefail`; the rebuild
@@ -155,20 +154,17 @@ Only then set `MISSION-STATUS: COMPLETE` and open the promotion PR to `main`.
   promotion PR to `main` only when the completion gate above is met; do not merge it — the
   founder authorizes promotion. Waiting for that does not block further work on the rebuild branch.
 
-**F. Self-audit: the system finds and fixes its own harness faults (founder decision 2026-10-27).**
-- After every run, Conflux audits its own trace for contradictions between what a step reported and
-  what later evidence shows: a "success" that later output or checks contradict, the same failure
-  repeated, steps spent on a check that cannot pass, reads that never lead to action. Deterministic
-  detectors first; a cheap model (or Jev) only for bounded judgements a detector cannot make.
-- Each finding is classified as a harness fault or a model fault, with the trace evidence attached.
-  Harness faults become candidate structural fixes; model faults become candidate supervision changes.
-- A candidate is admitted only when replaying recorded traces/fixtures, then a matched rerun, shows
-  better verified success per dollar (item E rules). The system writes and keeps its own gap list
-  (`docs/rebuild/GAPS.md`, generated from traces).
-- Grading reference, not a hint: the run-c4 trace (`~/evidence/core-runs/`) contains a pipeline whose
-  exit status masked a `make` failure, and an unsatisfiable acceptance check. The audit should find
-  both from that trace with detectors that are not written for those specific cases. Gaps a human or
-  Claude names are grading references for the audit, never hard-coded rules.
+**F. Self-audit, scoped by a demo (founder decision 2026-10-27).**
+Demo before build: `~/evidence/self-audit-demo-2026-10-27/RESULTS.md` (17 real traces, one 60-line script).
+- Build only what the demo showed works: a deterministic check that flags any step whose reported
+  success is contradicted by its own output (found the masked `make` failure in c4 and an unknown `;`-chain
+  case in c3). Run it after every run; a hit is a harness fault and gets a structural fix + regression test.
+  Fix its known false positives (read-only command parsing) first. Grade on the demo's traces.
+- Failing acceptance checks on objects the model kept inspecting are flagged for review only. Cheap
+  classification of "check wrong vs work incomplete" failed in the demo (v4.1-flash 1/3, Jev 0/5): build no
+  model-based classifier unless a new demo, on recorded traces, beats those numbers.
+- Any further self-improvement mechanism follows the same rule: a throwaway demo on recorded traces with
+  its numbers in `~/evidence/`, before code lands. No new layer without demo evidence.
 
 ## Engineering discipline
 
@@ -180,7 +176,8 @@ Only then set `MISSION-STATUS: COMPLETE` and open the promotion PR to `main`.
   strong reasoning calls can beat many ineffective cheap attempts.
 - Read targeted code/context; keep `STATE.md` short (goal, hypothesis, evidence, decision, next
   action). Do not resend whole histories, all repo files or full traces to every model.
-- No abstraction stacking: a new layer needs a demonstrated requirement simpler code cannot meet.
+- No abstraction stacking: a new layer needs a demonstrated requirement simpler code cannot meet,
+  shown by a throwaway demo on recorded traces before it is built.
   Favor deletion, direct functions, explicit transitions.
 - On the rebuild branch, delete superseded legacy implementation files in the same commits as their
   replacements; keep only useful tests/fixtures/docs. The legacy code lives on in the baseline tag.
