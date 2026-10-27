@@ -11,9 +11,10 @@ Commands run through a `Shell`: `local_shell` (a subprocess in a workdir) or `la
 (a detached job on a `devbox-lab` VM, polled over ssh, all waits capped by one deadline that
 starts when the lab comes up). Every command runs under `pipefail`, and its result carries
 `pipestatus`, the exit status of each stage of the last pipeline it ran (founder decision: the
-executor must not mask pipeline failures). Labs have no internet egress, so `run_lab` serves an
-HTTP proxy on the controller (`egress_proxy`), reverse-tunnels it to the lab's 127.0.0.1:3128 over
-ssh, and exports `PROXY_ENV` to every lab command; an egress check gates the first model call.
+executor must not mask pipeline failures), and `failed_cmds`, the number of simple commands outside
+conditions that exited non-zero (shown to the model when the command still exited 0). Labs have
+no internet egress, so `run_lab` serves an HTTP proxy on the controller (`egress_proxy`),
+reverse-tunnels it to the lab's 127.0.0.1:3128 over ssh, and exports `PROXY_ENV` to every lab command; an egress check gates the first model call.
 
 Terminal statuses: `accepted` (all checks pass), `failed` (checks ran and failed when
 steps ran out), `unverified` (no verdict: provider error, budget refusal, check timeout,
@@ -167,25 +168,28 @@ def billed_cost(body: object) -> float | None:
 
 
 _PS_MARK = "__CONFLUX_PIPESTATUS="
-# Prepended to every command. The EXIT trap's first statement copies PIPESTATUS (the last pipeline's
-# per-stage exits) into an array before anything resets it; printf prints it as the final stderr
-# line with an explicit separator, so the command's IFS cannot change it.
+# Prepended to every command. The ERR trap counts failing simple commands outside conditions
+# (bash restores `$?` and PIPESTATUS after it). The EXIT trap's first statement copies PIPESTATUS
+# (the last pipeline's per-stage exits) into an array before anything resets it; printf prints it
+# and the count as the final stderr line with explicit separators, so the command's IFS cannot change it.
 PIPEFAIL = ("set -o pipefail\n"
+            "__nf=0; trap '__nf=$((__nf+1))' ERR\n"
             f"trap '__ps=(\"${{PIPESTATUS[@]}}\"); "
-            f"{{ printf \"\\n{_PS_MARK}\"; printf \"%s \" \"${{__ps[@]}}\"; printf \"\\n\"; }} >&2' EXIT\n")
+            f"{{ printf \"\\n{_PS_MARK}\"; printf \"%s \" \"${{__ps[@]}}\"; "
+            f"printf \"failed=%s\\n\" \"$__nf\"; }} >&2' EXIT\n")
 
 
 def _wrap(command: str) -> str:
     return PIPEFAIL + command
 
 
-def _split_pipestatus(stderr: str) -> tuple[str, list[int] | None]:
-    """(stderr without the trailing marker, per-stage exits); None when the marker is missing
-    (killed, timed out, or the command replaced the trap or closed stderr)."""
-    m = re.search(rf"\n?{_PS_MARK}([\d ]+)\n?$", stderr)
+def _split_pipestatus(stderr: str) -> tuple[str, list[int] | None, int | None]:
+    """(stderr without the trailing marker, per-stage exits, failed simple commands); None, None
+    when the marker is missing (killed, timed out, or the command replaced the trap or closed stderr)."""
+    m = re.search(rf"\n?{_PS_MARK}([\d ]+)failed=(\d+)\n?$", stderr)
     if not m:
-        return stderr, None
-    return stderr[:m.start()], [int(x) for x in m[1].split()]
+        return stderr, None, None
+    return stderr[:m.start()], [int(x) for x in m[1].split()], int(m[2])
 
 
 def execute(command: str, workdir: Path, timeout: float = EXEC_TIMEOUT) -> dict:
@@ -193,11 +197,12 @@ def execute(command: str, workdir: Path, timeout: float = EXEC_TIMEOUT) -> dict:
     try:
         p = subprocess.run(["bash", "-c", _wrap(command)], cwd=workdir, capture_output=True,
                            text=True, errors="replace", timeout=timeout)
-        stderr, ps = _split_pipestatus(p.stderr)
+        stderr, ps, nf = _split_pipestatus(p.stderr)
         out = {"exit": p.returncode, "stdout": p.stdout[-TAIL:], "stderr": stderr[-TAIL:],
-               "pipestatus": ps, "timed_out": False}
+               "pipestatus": ps, "failed_cmds": nf, "timed_out": False}
     except subprocess.TimeoutExpired:
-        out = {"exit": None, "stdout": "", "stderr": "", "pipestatus": None, "timed_out": True}
+        out = {"exit": None, "stdout": "", "stderr": "", "pipestatus": None, "failed_cmds": None,
+               "timed_out": True}
     out["duration_s"] = round(time.monotonic() - t0, 3)
     return out
 
@@ -351,7 +356,8 @@ def lab_shell(remote: Callable[[str], list[str]], workdir: str, deadline: float 
         collect_by = stop_at + GRACE
         job = f"{time.time_ns():x}"
         d = f'"$HOME"/.conflux-jobs/{job}'
-        out = {"exit": None, "stdout": "", "stderr": "", "pipestatus": None, "timed_out": False, "job": job}
+        out = {"exit": None, "stdout": "", "stderr": "", "pipestatus": None, "failed_cmds": None,
+               "timed_out": False, "job": job}
 
         def done(**kw) -> dict:
             kw.setdefault("deadline", time.monotonic() >= lab_end)
@@ -399,7 +405,7 @@ def lab_shell(remote: Callable[[str], list[str]], workdir: str, deadline: float 
                 unavailable.append(stream)
         if unavailable:
             tails["unavailable"] = unavailable
-        tails["stderr"], tails["pipestatus"] = _split_pipestatus(tails["stderr"])
+        tails["stderr"], tails["pipestatus"], tails["failed_cmds"] = _split_pipestatus(tails["stderr"])
         if transport_error:
             return done(**tails, transport_error=transport_error)
         if rc is None:
@@ -462,6 +468,8 @@ def _tool_result(r: dict, timeout: float) -> str:
         head = f"exit={r['exit']}"
         if len(r.get("pipestatus") or ()) > 1:
             head += " pipestatus=" + " ".join(map(str, r["pipestatus"]))
+        if r["exit"] == 0 and r.get("failed_cmds"):
+            head += f" failed_cmds={r['failed_cmds']}"
     return f"{head}\nstdout:\n{r['stdout']}\nstderr:\n{r['stderr']}{missing}"
 
 

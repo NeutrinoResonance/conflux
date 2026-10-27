@@ -671,6 +671,35 @@ def test_pipestatus_does_not_depend_on_the_commands_ifs(any_shell, ifs):
     assert r["exit"] == 3 and r["pipestatus"] == [1, 0, 3] and "PIPESTATUS" not in r["stderr"]
 
 
+# ---------------------------------------------------------------- failed simple commands (C slice 7)
+
+
+def test_a_failure_hidden_by_a_later_command_reaches_the_model(any_shell):
+    """Run c3/a1 step 3 shape: a `;` chain hid a Traceback behind exit 0 (D1 residual)."""
+    r = any_shell("python3 -c 'import nope'; echo ok", 10)
+    assert r["exit"] == 0 and r["failed_cmds"] == 1 and r["stdout"] == "ok\n"
+    assert "PIPESTATUS" not in r["stderr"] and "nope" in r["stderr"]
+    assert core._tool_result(r, 10).startswith("exit=0 failed_cmds=1\n")
+
+
+def test_conditions_and_handled_failures_are_not_counted(any_shell):
+    r = any_shell("if false; then :; fi; false || true; ! false; true", 10)
+    assert r["exit"] == 0 and r["failed_cmds"] == 0
+    assert core._tool_result(r, 10).startswith("exit=0\n")
+
+
+@pytest.mark.parametrize("cmd, exit, stages, failed", [
+    ("false | true", 1, [1, 0], 1),
+    ("false | true; exit 3", 3, [1, 0], 1),
+    ("true | false | true; exit", 1, [0, 1, 0], 1),
+    ("false; true | false", 1, [0, 1], 2),
+])
+def test_the_err_trap_keeps_the_final_pipelines_statuses(any_shell, cmd, exit, stages, failed):
+    r = any_shell(cmd, 10)
+    assert (r["exit"], r["pipestatus"], r["failed_cmds"]) == (exit, stages, failed)
+    assert "failed_cmds" not in core._tool_result(r, 10)
+
+
 # ---------------------------------------------------------------- D1 self-audit (work item F)
 
 D1_CASES = json.loads((FIXTURES / "audit_d1_cases.json").read_text())["cases"]

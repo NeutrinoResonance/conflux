@@ -31,7 +31,7 @@
   `~/.conflux-jobs/<id>/` on the lab (`cmd.sh`, `out`, `err`, `rc`), polled every 5 s over `gcloud compute ssh
   --internal-ip` with an ssh ControlMaster socket in `~/.ssh/cm-*`.
 - Every command (model, checks, setup; local and lab) runs under `set -o pipefail`; results carry `pipestatus` (the
-  last pipeline's per-stage exits). Checks must not pipe a producer that may still be writing into an early-exiting reader (`| head`, `grep -q`):
+  last pipeline's per-stage exits) and `failed_cmds`, the count of failing simple commands outside conditions, from an `ERR` trap. Checks must not pipe a producer that may still be writing into an early-exiting reader (`| head`, `grep -q`):
   that is SIGPIPE 141, a false failure.
 - **Labs have no direct internet egress (verified 2026-10-27):** no external IP, no Cloud NAT in the project (the
   controller cannot create routers), Private Google Access only. Smoke: user `dev`, passwordless sudo.
