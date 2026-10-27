@@ -472,7 +472,7 @@ def _netbsd_root(tmp_path, monkeypatch):
 
 def test_optee_goal_b_checks_execute_and_reject_an_empty_workdir(tmp_path, monkeypatch):
     tasks = _goal_b()
-    assert list(tasks) == ["b1-driver-build", "b2-firmware-boot", "b3-driver-proof"]
+    assert list(tasks) == ["b1a-driver-source", "b1b-kernel-build", "b2-firmware-boot", "b3-driver-proof"]
     monkeypatch.setenv("NETBSD_ROOT", str(tmp_path / "absent"))
     for t in tasks.values():
         assert core.run_checks(t.checks, core.local_shell(tmp_path))[0] == "fail"
@@ -482,7 +482,9 @@ def test_optee_goal_b_kernel_and_firmware_must_be_newer_than_the_driver_source(t
     # Changes are measured against the fixed snapshot commit, so unstaged, staged and committed edits all count.
     src, kdir = _netbsd_root(tmp_path, monkeypatch)
     b = _goal_b()
-    b1, fresh = b["b1-driver-build"].checks, [b["b2-firmware-boot"].checks[0], b["b3-driver-proof"].checks[0]]
+    b1a, b1 = b["b1a-driver-source"].checks, b["b1b-kernel-build"].checks
+    fresh = [b["b2-firmware-boot"].checks[0], b["b3-driver-proof"].checks[0]]
+    assert b1[0].cmd == b1a[0].cmd  # b1b re-checks b1a's source: removing the driver cannot pass the build
     assert fresh[0].cmd == fresh[1].cmd
     work = tmp_path / "w"
     (work / "netbsd-optee").mkdir(parents=True)
@@ -499,6 +501,7 @@ def test_optee_goal_b_kernel_and_firmware_must_be_newer_than_the_driver_source(t
     assert verdict(b1) == "pass" and verdict(fresh[:1]) == "pass"
     at(driver, 3_000)  # driver edited after the build
     assert verdict(b1) == "fail" and verdict(fresh[:1]) == "fail"
+    assert verdict(b1a) == "pass"  # b1a is source only: a stale kernel does not matter
     at(kdir / "netbsd.img", 4_000)  # kernel rebuilt, firmware not
     assert verdict(b1) == "pass" and verdict(fresh[:1]) == "fail"
     at(work / "netbsd-optee/qemu_fw.bios", 5_000)  # firmware rebuilt
@@ -513,6 +516,8 @@ def test_optee_goal_b_kernel_and_firmware_must_be_newer_than_the_driver_source(t
     assert verdict(b1) == "pass" and verdict(fresh[:1]) == "pass"
     (tmp_path / "nb/netbsd-obj/tooldir.Linux-x/bin/aarch64--netbsd-nm").write_text("#!/bin/sh\necho 'x D other_cd'\n")
     assert verdict(b1) == "fail"  # kernel without the optee cfdriver
+    (src / "sys/arch/evbarm/conf/GENERIC64").write_text("simplebus*\tat fdt? pass 0\n")
+    assert verdict(b1a) == "fail"  # driver not enabled in GENERIC64
 
 
 def test_optee_goal_b_literal_guard_rejects_hard_coded_uid_words_and_build_hash(tmp_path, monkeypatch):
