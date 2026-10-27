@@ -663,3 +663,9 @@ def test_a_masked_build_failure_reaches_the_model_with_stage_statuses(tmp_path):
     assert tool.startswith("exit=2 pipestatus=2 0\n") and "Error 2" in tool
     results = next(e for e in trace.events if e["event"] == "acceptance")["results"]
     assert results[0]["pipestatus"] == [1]
+
+
+@pytest.mark.parametrize("ifs", ["IFS=", "IFS=:", "IFS=,", "unset IFS"])
+def test_pipestatus_does_not_depend_on_the_commands_ifs(any_shell, ifs):
+    r = any_shell(f"{ifs}; false | true | (exit 3)", 10)
+    assert r["exit"] == 3 and r["pipestatus"] == [1, 0, 3] and "PIPESTATUS" not in r["stderr"]

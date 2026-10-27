@@ -167,9 +167,11 @@ def billed_cost(body: object) -> float | None:
 
 _PS_MARK = "__CONFLUX_PIPESTATUS="
 # Prepended to every command. The EXIT trap's first statement copies PIPESTATUS (the last pipeline's
-# per-stage exits) before anything resets it, and prints it as the final stderr line.
+# per-stage exits) into an array before anything resets it; printf prints it as the final stderr
+# line with an explicit separator, so the command's IFS cannot change it.
 PIPEFAIL = ("set -o pipefail\n"
-            f"trap '__ps=\"${{PIPESTATUS[*]}}\"; printf \"\\n{_PS_MARK}%s\\n\" \"$__ps\" >&2' EXIT\n")
+            f"trap '__ps=(\"${{PIPESTATUS[@]}}\"); "
+            f"{{ printf \"\\n{_PS_MARK}\"; printf \"%s \" \"${{__ps[@]}}\"; printf \"\\n\"; }} >&2' EXIT\n")
 
 
 def _wrap(command: str) -> str:
