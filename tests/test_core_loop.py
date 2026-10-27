@@ -57,7 +57,7 @@ def test_accepted_after_tool_and_finish(tmp_path):
     assert tool_msg["role"] == "tool" and tool_msg["content"].startswith("exit=0")
     events = [e["event"] for e in map(json.loads, (tmp_path / "trace.jsonl").read_text().splitlines())]
     assert events == ["task_start", "model_call", "policy", "exec", "model_call", "policy",
-                      "acceptance", "task_end"]
+                      "acceptance", "audit", "task_end"]
 
 
 def test_failed_acceptance_feeds_evidence_back_then_accepts(tmp_path):
@@ -76,7 +76,7 @@ def test_step_cap_with_failing_checks_is_failed(tmp_path):
     chat = Scripted(*[resp(call("run_shell", {"command": "true"}))] * 4)
     res, trace = run(TOUCH, chat, tmp_path)
     assert res["status"] == "failed" and res["reason"] == "step_cap" and res["steps"] == 4
-    assert trace.events[-2]["event"] == "acceptance" and trace.events[-2]["verdict"] == "fail"
+    assert trace.events[-3]["event"] == "acceptance" and trace.events[-3]["verdict"] == "fail"
 
 
 def test_checks_passing_at_step_cap_are_accepted(tmp_path):
@@ -669,3 +669,81 @@ def test_a_masked_build_failure_reaches_the_model_with_stage_statuses(tmp_path):
 def test_pipestatus_does_not_depend_on_the_commands_ifs(any_shell, ifs):
     r = any_shell(f"{ifs}; false | true | (exit 3)", 10)
     assert r["exit"] == 3 and r["pipestatus"] == [1, 0, 3] and "PIPESTATUS" not in r["stderr"]
+
+
+# ---------------------------------------------------------------- D1 self-audit (work item F)
+
+D1_CASES = json.loads((FIXTURES / "audit_d1_cases.json").read_text())["cases"]
+
+
+@pytest.mark.parametrize("case", D1_CASES, ids=lambda c: f"{c['trace']}:{c['step']}")
+def test_d1_flags_exactly_the_masked_failures_of_the_demo_traces(case):
+    findings = core.audit([case["row"]])
+    assert [f["step"] for f in findings] == ([case["step"]] if case["expect"] == "hit" else [])
+
+
+def test_d1_ignores_failed_exits_harness_rows_and_reads():
+    out = "make: *** [all] Error 2"
+    rows = [{"event": "exec", "source": "model", "step": 1, "command": "make", "exit": 2, "stdout": out},
+            {"event": "exec", "source": "setup", "step": None, "command": "make", "exit": 0, "stdout": out},
+            {"event": "exec", "source": "model", "step": 2, "command": "cat build.log | grep -n 'Error\\|fatal'",
+             "exit": 0, "stdout": out},
+            {"event": "exec", "source": "model", "step": 3, "command": "make; true", "exit": 0, "stderr": out}]
+    assert [(f["check"], f["step"]) for f in core.audit(rows)] == [("D1", 3)]
+
+
+@pytest.mark.parametrize("cmd, segs", [
+    ("grep 'a\\|b' f; make", ["grep 'a\\|b' f", "make"]),
+    ('echo "x;y" && ls', ['echo "x;y"', "ls"]),
+    ("cd d && git log -3 | head\nls", ["git log -3", "head", "ls"]),
+    ("echo a\;b || false", ["echo a\;b", "false"]),
+])
+def test_segments_split_only_outside_quotes(cmd, segs):
+    assert core._scan(cmd)[0] == segs
+
+
+def test_segments_drop_comments_even_with_apostrophes():
+    assert core._scan("# Let's look\ngrep -n 'x' f # it's here")[0] == ["grep -n 'x' f"]
+
+
+def test_d1_keeps_stderr_diagnostics_of_reads():
+    row = {"event": "exec", "source": "model", "step": 1, "command": "cat /definitely-missing; echo done",
+           "exit": 0, "stdout": "done\n", "stderr": "cat: /definitely-missing: No such file or directory\n"}
+    assert [f["evidence"] for f in core.audit([row])] == ["cat: /definitely-missing: No such file or directory"]
+    assert core.audit([{**row, "stdout": "error: in file content\n", "stderr": ""}]) == []
+
+
+@pytest.mark.parametrize("cmd, exempt", [
+    ("python3 -c 'import nope'; echo \"exit=$?\"", True),
+    ("python3 -c 'import nope'; echo $?", True),
+    ("python3 -c 'import nope'; echo '$?'", False),
+    ("python3 -c 'import nope'; echo \\$?", False),
+    ("python3 -c 'import nope' # then check $?", False),
+    ("# echo $?\npython3 -c 'import nope'", False),
+])
+def test_d1_status_exemption_needs_an_expanded_dollar_question(cmd, exempt):
+    row = {"event": "exec", "source": "model", "step": 1, "command": cmd, "exit": 0,
+           "stderr": "Traceback (most recent call last):\nModuleNotFoundError: No module named 'nope'\n"}
+    assert (core.audit([row]) == []) == exempt
+
+
+def test_every_task_end_carries_its_audit(tmp_path):
+    chat = Scripted(resp(call("run_shell", {"command": "printf 'fatal: no repo\\n' >&2; echo yes > ok.txt"})),
+                    resp(call("finish", {})))
+    res, trace = run(TOUCH, chat, tmp_path)
+    assert res["status"] == "accepted" and res["audit_hits"] == 1
+    events = [e["event"] for e in trace.events]
+    assert events[-2:] == ["audit", "task_end"]
+    assert trace.events[-2]["findings"][0]["evidence"] == "fatal: no repo"
+    clean, _ = run(TOUCH, Scripted(resp(call("run_shell", {"command": "echo yes > ok.txt"})),
+                                   resp(call("finish", {}))), tmp_path / "b")
+    assert clean["audit_hits"] == 0
+
+
+def test_audit_subcommand_needs_no_key(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(core, "SECRETS", tmp_path / "no-secrets")
+    t = tmp_path / "trace.jsonl"
+    t.write_text("\n".join(json.dumps(r) for r in [{"event": "task_start"}, D1_CASES[0]["row"]]) + "\n")
+    assert core.main(["audit", str(t)]) == 0
+    line = json.loads(capsys.readouterr().out)
+    assert line["trace"] == str(t) and [f["step"] for f in line["findings"]] == [D1_CASES[0]["step"]]

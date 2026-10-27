@@ -43,6 +43,8 @@
   - an egress check (curl github/pypi, `apt-get update`) gates the first model call (`egress_failed`).
   - Verified in run c3: apt, pip, curl, git, `repo init` and the full qemu_v8 `repo sync` (56 s) all went through it.
   - Tools that ignore proxy env (raw sockets, `git://`, ping) have no egress.
+- Every task ends with the D1 self-audit (`audit` trace row, `audit_hits` on `task_end`/`summary.json`); recorded
+  traces: `python -m conflux.core audit <trace.jsonl>...` (no key needed).
 - The c3 disk holds a built qemu_v8 tree in `~/optee-work/optee`. `make check-only CHECK_TESTS=xtest XTEST_ARGS=1001`
   boots it and passes in ≈ 54 s. The snapshot has no `expect`; the a4 check installs it.
 

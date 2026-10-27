@@ -24,6 +24,7 @@ Usage:
   python -m conflux.core run --tasks tests/fixtures/core_loop/optee_goal_a.json --out DIR \
       --lab c2 --workdir '~/optee-work' --lab-hours 4
   python -m conflux.core reconcile --out DIR --day 2026-10-27
+  python -m conflux.core audit DIR/*/trace.jsonl
 """
 
 from __future__ import annotations
@@ -481,6 +482,66 @@ def _goal_text(task: Task) -> str:
     return f"{task.goal}\n\nAcceptance checks (run by the harness in the workspace):\n{checks}"
 
 
+# ---------------------------------------------------------------- self-audit (work item F, D1)
+
+FAIL_TEXT = re.compile(r"(?im)^.*\b(error|failed|fatal|cannot|can't|no such file|not found|denied|"
+                       r"undefined reference|traceback|exception|\*\*\*)\b.*$")
+READ_ONLY = re.compile(r"^(cat|head|tail|sed -n|less|grep|rg|ls|find|wc|stat|file|readlink|du|df|echo|pwd|which|"
+                       r"type|command -v|git (log|show|diff|status|branch|remote|rev-parse|ls-files)|"
+                       r"apt(-cache)? (search|show|list|policy)|dpkg (-l|-s|-L))\b")
+
+
+def _scan(cmd: str) -> tuple[list[str], bool]:
+    """(segments, captures_status). Segments: the command split on `;` `&&` `||` `|` and newlines outside quotes,
+    comments, empty and `cd` segments dropped. captures_status: some `$?` is expanded by the shell (not single
+    quoted, escaped or commented)."""
+    segs, cur, quote, status, i = [], "", None, False, 0
+    while i < len(cmd):
+        ch = cmd[i]
+        if ch == "\\" and quote != "'":
+            cur += cmd[i:i + 2]
+            i += 2
+            continue
+        if quote:
+            quote = None if ch == quote else quote
+        elif ch == "#" and (not cur or cur[-1].isspace()):
+            while i < len(cmd) and cmd[i] != "\n":
+                i += 1
+            continue
+        elif ch in "'\"":
+            quote = ch
+        elif ch in ";|\n" or cmd.startswith("&&", i):
+            segs.append(cur)
+            cur = ""
+            i += 2 if cmd.startswith(("&&", "||"), i) else 1
+            continue
+        if quote != "'" and cmd.startswith("$?", i):
+            status = True
+        cur += ch
+        i += 1
+    segs.append(cur)
+    return [s.strip() for s in segs if s.strip() and not re.match(r"cd(\s|$)", s.strip())], status
+
+
+def audit(rows: list[dict]) -> list[dict]:
+    """D1: a model step that exited 0 although its own output reports a failure, i.e. a failure that looked like
+    success. Exempt: the model capturing `$?` itself. For pure reads only stderr counts (stdout is file content)."""
+    findings = []
+    for r in rows:
+        if r.get("event") != "exec" or r.get("source") != "model" or r.get("exit") != 0:
+            continue
+        cmd = r.get("command") or ""
+        segs, status = _scan(cmd)
+        if status:
+            continue
+        reads = bool(segs) and all(READ_ONLY.match(s) for s in segs)
+        text = ("" if reads else (r.get("stdout") or "")) + "\n" + (r.get("stderr") or "")
+        hits = list(FAIL_TEXT.finditer(text))
+        if hits:
+            findings.append({"check": "D1", "step": r.get("step"), "command": cmd[:200],
+                             "evidence": hits[-1].group(0).strip()[:200]})
+    return findings
+
 def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
              model: str = MODEL, deadline: float | None = None) -> dict:
     t0 = time.monotonic()
@@ -489,8 +550,10 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
     trace.write("task_start", task=task.id, model=model, max_steps=task.max_steps, max_usd=task.max_usd)
 
     def end(status: str, reason: str) -> dict:
+        findings = audit([e for e in trace.events if e.get("task") == task.id])
+        trace.write("audit", task=task.id, findings=findings)
         row = trace.write("task_end", task=task.id, status=status, reason=reason, steps=steps,
-                          retries=retries, cost_usd=round(cost, 8),
+                          retries=retries, cost_usd=round(cost, 8), audit_hits=len(findings),
                           latency_s=round(time.monotonic() - t0, 2))
         return {k: v for k, v in row.items() if k not in ("event", "ts")}
 
@@ -751,7 +814,8 @@ def run_lab(tasks: list[Task], chat: Chat, budget: Budget, out: Path, name: str,
         summary = {"model": model, "allowance_usd": budget.allowance, "committed_usd": budget.committed,
                    "lab": lab, "runs": results,
                    "accepted": sum(r["status"] == "accepted" for r in results),
-                   "cost_usd": round(sum(r["cost_usd"] for r in results), 8)}
+                   "cost_usd": round(sum(r["cost_usd"] for r in results), 8),
+                   "audit_hits": sum(r["audit_hits"] for r in results)}
         (out / "summary.json").write_text(json.dumps(summary, indent=2))
     return summary
 
@@ -772,7 +836,14 @@ def main(argv: list[str] | None = None) -> int:
     rec = sub.add_parser("reconcile")
     rec.add_argument("--out", type=Path, required=True)
     rec.add_argument("--day", default=datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+    aud = sub.add_parser("audit", help="D1 self-audit of recorded trace.jsonl files")
+    aud.add_argument("traces", type=Path, nargs="+")
     a = ap.parse_args(argv)
+    if a.cmd == "audit":
+        for p in a.traces:
+            rows = [json.loads(line) for line in p.read_text().splitlines() if line.strip()]
+            print(json.dumps({"trace": str(p), "findings": audit(rows)}))
+        return 0
     key = load_key("surplus.key")
 
     if a.cmd == "reconcile":
@@ -803,7 +874,8 @@ def main(argv: list[str] | None = None) -> int:
     summary = {"model": a.model, "allowance_usd": budget.allowance, "committed_usd": budget.committed,
                "runs": results,
                "accepted": sum(r["status"] == "accepted" for r in results),
-               "cost_usd": round(sum(r["cost_usd"] for r in results), 8)}
+               "cost_usd": round(sum(r["cost_usd"] for r in results), 8),
+               "audit_hits": sum(r["audit_hits"] for r in results)}
     (a.out / "summary.json").write_text(json.dumps(summary, indent=2))
     return 0
 

@@ -5,6 +5,33 @@ Keep this short and current. One entry per decision; newest first.
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred to E); B done.
+- **F step 1 (2026-10-27, executed offline, $0): the D1 self-audit runs at the end of every task.**
+  - D1 flags a model step that exited 0 although its own output reports failure. `conflux/core.py` `audit()` runs in
+    `run_task`'s `end()` on every exit path, so it covers both `run` and `run --lab`. It writes an `audit` trace row and
+    `audit_hits` on `task_end` and in `summary.json`; a hit does not change the status. Recorded traces:
+    `python -m conflux.core audit <trace.jsonl>...`, which needs no key.
+  - The demo's false positives are fixed generically:
+    - commands are split on separators outside quotes and comments;
+    - `git log`/`show`/`diff`, `apt search`/`show` and `command -v` count as reads; for a read only stderr is scanned
+      (stdout is file content; `cat missing; echo done` still hits);
+    - a command whose shell expands `$?` (not single-quoted, escaped or commented) is exempt, because the model
+      captured the exit itself.
+  - **Hypothesis supported.** On the 16 demo traces, D1 gives exactly the 2 required hits and nothing else; the demo
+    script gave 5 extra:
+    - c4/a3 step 27, `make … | tail`;
+    - c3/a1 step 3, a `;` chain hiding a Traceback.
+
+    RESULTS.md says 17 traces, but its output covers 16.
+  - **Held-out** (7 unseen traces, rules not tuned to them): c1 gave 0 hits. c2/a1 gave 8 hits; all 8 are real
+    failures reported as exit 0 (hand-labelled, single labeller):
+    - 6 are pipe-masked (pre-pipefail; slice 6 covers them);
+    - in step 9, `apt-get update` only warned and itself exited 0;
+    - step 2 is a model-written `|| true`.
+  - **Residual class after pipefail:** `;` chains, `|| true`, and tools that exit 0 with warnings. The model sees the
+    text, but nothing in the exit status reflects it.
+  - Evidence: `~/evidence/self-audit-d1-2026-10-27/` (`grade.txt`, `README.md`). Fixture
+    `tests/fixtures/core_loop/audit_d1_cases.json` (7 cases with source sha256). Tests: 60 in `test_core_loop.py` (+8 new; critic round 1 added the read-stderr and `$?` regressions);
+    suite 718 passed, 1 xfailed.
 - **C slice 6 (2026-10-27, executed, $0 metered + $0.03 GCE): the executor no longer masks pipeline failures.**
   - Every command (model, checks, setup; local `execute` and `lab_shell`) runs under `set -o pipefail`. An `EXIT` trap
     reports the last pipeline's per-stage exits as a stderr marker. The harness strips the marker and returns it as `pipestatus`, which
@@ -17,12 +44,12 @@ MISSION-STATUS: ACTIVE
   - Model habits like `cat big | head` now report 141 with `pipestatus=141 0`. That is intended.
   - Evidence: `~/evidence/core-runs/2026-10-27-c6/` (`recheck_goal_a.py`, `recheck.json`). Suite 688 passed, 1 xfailed.
 - **Next action:**
-  1. Work item F, as rescoped (MISSION 089d6e3): build only the deterministic D1 check, "step reported success but its own
-     output reports failure", from `~/evidence/self-audit-demo-2026-10-27/` (`audit.py`, `RESULTS.md`). First fix its known false positives
-     (quoted `\|` split; `git log`/`apt search` as reads). Grade it on the demo's 17 traces; it must find c4/a3 step 27 and c3/a1
-     step 3. Run it after every run. No model-based classifier.
+  1. Structural fix for the D1 residual (harness fault, c3/a1 step 3). Extend slice 6's EXIT-trap marker with an
+     `ERR` trap that counts failing simple commands outside conditions, and show `failed_cmds=N` to the model when
+     exit=0. Add a regression test on the c3 shape (`python3 -c 'import nope'; echo ok` → exit 0, failed_cmds=1), and
+     revalidate the a1–a4 checks harness-only on c3 before any paid run.
   2. Then run `--only a3-build,a4-boot --lab c3 --workdir '~/optee-work'` on the default executor (expected: a3 accepts
-     at once, a4 within 25 steps), then cut goal (b) sub-goals with harness-validated checks.
+     at once, a4 within 25 steps). Check `audit_hits`, then cut goal (b) sub-goals with harness-validated checks.
   - Delete the c3 disk once goal (a) is done or abandoned.
 - **C slice 5 (2026-10-27, executed, $0.000000 metered + $0.05 GCE): default executor is `deepseek-v4.1-flash`; a4 cut.**
   - **Offers** (`GET https://api.surplusintelligence.ai/v1/prices`, 09:31Z): at list price v4.1-flash is *not* cheaper
