@@ -491,9 +491,11 @@ READ_ONLY = re.compile(r"^(cat|head|tail|sed -n|less|grep|rg|ls|find|wc|stat|fil
                        r"apt(-cache)? (search|show|list|policy)|dpkg (-l|-s|-L))\b")
 
 
-def _segments(cmd: str) -> list[str]:
-    """Split a command on `;` `&&` `||` `|` and newlines outside quotes; drop empty and `cd` segments."""
-    segs, cur, quote, i = [], "", None, 0
+def _scan(cmd: str) -> tuple[list[str], bool]:
+    """(segments, captures_status). Segments: the command split on `;` `&&` `||` `|` and newlines outside quotes,
+    comments, empty and `cd` segments dropped. captures_status: some `$?` is expanded by the shell (not single
+    quoted, escaped or commented)."""
+    segs, cur, quote, status, i = [], "", None, False, 0
     while i < len(cmd):
         ch = cmd[i]
         if ch == "\\" and quote != "'":
@@ -502,6 +504,10 @@ def _segments(cmd: str) -> list[str]:
             continue
         if quote:
             quote = None if ch == quote else quote
+        elif ch == "#" and (not cur or cur[-1].isspace()):
+            while i < len(cmd) and cmd[i] != "\n":
+                i += 1
+            continue
         elif ch in "'\"":
             quote = ch
         elif ch in ";|\n" or cmd.startswith("&&", i):
@@ -509,29 +515,32 @@ def _segments(cmd: str) -> list[str]:
             cur = ""
             i += 2 if cmd.startswith(("&&", "||"), i) else 1
             continue
+        if quote != "'" and cmd.startswith("$?", i):
+            status = True
         cur += ch
         i += 1
     segs.append(cur)
-    return [s.strip() for s in segs if s.strip() and not re.match(r"cd(\s|$)", s.strip())]
+    return [s.strip() for s in segs if s.strip() and not re.match(r"cd(\s|$)", s.strip())], status
 
 
 def audit(rows: list[dict]) -> list[dict]:
     """D1: a model step that exited 0 although its own output reports a failure, i.e. a failure that looked like
-    success. Exempt: the model capturing `$?` itself, and pure reads (their output is file content)."""
+    success. Exempt: the model capturing `$?` itself. For pure reads only stderr counts (stdout is file content)."""
     findings = []
     for r in rows:
         if r.get("event") != "exec" or r.get("source") != "model" or r.get("exit") != 0:
             continue
         cmd = r.get("command") or ""
-        segs = _segments(cmd)
-        if "$?" in cmd or (segs and all(READ_ONLY.match(s) for s in segs)):
+        segs, status = _scan(cmd)
+        if status:
             continue
-        hits = list(FAIL_TEXT.finditer((r.get("stdout") or "") + "\n" + (r.get("stderr") or "")))
+        reads = bool(segs) and all(READ_ONLY.match(s) for s in segs)
+        text = ("" if reads else (r.get("stdout") or "")) + "\n" + (r.get("stderr") or "")
+        hits = list(FAIL_TEXT.finditer(text))
         if hits:
             findings.append({"check": "D1", "step": r.get("step"), "command": cmd[:200],
                              "evidence": hits[-1].group(0).strip()[:200]})
     return findings
-
 
 def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
              model: str = MODEL, deadline: float | None = None) -> dict:

@@ -11,9 +11,11 @@ MISSION-STATUS: ACTIVE
     `audit_hits` on `task_end` and in `summary.json`; a hit does not change the status. Recorded traces:
     `python -m conflux.core audit <trace.jsonl>...`, which needs no key.
   - The demo's false positives are fixed generically:
-    - commands are split on separators outside quotes;
-    - `git log`/`show`/`diff`, `apt search`/`show` and `command -v` count as reads;
-    - a command that prints `$?` is exempt, because the model captured the exit itself.
+    - commands are split on separators outside quotes and comments;
+    - `git log`/`show`/`diff`, `apt search`/`show` and `command -v` count as reads; for a read only stderr is scanned
+      (stdout is file content; `cat missing; echo done` still hits);
+    - a command whose shell expands `$?` (not single-quoted, escaped or commented) is exempt, because the model
+      captured the exit itself.
   - **Hypothesis supported.** On the 16 demo traces, D1 gives exactly the 2 required hits and nothing else; the demo
     script gave 5 extra:
     - c4/a3 step 27, `make … | tail`;
@@ -28,8 +30,8 @@ MISSION-STATUS: ACTIVE
   - **Residual class after pipefail:** `;` chains, `|| true`, and tools that exit 0 with warnings. The model sees the
     text, but nothing in the exit status reflects it.
   - Evidence: `~/evidence/self-audit-d1-2026-10-27/` (`grade.txt`, `README.md`). Fixture
-    `tests/fixtures/core_loop/audit_d1_cases.json` (7 cases with source sha256). Tests: 57 in `test_core_loop.py` (+5 new);
-    suite 710 passed, 1 xfailed.
+    `tests/fixtures/core_loop/audit_d1_cases.json` (7 cases with source sha256). Tests: 60 in `test_core_loop.py` (+8 new; critic round 1 added the read-stderr and `$?` regressions);
+    suite 718 passed, 1 xfailed.
 - **C slice 6 (2026-10-27, executed, $0 metered + $0.03 GCE): the executor no longer masks pipeline failures.**
   - Every command (model, checks, setup; local `execute` and `lab_shell`) runs under `set -o pipefail`. An `EXIT` trap
     reports the last pipeline's per-stage exits as a stderr marker. The harness strips the marker and returns it as `pipestatus`, which

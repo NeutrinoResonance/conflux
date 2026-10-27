@@ -699,7 +699,32 @@ def test_d1_ignores_failed_exits_harness_rows_and_reads():
     ("echo a\;b || false", ["echo a\;b", "false"]),
 ])
 def test_segments_split_only_outside_quotes(cmd, segs):
-    assert core._segments(cmd) == segs
+    assert core._scan(cmd)[0] == segs
+
+
+def test_segments_drop_comments_even_with_apostrophes():
+    assert core._scan("# Let's look\ngrep -n 'x' f # it's here")[0] == ["grep -n 'x' f"]
+
+
+def test_d1_keeps_stderr_diagnostics_of_reads():
+    row = {"event": "exec", "source": "model", "step": 1, "command": "cat /definitely-missing; echo done",
+           "exit": 0, "stdout": "done\n", "stderr": "cat: /definitely-missing: No such file or directory\n"}
+    assert [f["evidence"] for f in core.audit([row])] == ["cat: /definitely-missing: No such file or directory"]
+    assert core.audit([{**row, "stdout": "error: in file content\n", "stderr": ""}]) == []
+
+
+@pytest.mark.parametrize("cmd, exempt", [
+    ("python3 -c 'import nope'; echo \"exit=$?\"", True),
+    ("python3 -c 'import nope'; echo $?", True),
+    ("python3 -c 'import nope'; echo '$?'", False),
+    ("python3 -c 'import nope'; echo \\$?", False),
+    ("python3 -c 'import nope' # then check $?", False),
+    ("# echo $?\npython3 -c 'import nope'", False),
+])
+def test_d1_status_exemption_needs_an_expanded_dollar_question(cmd, exempt):
+    row = {"event": "exec", "source": "model", "step": 1, "command": cmd, "exit": 0,
+           "stderr": "Traceback (most recent call last):\nModuleNotFoundError: No module named 'nope'\n"}
+    assert (core.audit([row]) == []) == exempt
 
 
 def test_every_task_end_carries_its_audit(tmp_path):
