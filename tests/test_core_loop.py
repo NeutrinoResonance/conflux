@@ -39,7 +39,7 @@ TOUCH = Task(id="touch", goal="create ok.txt containing yes",
 
 def run(task, chat, tmp_path, allowance=1.0):
     trace = Trace(tmp_path / "trace.jsonl")
-    return run_task(task, chat, tmp_path / "work", trace, Budget(allowance)), trace
+    return run_task(task, chat, core.local_shell(tmp_path / "work"), trace, Budget(allowance)), trace
 
 
 def test_accepted_after_tool_and_finish(tmp_path):
@@ -156,7 +156,7 @@ def test_tuning_task_checks_reject_the_untouched_setup(tmp_path):
         w = tmp_path / t.id
         w.mkdir()
         assert core.execute(t.setup or "true", w)["exit"] == 0
-        assert core.run_checks(t.checks, w)[0] == "fail"
+        assert core.run_checks(t.checks, core.local_shell(w))[0] == "fail"
 
 
 def test_reconcile_matches_on_model_tokens_and_nearest_time():
@@ -207,3 +207,162 @@ def test_recorded_live_run_replays_to_the_same_status_and_cost(tmp_path):
     assert {k: res[k] for k in rec["expected"]} == rec["expected"]
     assert chat.responses == []
     assert all(e["cost_kind"] == "billed" for e in trace.events if e["event"] == "model_call")
+
+
+# ---------------------------------------------------------------- slice 2: lab backend
+
+
+import os
+import shlex
+import time
+
+
+@pytest.fixture
+def lab(tmp_path, monkeypatch):
+    """lab_shell over the local seam; job dirs land under a temporary $HOME."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+
+    def make(deadline=None, remote=core.local_remote):
+        return core.lab_shell(remote, str(tmp_path / "work"), deadline, poll_s=0.1)
+    return make
+
+
+def _alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+def test_lab_shell_returns_exit_and_output(lab, tmp_path):
+    r = lab()("echo hi; echo err >&2; pwd", 10)
+    assert r["exit"] == 0 and r["stdout"] == f"hi\n{tmp_path / 'work'}\n" and r["stderr"] == "err\n"
+    assert lab()("exit 3", 10)["exit"] == 3
+
+
+def test_lab_shell_runs_awkward_commands_verbatim(lab, tmp_path):
+    cmd = "printf '%s|' \"a'b\" '$HOME' \"x\\\\y\"\necho \"`echo tick`\" $((1+2))"
+    assert lab()(cmd, 10)["stdout"] == core.execute(cmd, tmp_path)["stdout"] == "a'b|$HOME|x\\y|tick 3\n"
+
+
+def test_lab_shell_timeout_kills_the_process_group_and_keeps_output(lab, tmp_path):
+    r = lab()("echo started; sleep 30 & echo $! > child.pid; wait", 1.5)
+    assert r["timed_out"] and r["exit"] is None and not r["deadline"] and r["stdout"] == "started\n"
+    assert not _alive(int((tmp_path / "work/child.pid").read_text()))
+    assert (tmp_path / "home/.conflux-jobs" / r["job"] / "out").read_text() == "started\n"
+
+
+def test_lab_shell_transport_failure_is_no_verdict(lab):
+    r = lab(remote=lambda script: ["false"])("echo hi", 10)
+    assert r["exit"] is None and r["transport_error"] == "launch" and not r["timed_out"]
+    task = Task(id="t", goal="g", checks=[Check("true")])
+    assert core.run_checks(task.checks, lab(remote=lambda script: ["false"]))[0] is None
+
+
+def test_lab_shell_deadline_caps_the_command_timeout(lab, tmp_path):
+    t0 = time.monotonic()
+    r = lab(deadline=t0 + 1.5)("sleep 30 & echo $! > child.pid; wait", 60)
+    assert r["timed_out"] and r["deadline"] and time.monotonic() - t0 < 6
+    assert not _alive(int((tmp_path / "work/child.pid").read_text()))
+    late = lab(deadline=t0)("echo never > ran.txt", 10)
+    assert late["exit"] is None and late["deadline"] and not (tmp_path / "work/ran.txt").exists()
+
+
+def test_run_task_ends_at_the_lab_deadline_without_another_model_call(lab, tmp_path):
+    deadline = time.monotonic() + 1.5
+    chat = Scripted(resp(call("run_shell", {"command": "sleep 30", "timeout_s": 60})),
+                    resp(call("finish", {})))
+    res = run_task(TOUCH, chat, lab(deadline=deadline), Trace(), Budget(1.0), deadline=deadline)
+    assert res["status"] == "unverified" and res["reason"] == "lab_deadline" and len(chat.responses) == 1
+
+
+def test_gcloud_remote_puts_the_whole_script_in_one_command_value():
+    script = "set -e; d=\"$HOME\"/x; echo 'q' | base64 -d > \"$d/cmd.sh\""
+    argv = core.gcloud_remote("c2")(script)
+    assert argv[:4] == ["gcloud", "compute", "ssh", "conflux-dev-lab-c2"]
+    commands = [a for a in argv if a.startswith("--command")]
+    assert commands == [argv[-1]]
+    assert shlex.split(argv[-1][len("--command="):]) == ["bash", "-c", script]
+
+
+@pytest.mark.parametrize("t,deny", [(None, None), (1, None), (10800, None), (0, "bad_timeout"),
+                                    (-5, "bad_timeout"), (10801, "bad_timeout"), (2.5, "bad_timeout"),
+                                    ("60", "bad_timeout"), (True, "bad_timeout")])
+def test_policy_timeout_bounds(t, deny):
+    args = {"command": "true", **({} if t is None else {"timeout_s": t})}
+    name, got, reason = core.policy(call("run_shell", args))
+    assert reason == deny
+    if deny is None:
+        assert got["timeout_s"] == (60 if t is None else t)
+
+
+@pytest.fixture
+def devbox_lab(tmp_path, monkeypatch):
+    """A fake `devbox-lab` on PATH that logs its arguments."""
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    log = tmp_path / "devbox-lab.log"
+    (bindir / "devbox-lab").write_text(f"#!/bin/sh\necho \"$*\" >> {log}\n")
+    (bindir / "devbox-lab").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bindir}:{os.environ['PATH']}")
+    return lambda: log.read_text().splitlines()
+
+
+@pytest.fixture(autouse=True)
+def fast_poll(monkeypatch):
+    monkeypatch.setattr(core, "POLL_S", 0.1)
+
+
+def _run_lab(tmp_path, chat, hours=1.0, tasks=(TOUCH,)):
+    return core.run_lab(list(tasks), chat, Budget(1.0), tmp_path / "out", "c2", str(tmp_path / "w"), hours,
+                        remote=core.local_remote)
+
+
+def test_run_lab_stops_the_lab_after_normal_completion(lab, tmp_path, devbox_lab):
+    chat = Scripted(resp(call("run_shell", {"command": "echo yes > ok.txt"})), resp(call("finish", {})))
+    s = _run_lab(tmp_path, chat)
+    assert devbox_lab() == ["up c2", "stop c2"]
+    assert s["accepted"] == 1 and s["lab"]["smoke"]["exit"] == 0 and s["lab"]["keep_disk"]
+    assert json.loads((tmp_path / "out/summary.json").read_text())["lab"]["stop_exit"] == 0
+
+
+def test_run_lab_stops_the_lab_when_a_task_raises(lab, tmp_path, devbox_lab):
+    def boom(messages, tools):
+        raise RuntimeError("provider exploded")
+    with pytest.raises(RuntimeError):
+        _run_lab(tmp_path, boom)
+    assert devbox_lab() == ["up c2", "stop c2"]
+    assert (tmp_path / "out/summary.json").exists()
+
+
+def test_run_lab_stops_the_lab_at_the_deadline(lab, tmp_path, devbox_lab):
+    s = _run_lab(tmp_path, Scripted(), hours=1e-9)
+    assert devbox_lab() == ["up c2", "stop c2"]
+    assert s["runs"] == [] and s["lab"]["stopped_reason"] == "smoke_failed"
+    assert s["lab"]["smoke"]["deadline"]
+
+
+def test_run_lab_stops_after_the_first_non_accepted_task(lab, tmp_path, devbox_lab):
+    second = Task(id="second", goal="g", checks=[Check("true")])
+    chat = Scripted(resp(call("finish", {})), *[resp(call("run_shell", {"command": "true"}))] * 3)
+    s = _run_lab(tmp_path, chat, tasks=(TOUCH, second))
+    assert [r["task"] for r in s["runs"]] == ["touch"] and s["lab"]["stopped_reason"] == "touch:step_cap"
+    assert devbox_lab() == ["up c2", "stop c2"] and not s["lab"]["keep_disk"]
+
+
+def test_optee_goal_a_checks_execute_and_reject_an_empty_workdir(tmp_path):
+    tasks = [Task.from_dict(d) for d in json.loads((FIXTURES / "optee_goal_a.json").read_text())]
+    assert [t.id for t in tasks] == ["a1-host-prereqs", "a2-sources", "a3-build"]
+    for t in tasks[1:]:  # a1 depends on the host; a2/a3 cannot pass without a tree
+        assert core.run_checks(t.checks, core.local_shell(tmp_path))[0] == "fail"
+
+
+def test_lab_shell_rides_out_a_failed_poll(lab):
+    calls = []
+
+    def flaky(script):
+        calls.append(script)
+        return ["false"] if len(calls) in (2, 3, 4) else core.local_remote(script)  # first poll: 3 failures
+    r = lab(remote=flaky)("sleep 0.5; echo done", 10)
+    assert r["exit"] == 0 and r["stdout"] == "done\n" and len(calls) > 5
