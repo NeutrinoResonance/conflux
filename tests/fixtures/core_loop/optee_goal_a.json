@@ -47,7 +47,7 @@
     "cmd": "cd optee/out/bin && for f in bl1.bin bl2.bin bl31.bin bl32.bin bl32_extra1.bin Image rootfs.cpio.gz; do test -s $f || { echo missing $f; exit 1; }; done && test -e bl32_extra2.bin"
    },
    {
-    "cmd": "optee/qemu/build/qemu-system-aarch64 --version | head -n 1 | grep -q 'QEMU emulator version'",
+    "cmd": "optee/qemu/build/qemu-system-aarch64 --version | grep 'QEMU emulator version' >/dev/null",
     "timeout": 60
    }
   ]

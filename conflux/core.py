@@ -9,9 +9,11 @@ matches the calls against the Surplus buyer usage export, the authoritative bill
 
 Commands run through a `Shell`: `local_shell` (a subprocess in a workdir) or `lab_shell`
 (a detached job on a `devbox-lab` VM, polled over ssh, all waits capped by one deadline that
-starts when the lab comes up). Labs have no internet egress, so `run_lab` serves an HTTP proxy
-on the controller (`egress_proxy`), reverse-tunnels it to the lab's 127.0.0.1:3128 over ssh, and
-exports `PROXY_ENV` to every lab command; an egress check gates the first model call.
+starts when the lab comes up). Every command runs under `pipefail`, and its result carries
+`pipestatus`, the exit status of each stage of the last pipeline it ran (founder decision: the
+executor must not mask pipeline failures). Labs have no internet egress, so `run_lab` serves an
+HTTP proxy on the controller (`egress_proxy`), reverse-tunnels it to the lab's 127.0.0.1:3128 over
+ssh, and exports `PROXY_ENV` to every lab command; an egress check gates the first model call.
 
 Terminal statuses: `accepted` (all checks pass), `failed` (checks ran and failed when
 steps ran out), `unverified` (no verdict: provider error, budget refusal, check timeout,
@@ -163,15 +165,36 @@ def billed_cost(body: object) -> float | None:
     return None
 
 
+_PS_MARK = "__CONFLUX_PIPESTATUS="
+# Prepended to every command. The EXIT trap's first statement copies PIPESTATUS (the last pipeline's
+# per-stage exits) before anything resets it, and prints it as the final stderr line.
+PIPEFAIL = ("set -o pipefail\n"
+            f"trap '__ps=\"${{PIPESTATUS[*]}}\"; printf \"\\n{_PS_MARK}%s\\n\" \"$__ps\" >&2' EXIT\n")
+
+
+def _wrap(command: str) -> str:
+    return PIPEFAIL + command
+
+
+def _split_pipestatus(stderr: str) -> tuple[str, list[int] | None]:
+    """(stderr without the trailing marker, per-stage exits); None when the marker is missing
+    (killed, timed out, or the command replaced the trap or closed stderr)."""
+    m = re.search(rf"\n?{_PS_MARK}([\d ]+)\n?$", stderr)
+    if not m:
+        return stderr, None
+    return stderr[:m.start()], [int(x) for x in m[1].split()]
+
+
 def execute(command: str, workdir: Path, timeout: float = EXEC_TIMEOUT) -> dict:
     t0 = time.monotonic()
     try:
-        p = subprocess.run(["bash", "-c", command], cwd=workdir, capture_output=True,
+        p = subprocess.run(["bash", "-c", _wrap(command)], cwd=workdir, capture_output=True,
                            text=True, errors="replace", timeout=timeout)
-        out = {"exit": p.returncode, "stdout": p.stdout[-TAIL:], "stderr": p.stderr[-TAIL:],
-               "timed_out": False}
+        stderr, ps = _split_pipestatus(p.stderr)
+        out = {"exit": p.returncode, "stdout": p.stdout[-TAIL:], "stderr": stderr[-TAIL:],
+               "pipestatus": ps, "timed_out": False}
     except subprocess.TimeoutExpired:
-        out = {"exit": None, "stdout": "", "stderr": "", "timed_out": True}
+        out = {"exit": None, "stdout": "", "stderr": "", "pipestatus": None, "timed_out": True}
     out["duration_s"] = round(time.monotonic() - t0, 3)
     return out
 
@@ -295,8 +318,8 @@ def lab_shell(remote: Callable[[str], list[str]], workdir: str, deadline: float 
     loses nothing. Launch is idempotent: `mkdir` of the job dir is an atomic guard, so a retried
     launch recovers the running job's pid instead of starting it again. Launch and polls are
     bounded by `min(command end, deadline)`; killing and collecting output get `GRACE` more.
-    A transport failure that outlasts `TRANSPORT_RETRIES` attempts ends the command with no
-    verdict (`exit: None`). Output that could not be fetched is listed in `unavailable`.
+    Commands run under `pipefail` (`_wrap`), like `execute`. A transport failure that outlasts
+    `TRANSPORT_RETRIES` attempts ends the command with no verdict (`exit: None`). Output that could not be fetched is listed in `unavailable`.
     `env` is exported to every job.
     """
     poll_s = POLL_S if poll_s is None else poll_s
@@ -325,7 +348,7 @@ def lab_shell(remote: Callable[[str], list[str]], workdir: str, deadline: float 
         collect_by = stop_at + GRACE
         job = f"{time.time_ns():x}"
         d = f'"$HOME"/.conflux-jobs/{job}'
-        out = {"exit": None, "stdout": "", "stderr": "", "timed_out": False, "job": job}
+        out = {"exit": None, "stdout": "", "stderr": "", "pipestatus": None, "timed_out": False, "job": job}
 
         def done(**kw) -> dict:
             kw.setdefault("deadline", time.monotonic() >= lab_end)
@@ -333,7 +356,7 @@ def lab_shell(remote: Callable[[str], list[str]], workdir: str, deadline: float 
 
         if stop_at <= t0:
             return done(timed_out=True)
-        b64 = base64.b64encode(command.encode()).decode()
+        b64 = base64.b64encode(_wrap(command).encode()).decode()
         launch = (f"set -e; d={d}; w={_remote_path(workdir)}; mkdir -p \"$HOME/.conflux-jobs\" \"$w\"; "
                   "if mkdir \"$d\" 2>/dev/null; then "
                   f"echo {b64} | base64 -d > \"$d/cmd.sh\"; cd \"$w\"; {exports}"
@@ -373,6 +396,7 @@ def lab_shell(remote: Callable[[str], list[str]], workdir: str, deadline: float 
                 unavailable.append(stream)
         if unavailable:
             tails["unavailable"] = unavailable
+        tails["stderr"], tails["pipestatus"] = _split_pipestatus(tails["stderr"])
         if transport_error:
             return done(**tails, transport_error=transport_error)
         if rc is None:
@@ -433,6 +457,8 @@ def _tool_result(r: dict, timeout: float) -> str:
                 "may not have run")
     else:
         head = f"exit={r['exit']}"
+        if len(r.get("pipestatus") or ()) > 1:
+            head += " pipestatus=" + " ".join(map(str, r["pipestatus"]))
     return f"{head}\nstdout:\n{r['stdout']}\nstderr:\n{r['stderr']}{missing}"
 
 
