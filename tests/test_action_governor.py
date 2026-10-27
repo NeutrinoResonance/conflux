@@ -1366,7 +1366,7 @@ class GovernorProtocolTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(client.critic_calls, 1)
         self.assertIn("budget exhausted", outcome.directives[0])
-        self.assertEqual(orch.action_store.list()[0]["status"], "postcheck_failed")
+        self.assertEqual(orch.action_store.list()[0]["status"], "unverified")
 
 
 class FlowRuntimeTests(unittest.TestCase):

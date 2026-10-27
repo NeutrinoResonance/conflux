@@ -5,6 +5,18 @@ Keep this short and current. One entry per decision; newest first.
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item A — reproduce the NetBSD / child-model mapping failure from evidence.
+  T1 and T2 are both fixed offline; A's remaining open point is a live rerun, which is deferred to E.
+- **T2 fixed (2026-10-27, verified offline, $0):** a soundness check that produced no verdict (checker
+  unavailable, provider error such as 402, malformed output across the whole chain, budget
+  exhausted) now gives decision/status `unverified`, not `postcheck_failed`. `unverified` is final
+  but is not a "recent effect", so an identical retry goes through normal governance instead of the
+  failed-retry human hold. Real `fail` verdicts are unchanged.
+  - **Replay of run-12 `traces.db`** (`t2_fix_replay.txt`): 26/26 no-verdict checks become
+    `unverified`. Of the 10 failed-retry holds, 6 are removed (including `act_f2e51f2cc42840a1`) and
+    4 are kept (their prior `act_edaa16c73d5d46ab` had a real fail).
+  - **Acceptance:** `tests/test_run12_t2_unverified.py` (402 → unverified + retry released; a real
+    fail is still held). Suite: 601 passed, 1 xfailed (letter scale).
+  - **Not covered:** unsafe or same-target probes stay `postcheck_failed`.
 - **T1 fixed (2026-10-27, verified offline, $0):** `_shell_effects` now strips fd prefixes (`2>&1`),
   consumes `>&`/`<&` targets, parses option values (`head`/`tail -n`, grep `-e/-f/-m/-A/-B/-C`) and
   grep patterns. Replay of all 293 run-12 commands: actions with phantom relative paths 38 → 2.
@@ -37,6 +49,8 @@ MISSION-STATUS: ACTIVE
   checking that real operands are still scoped.
 - **Known contract violation (2026-10-27, PR #1):** `conflux/verifier.py` `_parse_point` still accepts
   digit scores (`<score>7</score>`); pinned by strict xfail in `tests/test_letter_scale_contract.py`.
-- **Next action:** T2. Write an acceptance test: a provider/billing error (HTTP 402) in the
-  soundness checker must leave the action unverified, not `postcheck_failed`, and must not trigger
-  the failed-retry hold (`act_f2e51f2cc42840a1`). Strict-xfail it first, then fix.
+- **Next action:** work item B — provider discovery, mostly at $0. List the authenticated catalogues
+  and the balance/quota endpoints for Surplus, NanoGPT, Kimi Code and GLM. Then run probes capped at
+  $1 on Surplus `deepseek-v4-pro`/`-flash` and `jev-1.14`: a tool-call round trip, streaming, usage
+  and billed cost from the response, and whether logprobs come back (3 samples each). Record them as
+  a sanitized capability matrix.
