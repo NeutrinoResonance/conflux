@@ -24,6 +24,21 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
 - **Cheapest billed:** < 1 micro-USD per 2k-token call (2026-10-27); 46 judge calls cost 19 micro-USD.
 - **Strong: command semantics.** "Did this command fail?" 29/30 (28 after the label fix); reasoned
   "grep with no match exits 1" on all three empty-grep items Jev missed. Evidence: Jev fair test above.
+- **Weak: does not stop when the work is done (n=1 run).** On c8/a3-build, with the qemu_v8 tree already built,
+  it ran the acceptance check commands itself at steps 7, 20 and 31. All of them passed, and it never called
+  `finish`. It was accepted only at the 40-step cap after 1801 s; 33 steps were wasted on five no-op `make all`
+  runs (69–107 s each) and on inspecting the PAGER config and binaries.
+  - Example: at step 21 it wrote "Both acceptance checks pass already. Let me verify the build is genuinely
+    complete/consistent by re-running the canonical build." and then kept going.
+  Evidence: `~/evidence/core-runs/2026-10-27-c8/a3-build/trace.jsonl`.
+- **Strong: QEMU boot from an upstream recipe (n=1 run).** On c8/a4-boot it was accepted in 24 steps (790 s,
+  $0.000009, `finish` called, 0 retries). It found upstream's `qemu-check.exp`, then ran `make check-only
+  CHECK_TESTS=xtest XTEST_ARGS=1001` non-interactively (step 17) instead of an interactive `make run`.
+  - Example: step 20 re-ran the exact acceptance command and then called `finish`. The harness check passed
+    independently in 41 s.
+  Evidence: `~/evidence/core-runs/2026-10-27-c8/a4-boot/trace.jsonl`, `summary.json`.
+- **Strong: reacts to a reported failed command.** On c8/a3 step 12, `xxd: command not found` came back as
+  `exit=0 failed_cmds=1`, and at step 13 it switched to `od` (one instance).
 - **Strong: small executor tasks.** 6/6 toy tasks accepted (c5 tuning: csv-total, fix-mean, fizzbuzz ×2).
 - **Weak: burns its token budget on reasoning and returns nothing.** Empty content with `finish_reason=length`
   on 2/16 two-word answers at `max_tokens` 4000, and 2/3 at 8000 on the check-wrong question.
