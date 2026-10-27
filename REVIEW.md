@@ -19,6 +19,10 @@ Contract: `docs/rebuild/MISSION.md`. Integration base: `rebuild/conflux-core-202
 - **Abstraction stacking.** A new layer, registry, framework or generic scheduler without a
   demonstrated requirement that direct code cannot meet is Important when it adds code paths the
   mission defers (DAG scheduler, workflow editor, store framework, broad UI).
+- **Demo before build.** A PR that adds or changes how Conflux uses agents (new layer, detector,
+  classifier, model/route, prompt, policy, critic/decider wiring) without citing a demo's
+  `~/evidence/<demo>/RESULTS.md` whose numbers support the change is Important. Fixes for observed
+  harness faults need a regression test reproducing the fault instead.
 - **Evaluation claims.** Claims of improvement must cite matched held-out runs; a single favorable
   demo or a model's self-grade is not evidence.
 

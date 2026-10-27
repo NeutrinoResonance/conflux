@@ -31,9 +31,14 @@ Only then set `MISSION-STATUS: COMPLETE` and open the promotion PR to `main`.
 
 ## Founder decisions (binding; newest first)
 
-- **2026-10-27 — Self-improvement is in scope (work item F), demo first.** New mechanisms (detectors,
-  classifiers, supervision layers) need a throwaway demo on recorded traces with measured results
-  before implementation. The founder has seen layer-on-layer abstraction drive costs up.
+- **2026-10-27 — Demo first for any conjectured change to how Conflux uses agents.** This covers new
+  mechanisms (detectors, classifiers, supervision or review layers), model or route choices, prompts,
+  policies, panel/critic/decider wiring and loop changes, whether a developer or Conflux itself proposes
+  them. Before implementation, run a throwaway demo (a short script, cost-capped, on recorded traces in
+  `~/evidence/` or a tiny live run) and write its numbers to `~/evidence/<demo>/RESULTS.md`; build only
+  what the numbers support, and cite that file in the PR. A fix for an observed harness fault is
+  demonstrated by its regression test reproducing the fault. The founder has seen layer-on-layer
+  abstraction drive costs up; work item F is the worked example (one detector of four survived).
 - **2026-10-27 — Fix first: the executor masks pipeline failures.** `conflux/core.py` runs model commands
   as plain `bash -c` (local `execute()` and the lab job launcher), so `make … | tail` reports exit 0 when
   make fails, and the model acts on false success. The old governor enforced `pipefail`; the rebuild

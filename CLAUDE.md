@@ -1,6 +1,7 @@
 # Conflux — notes for Claude Code
 
 Rebuild in progress: read `AGENTS.md` and `docs/rebuild/MISSION.md` first.
+Demo before build: no change to how Conflux uses agents lands without a throwaway demo's numbers (`AGENTS.md`).
 On the `conflux-dev-ctl` controller the identity cannot create VMs: use the two pre-created
 worker slots (`docs/rebuild/RESOURCES.md`) instead of the ephemeral `conflux-*` VMs described below.
 
