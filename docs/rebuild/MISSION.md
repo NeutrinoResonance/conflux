@@ -39,6 +39,9 @@ Only then set `MISSION-STATUS: COMPLETE` and open the promotion PR to `main`.
   is the last resort: minimize it, keep any that survives generic and measured, and never task-specific. Which
   models, when to switch and for how long are chosen by measured outcomes on the recorded stalls. The
   OSS harness survey (`~/evidence/harness-survey-2026-10-28/`) is a source of candidates to measure, not prompts to copy.
+  Jev can fail or miss: in addition to Jev's trigger, a very cheap model inspects the trace at **random** steps
+  (rate and model chosen by measurement). This is the fallback when Jev is unavailable or silent, and its findings
+  on steps Jev did not flag measure Jev's miss rate.
 - **2026-10-28 — Harness fault: the core dropped DeepSeek's `reasoning_content` between turns.** DeepSeek requires
   it to be passed back on every turn when tools are used. Every measurement of "the executor names the fix, then
   keeps reading" (slices 18, 27–32) was taken with the executor's previous reasoning erased at every step, so those
