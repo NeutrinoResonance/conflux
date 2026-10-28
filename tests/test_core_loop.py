@@ -63,6 +63,19 @@ def test_accepted_after_tool_and_finish(tmp_path):
                       "acceptance", "audit", "task_end"]
 
 
+def test_reasoning_content_is_passed_back_on_later_turns(tmp_path):
+    # DeepSeek requires the assistant's reasoning_content on every later turn of a tool-call loop (MISSION c36f507).
+    first = resp(call("run_shell", {"command": "echo yes > ok.txt"}))
+    first[1]["choices"][0]["message"]["reasoning_content"] = "write ok.txt, then finish"
+    chat = Scripted(first, resp(call("run_shell", {"command": "true"}, cid="c2")),
+                    resp(call("finish", {"summary": "done"}, cid="c3")))
+    res, _ = run(TOUCH, chat, tmp_path)
+    assert res["status"] == "accepted"
+    turns = [m for m in chat.seen[2] if m["role"] == "assistant"]
+    assert turns[0]["reasoning_content"] == "write ok.txt, then finish"
+    assert "reasoning_content" not in turns[1]
+
+
 def test_failed_acceptance_feeds_evidence_back_then_accepts(tmp_path):
     chat = Scripted(resp(call("run_shell", {"command": "echo no > ok.txt"})),
                     resp(call("finish", {})),

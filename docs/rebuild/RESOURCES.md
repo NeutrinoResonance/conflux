@@ -56,8 +56,8 @@
 - The c3 disk holds a built qemu_v8 tree in `~/optee-work/optee`. `make check-only CHECK_TESTS=xtest XTEST_ARGS=1001`
   boots it and passes in ≈ 54 s. The snapshot has no `expect`; the a4 check installs it.
   Since C slice 32 its in-tree TF-A build (`optee/trusted-firmware-a/build/qemu/release`) and `netbsd-optee/qemu_fw.bios`
-  are pro's slice-26 no-flag NetBSD-as-BL33 build again (b2 check 2 fails), and `~/.conflux-jobs` holds only slice 32's
-  last job (older jobs archived in `~/evidence/self-diagnosis-demo-2026-10-28/`). TF-A does not track flag changes, and
+  are pro's slice-26 no-flag NetBSD-as-BL33 build again (b2 check 2 fails; unchanged by slice 35's read-only run),
+  and `~/.conflux-jobs` also holds slice 35's jobs (older jobs archived in `~/evidence/self-diagnosis-demo-2026-10-28/`). TF-A does not track flag changes, and
   `make realclean` failed there: to rebuild with different flags, `rm -rf optee/trusted-firmware-a/build/qemu` first.
   Goal (a)'s Linux firmware must be rebuilt before an a-check there.
 

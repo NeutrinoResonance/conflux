@@ -11,12 +11,17 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
-- **Harness fault reported by the founder (MISSION c36f507), not yet fixed: `run_task` drops `reasoning_content`.**
-  `conflux/core.py` `run_task()` rebuilds each assistant turn as `{role, content, tool_calls}`; DeepSeek requires the
-  reasoning to be passed back on every turn when tools are used. Every "names the fix, keeps reading" measurement
-  (slices 18, 27–32) ran with the executor's previous reasoning erased: those attributions to the model are
-  **confounded**. Measured so far with reasoning passed back: slice 22 (b1b, 0/5) and slice 34's post-hoc continuation
-  (b2, 0/6), both one step.
+- **C slice 35 (2026-10-28, harness fix + live re-measure, $0.001271 metered + $0.17 GCE): reasoning passback fixed;
+  pro's b2 stall survives it (failed `step_cap`, n=1); hypothesis falsified.** Harness fault (MISSION c36f507):
+  `run_task` now passes each assistant turn's `reasoning_content` back; regression test fails on the old loop. Live
+  pro b2 on c3 (slice 27's tasks, no injection), with reasoning delivered on every turn (request-side log): 70 commands,
+  0 builds, 0 writes. At step 24 pro read the BL33 kernel setting at its default and **dismissed it in reasoning**. At
+  steps 26–27 it decided to rebuild (slice 27 never did), with a flag list that omits that setting, then hunted the
+  toolchain until the cap. The b2 stall is a wrong belief, not lost context: **model fault, unconfounded**. With
+  slice 22 (b1b 0/5) and slice 34 (b2 0/6), passback has not moved pro off a stall in any measurement. D1 0 hits;
+  30/30 export-matched. c3 unchanged.
+  - Still confounded: b1 (c10/c11/slice 18, flash) and b3 (slice 31). Re-measure them live when a lab run is due anyway.
+  - Evidence: `~/evidence/pro-b2-passback-c3-2026-10-28/RESULTS.md`.
 - **C slice 34 (2026-10-28, work item D demo, $0.590990 metered + $0 GCE): a different-family decider does not
   reliably turn pro's b2 stall into the experiment; hypothesis falsified at n=5.** Legacy `DECIDER_PROMPT` verbatim
   (`conflux-baseline-20261026`), slice 27's trace to step 20 (no reasoning), only the model varied; rule ≥ 3/5 and
@@ -236,15 +241,12 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. **Fix the reasoning-passback harness fault** (founder, MISSION c36f507): `run_task` replays each assistant turn's
-     `reasoning_content`; regression test that fails on current code. Then re-measure the recorded stalls with cheap
-     replays first (b2 slice 27, b1 c10/c11/slice 18, b3 slice 31, using the existing demos with reasoning passed back)
-     before attributing any stall to the model.
-  2. **Model-switching demo on those stalls** (MISSION c36f507, 0290ed2): deterministic code flags a candidate stall,
+  1. **Model-switching demo on the recorded stalls** (MISSION c36f507, 0290ed2): deterministic code flags a candidate stall,
      Jev decides whether to intervene and whom to bring in, GLM/Kimi read the trace and correct **or take over the next
      steps with tools**, then hand back; minimal developer prose. Slice 34 says advice alone is not enough (the make
      line is missing) and that kimi-k3/glm-5.3 need a reasoning cap or a smaller context to answer at all; K3.1-pro
      is the only measured catcher (2/5, expensive). Add a very cheap random-step inspector as Jev's fallback and to
      measure Jev's miss rate. Candidates: `~/evidence/harness-survey-2026-10-28/`. Spec derivation follows the same
-     shape (slice 33 baseline; its 2 missing P samples when lab capacity allows).
-  3. Completion-gate run: `run12/task.txt` only, unattended from the clean snapshot on a fresh lab; then delete the c3 disk.
+     shape (slice 33 baseline; its 2 missing P samples when lab capacity allows). b2 target: slice 35's
+     reasoning-carrying trace, where pro dismisses the BL33 setting at step 24 (wrong belief, not lost context).
+  2. Completion-gate run: `run12/task.txt` only, unattended from the clean snapshot on a fresh lab; then delete the c3 disk.

@@ -52,6 +52,7 @@ USD comes from provider responses or documented prices — never estimated silen
 | 2026-10-28 | Surplus chat | `deepseek-v4-pro` 19 calls | 68564 | 73743 | 0.001184 | — | C slice 33 spec-derivation demo (3+4 no-probe planner calls, 12 planner calls with 20 runtime probes on fresh lab sd0); 19/19 export rows token-matched |
 | 2026-10-28 | Surplus chat | `kimi-k3.1-pro` 13 calls, `kimi-k3` 18, `glm-5.3` 17, `deepseek-v4-pro` 11 | 1176744 | 781373 | 0.589936 | — | C slice 34 work-item-D decider demo (legacy `DECIDER_PROMPT` on slice 27's b2 trace; 29 calls truncated at 8192 tokens, 30 at 24000); K3.1-pro $0.553023; 59/59 export-matched (1 `kimi-k3` reply had no usage: time-matched, tokens not counted) |
 | 2026-10-28 | Surplus chat | `deepseek-v4-pro` 12 calls | 540330 | 6289 | 0.001054 | — | C slice 34 post-hoc continuation (pro on slice 27 K=20 + K3.1-pro's 2 decisions, reasoning dropped vs passed back); 12/12 export-matched |
+| 2026-10-28 | Surplus chat | `deepseek-v4-pro` 30 calls | 1021138 | 10814 | 0.001271 | — | C slice 35 live b2 on lab c3 with reasoning passed back (no injection): failed step_cap, 0 builds; 30/30 export-matched |
 
 C slice 1 rows are reconciled with the export by `python -m conflux.core reconcile` (`~/evidence/core-runs/2026-10-27-c1*/reconciled.json`;
 export total for 2026-10-27: 83 rows, $0.001372).
@@ -64,7 +65,7 @@ charge-bound estimates) are only admission-time bounds. They are replaced by bil
 $0.0108 Jev and $0.0207 rejected-request estimates were billed $0.000006 and $0. Account credit after these runs
 is $9.369476 (`/v1/buyer/me`).
 
-**Metered total: $0.643475** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
+**Metered total: $0.644746** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
 
 ## GCE lab VMs (week 2026-W44 cap $60)
 
@@ -98,5 +99,6 @@ Rate: n2d-standard-8 ≈ $0.338/h running (GCE list price, us-central1) + 100 GB
 | 2026-10-28 | `conflux-dev-lab-c3` | 08:17:44–10:07:51 | 1.84 | 0.62 | C slice 31 state + harness-only pre-check (b1a/b1b/b2 pass, b3 fail) + pro b3 run (failed step_cap); stopped, disk kept (tree unchanged by the model) |
 | 2026-10-28 | `conflux-dev-lab-c3` | 10:36:12–10:49:39, 10:52:13–11:59:05 | 1.34 | 0.45 | C slice 32 diagnostic sub-run demo: try 2 stopped at setup (restore did not clean TF-A; b2 passed, no paid call), try 3 setup + 3 diagnoses + resets; 3 starts 10:23–10:27Z and 1 at 10:50Z failed on GCE stockouts ($0); stopped, disk kept (in-tree TF-A back to no-flag build) |
 | 2026-10-28 | `conflux-dev-lab-sd0` | 12:41:22–12:56:55 (created 12:39:04Z) | 0.30 | 0.10 | C slice 33 spec-derivation planner with 20 probes, fresh lab from the clean snapshot; deleted 12:56Z. sd1: 21 starts 12:56–13:54Z failed on GCE stockouts ($0 compute; one stray boot disk 12:57–13:15Z ≈ $0.004, deleted) |
+| 2026-10-28 | `conflux-dev-lab-c3` | 17:34:51–18:05:26 | 0.51 | 0.17 | C slice 35 harness-only pre-check (b1a/b1b pass, b2 fail) + pro b2 run with reasoning passback (failed step_cap, no writes); stopped, disk kept (tree unchanged by the model) |
 
-**GCE lab total: $4.94** (plus the c3 disk while it exists)
+**GCE lab total: $5.11** (plus the c3 disk while it exists)
