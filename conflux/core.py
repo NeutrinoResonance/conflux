@@ -581,10 +581,11 @@ def _scan(cmd: str) -> tuple[list[str], bool]:
 
 def audit(rows: list[dict]) -> list[dict]:
     """D1: a model step that exited 0 although its own output reports a failure, i.e. a failure that looked like
-    success. Exempt: the model capturing `$?` itself. For pure reads only stderr counts (stdout is file content)."""
+    success. Exempt: the model capturing `$?` itself, and `failed_cmds` > 0 (the result header named the failure).
+    For pure reads only stderr counts (stdout is file content)."""
     findings = []
     for r in rows:
-        if r.get("event") != "exec" or r.get("source") != "model" or r.get("exit") != 0:
+        if r.get("event") != "exec" or r.get("source") != "model" or r.get("exit") != 0 or r.get("failed_cmds"):
             continue
         cmd = r.get("command") or ""
         segs, status = _scan(cmd)

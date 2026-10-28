@@ -160,6 +160,46 @@
     "stdout": "enhidalgo/netbsd-src/sys/../common/lib/libc/misc\\ -I/home/darrenhidalgo/netbsd-src/sys/../common/include\\ -I/home/darrenhidalgo/netbsd-src/sys/arch\\ -I/home/darrenhidalgo/netbsd-src/sys\\ -nostdinc\\ -DCOMPAT_UTILS\\ -DAARCH64\\ -DARM_GENERIC_TODR\\ -DFPU_VFP\\ -D__HAVE_PCI_CONF_HOOK\\ -D__HAVE_PCI_MSI_MSIX\\ -DCOMPAT_44\\ -DARMV81_PAN\\ -D_KERNEL\\ -D_KERNEL_OPT\\ -std=gnu99\\ -I/home/darrenhidalgo/netbsd-src/sys/lib/libkern/../../../common/lib/libc/quad\\ -I/home/darrenhidalgo/netbsd-src/sys/lib/libkern/../../../common/lib/libc/string\\ -I/home/darrenhidalgo/netbsd-src/sys/lib/libkern/../../../common/lib/libc/hash/sha3\\ -I/home/darrenhidalgo/netbsd-src/sys/external/bsd\\ -I/home/darrenhidalgo/netbsd-src/sys/external/bsd/common/include\\ -I/home/darrenhidalgo/netbsd-src/sys/external/bsd/dwc2/dist\\ -I/home/darrenhidalgo/netbsd-src/sys/external/bsd/libfdt/dist\\ -I/home/darrenhidalgo/netbsd-src/sys/external/bsd/acpica/dist/include\\ -I/home/darrenhidalgo/netbsd-src/sys/external/bsd/libnv/dist\\ -I/home/darrenhidalgo/netbsd-src/sys/external/bsd/vchiq/dist\\ -I/home/darrenhidalgo/netbsd-src/sys/external/bsd/common/include\\ -DVCOS_VERIFY_BKPTS=1\\ -DUSE_VCHIQ_ARM\\ -D__VCCOREVER__=0x04000000\\ -DVCHIQ_ENABLE_DEBUG=1\\ -DVCHIQ_LOG_DEFAULT=5  KERNMISCCPPFLAGS=  LINTFLAGS=-bceghnxzFS  LIBKERN_ARCH=  COMMON_MACHINE_ARCH=  LIBKERN_MD_FLAGS=none   cleandir; fi\nif [ -d \"/home/darrenhidalgo/netbsd-obj/sys/arch/evbarm/compile/GENERIC64/lib/kern\" ]; then cd /home/darrenhidalgo/netbsd-obj/sys/arch/evbarm/compile/GENERIC64/lib/kern && /home/darrenhidalgo/netbsd-obj/tooldir.Linux-6.1.0-50-cloud-amd64-x86_64/bin/nbmake -f /home/darrenhidalgo/netbsd-src/sys/lib/libkern/Makefile  KERNDIR=/home/darrenhidalgo/netbsd-src/sys/lib/libkern  CC=gcc CFLAGS=\\ -march=armv8-a+nofp+nosimd\\ -fno-omit-frame-pointer\\ -mno-omit-leaf-frame-pointer\\ -ffreestanding\\ -fno-zero-initialized-in-bss\\ \\ -fno-delete-null-pointer-checks\\ \\ -g\\ -O2\\ \\ -fstack-usage\\ -Wstack-usage=3584\\ \\ -fno-strict-aliasing\\ -fno-common\\ \\ \\ \\ \\ -std=gnu99\\ \\ \\ -Werror\\ -Wall\\ -Wno-main\\ -Wno-format-zero-length\\ -Wpointer-arith\\ -Wmissing-prototypes\\ -Wstrict-prototypes\\ -Wold-style-definition\\ -Wswitch\\ -Wshadow\\ -Wcast-qual\\ -Wwrite-strings\\ -Wno-unreachable-code\\ -Wno-pointer-sign\\ -Wno-attributes\\ -Wno-type-limits\\ -Wno-sign-compare\\ -Walloca\\ \\ \\ -Wno-address-of-packed-member\\ \\  CPUFLAGS=  AS=as AFLAGS=\\ -D_LOCORE\\ -Wa,--fatal-warnings\\ \\   LORDER=lorder  TSORT=tsort\\ -q  LD=ld STRIP=strip  AR=ar NM=nm  RANLIB=ranlib SIZE=size  MACHINE=evbarm MACHINE_ARCH=unknown  KERNCPPFLAGS=-I../../.\\ -I/home/darrenhidalgo/netbsd-src/sys/external/bsd/libnv/dist\\ -I/home/darrenhidalgo/netbsd-src/sys/external/bsd/acpica/dist\\ -I/home/darrenhidalgo/netbsd-src/sys/../common/lib/libx86emu\\ -I/home/darrenhidalgo/netbsd-src/sys/../common/lib/libc/misc\\ -I/home/darrenhidalgo/netbsd-src/sys/../common/include\\ -I/home/darrenhidalgo/netbsd-src/sys/arch\\ -I/home/darrenhidalgo/netbsd-src/sys\\ -nostdinc\\ -DCOMPAT_UTILS\\ -DAARCH64\\ -DARM_GENERIC_TODR\\ -DFPU_VFP\\ -D__HAVE_PCI_CONF_HOOK\\ -D__HAVE_PCI_MSI_MSIX\\ -DCOMPAT_44\\ -DARMV81_PAN\\ -D_KERNEL\\ -D_KERNEL_OPT\\ -std=gnu99\\ -I/home/darrenhidalgo/netbsd-src/sys/lib/libkern/../../../common/lib/libc/quad\\ -I/home/darrenhidalgo/netbsd-src/sys/lib/libkern/../../../common/lib/libc/string\\ -I/home/darrenhidalgo/netbsd-src/sys/lib/libkern/../../../common/lib/libc/hash/sha3\\ -I/home/darrenhidalgo/netbsd-src/sys/external/bsd\\ -I/home/darrenhidalgo/netbsd-src/sys/external/bsd/common/include\\ -I/home/darrenhidalgo/netbsd-src/sys/external/bsd/dwc2/dist\\ -I/home/darrenhidalgo/netbsd-src/sys/external/bsd/libfdt/dist\\ -I/home/darrenhidalgo/netbsd-src/sys/external/bsd/acpica/dist/include\\ -I/home/darrenhidalgo/netbsd-src/sys/external/bsd/libnv/dist\\ -I/home/darrenhidalgo/netbsd-src/sys/external/bsd/vchiq/dist\\ -I/home/darrenhidalgo/netbsd-src/sys/external/bsd/common/include\\ -DVCOS_VERIFY_BKPTS=1\\ -DUSE_VCHIQ_ARM\\ -D__VCCOREVER__=0x04000000\\ -DVCHIQ_ENABLE_DEBUG=1\\ -DVCHIQ_LOG_DEFAULT=5  KERNMISCCPPFLAGS=  LINTFLAGS=-bceghnxzFS  LIBKERN_ARCH=  COMMON_MACHINE_ARCH=  LIBKERN_MD_FLAGS=none   clean; fi\n",
     "stderr": ""
    }
+  },
+  {
+   "trace": "~/evidence/pro-b1b-headtail-2026-10-28/run/b1b-kernel-build/trace.jsonl",
+   "sha256": "aa59a4ba8a966204c620b04ed75f639496a780388326e0a5a2617c1eac67393f",
+   "step": 13,
+   "expect": "none",
+   "why": "`build.sh ... > log; tail -300 log` exits 0 via the tail, but failed_cmds=1 was in the result header the model saw (it ran sudo next step): not masked",
+   "row": {
+    "event": "exec",
+    "source": "model",
+    "step": 13,
+    "command": "cd /home/darrenhidalgo/netbsd-src && ./build.sh -m evbarm -a aarch64 -U -O /home/darrenhidalgo/netbsd-obj -T /home/darrenhidalgo/netbsd-obj/tooldir.Linux-6.1.0-51-cloud-amd64-x86_64 kernel=GENERIC64 2>&1 > /tmp/build.log; tail -300 /tmp/build.log",
+    "exit": 0,
+    "stdout": "\tumodti3.o\n\txlat_mbr_fstype.o\n*** Error code 1\n\nStop.\nnbmake[1]: stopped in /home/darrenhidalgo/netbsd-obj/sys/arch/evbarm/compile/GENERIC64/lib/kern\n*** Error code 1\n\nStop.\nnbmake: stopped in /home/darrenhidalgo/netbsd-obj/sys/arch/evbarm/compile/GENERIC64",
+    "stderr": "",
+    "pipestatus": [
+     0
+    ],
+    "failed_cmds": 1
+   }
+  },
+  {
+   "trace": "~/evidence/pro-b1b-headtail-2026-10-28/run/b1b-kernel-build/trace.jsonl",
+   "sha256": "aa59a4ba8a966204c620b04ed75f639496a780388326e0a5a2617c1eac67393f",
+   "step": 28,
+   "expect": "none",
+   "why": "`;` chain of two `sed -i` (Permission denied) ending in grep exits 0, but failed_cmds=2 was in the result header: not masked",
+   "row": {
+    "event": "exec",
+    "source": "model",
+    "step": 28,
+    "command": "# Fix: remove unused faa variable, and make optee_smc_call __unused (or remove the unused line)\n# Use sed to fix:\n# 1. Remove the line with faa declaration\n# 2. Mark optee_smc_call as __unused\ncd /home/darrenhidalgo/netbsd-src\nsed -i '/struct fdt_attach_args \\* const faa = opaque;/d' sys/dev/fdt/optee.c\n# Make optee_smc_call unused or remove the function - let's just remove it for now since nothing calls it\n# Actually let's comment it out or mark it unused\nsed -i 's/^optee_smc_call(/__unused optee_smc_call(/' sys/dev/fdt/optee.c\ngrep -n 'faa\\|optee_smc_call' sys/dev/fdt/optee.c",
+    "exit": 0,
+    "stdout": "146:\tstruct fdt_attach_args * const faa = opaque;\n148:\treturn of_compatible_match(faa->faa_phandle, compat_data);\n152: * optee_smc_call --\n159:optee_smc_call(uint32_t fid, register_t a1, register_t a2,\n179:\tstruct fdt_attach_args * const faa = opaque;",
+    "stderr": "sed: couldn't open temporary file sys/dev/fdt/sedMYFOHB: Permission denied\nsed: couldn't open temporary file sys/dev/fdt/sedqFK2Tq: Permission denied",
+    "pipestatus": [
+     0
+    ],
+    "failed_cmds": 2
+   }
   }
  ]
 }
