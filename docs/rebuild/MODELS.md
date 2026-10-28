@@ -137,6 +137,14 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
 - Billed $0.001201 / 33 calls (≈ $0.000036/call); 7/40 replies again had no `buyer_cost_micro`. Median 12 s, max 27 s.
   Evidence: `~/evidence/pro-b1b-rerun-2026-10-28/RESULTS.md`.
 
+## `deepseek-v4-pro` under correction vs carried reasoning (C slice 22, one next reply on slice 21's step-23 prefix)
+- **Adopts a grounded correction, but a carried reasoning history does not change its course.** Correction message
+  (violated requirement + `Permission denied` lines + "build via `sudo -n -u darrenhidalgo`"): 5/5 replies commit to
+  it in reasoning; 2/5 run the sudo build at once; 3/5 first run `ls -d tooldir.*/`. Its own reasoning replayed as
+  `reasoning_content` (accepted by Surplus, +3,083 prompt tokens): 0/5 ownership actions. 3/5 keep the
+  `NETBSDSRCDIR` detour, as in control (0/5). Billed $0.000043/call, median ≈ 13 s.
+  Evidence: `~/evidence/reasoning-carry-demo-2026-10-28/RESULTS.md`.
+
 ## Cheap baselines to beat
 - Keyword failure rule (`error|failed|fatal|…`): "did this command fail?" 23/30 (catches no silent failures,
   never false-alarms on writes); acceptance 14/16 by always saying pass. A model judge must beat this.
