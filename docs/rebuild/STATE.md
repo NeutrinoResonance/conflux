@@ -7,12 +7,22 @@ MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred
   to E); B done. Goal (a): a1–a4 each model-accepted, but not yet in one run. Goal (b): b1a's check passes on pro's
-  slice-18 edits; **b1b model-accepted on c3 (slice 26)** after slices 20–25 removed the harness faults (no-cost
-  settlement, 4 KB tail cut) and pro cleared the ownership stall; **b2 accepted on c3 (slice 30)** with a supervisor's
-  recipe-carrying correction injected once at step 20 (slices 26–27 failed at the step cap without it). That correction
-  was developer-authored, so b2 is not yet done unattended. b3 not attempted.
+  slice-18 edits; b1b model-accepted on c3 (slice 26). **b2 is not done:** slice 30 passed it only with a
+  developer-authored correction, which does not count (founder decision 2026-10-28, `MISSION.md`). **b3 failed** at
+  the step cap on its first run (slice 31). Top priority now: Conflux produces its own corrections at runtime.
+- **C slice 31 (2026-10-28, run, $0.017228 metered + $0.62 GCE): pro's first b3 run fails at the step cap (40 steps,
+  100 commands, 0 writes, 0 builds); hypothesis falsified.** No injection, but its starting state includes slice
+  30's developer-helped b2 firmware. Pre-check: b1a, b1b and b2 pass, b3 fails. At step 19 pro correctly named the
+  problem: the driver matches only `linaro,optee-tz`, which is absent without OP-TEE. Steps 20–40 read TF-A, OP-TEE
+  DT and NetBSD fdt code without acting. This is the 4th reading stall (flash b1, pro b1, pro b2, pro b3). Model fault;
+  D1 0 hits; 40/40 export-matched.
+  - Before any further b3 run: check 2 fails on pro's driver because it `#define`s the OP-TEE UID words for a
+    comparison, which the task text does not forbid. Fix the task text or the check, then re-validate harness-only.
+    Pro's "no attach under OP-TEE" premise came from a 4 KB-clipped log, so it is unverified (missing evidence).
+  - Evidence: `~/evidence/pro-b3-c3-2026-10-28/RESULTS.md`.
 - **C slice 30 (2026-10-28, hook + run, $0.007037 metered + $0.21 GCE): with slice 29's correction M injected once at
-  step 20, pro's live b2 is accepted at the step cap (30/30, 0 steps to spare).** Harness: `Task.inject_step`/`inject`
+  step 20, pro's live b2 is accepted at the step cap (30/30, 0 steps to spare).** The correction was developer-authored,
+  so b2 is not done (founder decision 2026-10-28). Harness: `Task.inject_step`/`inject`
   appends one `user` message before that step's model call and traces it (`inject` row); 2 regression tests fail on old
   code. The evidence sentence was restated as the slice-27 harness diagnosis, the rest verbatim. Pre-check b1a/b1b pass, b2 fail.
   - Steps 1–19: 50 reads chasing the original flags (= slices 27–29). After the correction: 5 steps of input checks,
@@ -186,11 +196,16 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. b3 (driver proof incl. the no-SPD control boot, `optee_goal_b.json`) on c3 as slice 30 left it, pro: harness-only
-     pre-check (b2 pass, b3 fail), then one live run.
-  2. Demo where a recipe-carrying b2 correction comes from at runtime (e.g. a stronger model or Jev-gated critic given
-     the stalled trace), on slice 27's recorded trace, before any wiring. Fixed-step injection is an instrument, not
-     the mechanism.
-  3. For the completion gate, run a1→a4 then b1a→b3 unattended from the clean snapshot on a fresh lab (ownership
-     friction returns there: snapshot trees are darrenhidalgo's), then delete the c3 disk. Executor per sub-goal is an
-     open, measured choice (flash on a1–a4, pro on b1a/b1b/b2 so far).
+  1. **Conflux generates the missing correction at runtime from its own trace and its own executed probes** (founder
+     decision 2026-10-28, top priority; "runtime probe" as defined in `MISSION.md`). Example triggers: a measured stall (e.g. N reads with no write or build), then
+     a stronger model, critic or diagnostic sub-run. First demo it on the recorded stalls:
+     - b2: slice 27 (`~/evidence/pro-b2-c3-2026-10-28/`);
+     - b1 over-reading: c10, c11 and slice 18;
+     - b3: slice 31.
+
+     Grade it against the developer-found fixes (e.g. `ARM_LINUX_KERNEL_AS_BL33=1`, the `arm,psci*` match in
+     `core-runs/2026-10-27-c9/reference/optee.c`). Those fixes are grading references only, never inputs. Then live.
+  2. b3 again only with a Conflux-generated correction, after fixing the check-2 vs task-text mismatch (slice 31).
+     b2 must also be redone without developer help.
+  3. Completion-gate run: a1→a4 then b1a→b3 unattended from the clean snapshot on a fresh lab; then delete the c3 disk.
+     Executor per sub-goal is an open, measured choice (flash on a1–a4, pro on b1a/b1b/b2 so far).
