@@ -31,6 +31,19 @@ Only then set `MISSION-STATUS: COMPLETE` and open the promotion PR to `main`.
 
 ## Founder decisions (binding; newest first)
 
+- **2026-10-28 — Correction is model switching, with as few hardcoded prompts as possible.** Prefer changing *who*
+  acts over writing *what to say*. The intended shape: deterministic code detects a candidate stall from the trace;
+  Jev (`/v1/decisions`) decides whether to intervene and whom to bring in; GLM, Kimi, or both, read the executor's
+  trace and produce the correction, or take over the next steps, before handing back. Developer-written correction
+  or nudge prose (fixed reminders, "apply or test it" messages, "search the machine first" planner instructions)
+  is the last resort: minimize it, keep any that survives generic and measured, and never task-specific. Which
+  models, when to switch and for how long are chosen by measured outcomes on the recorded stalls. The
+  OSS harness survey (`~/evidence/harness-survey-2026-10-28/`) is a source of candidates to measure, not prompts to copy.
+- **2026-10-28 — Harness fault: the core dropped DeepSeek's `reasoning_content` between turns.** DeepSeek requires
+  it to be passed back on every turn when tools are used. Every measurement of "the executor names the fix, then
+  keeps reading" (slices 18, 27–32) was taken with the executor's previous reasoning erased at every step, so those
+  conclusions are confounded. Fix it first (regression test), then re-measure the recorded stalls before attributing
+  them to the model.
 - **2026-10-28 — Corrections and the spec come from Conflux's other models, not from the executor grading
   itself.** The executor's measured failure (it names the fix, then keeps reading; it does not look for what it
   needs) is the failure the multi-model layer exists to catch: a different model (critic, planner, decider/Jev,
