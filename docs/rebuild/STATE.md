@@ -6,7 +6,20 @@ evidence `RESULTS.md` and in the PR that landed it (`git log`); measured model b
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred
-  to E); B done. Goal (a) a1–a4 each model-accepted (not yet as one run); goal (b) b1a's check passes on pro's slice-18 edits; b1b not accepted (slice 20 cut off; slice 21 pro never used sudo). Slices 22–23: a grounded correction at slice 21's stall makes pro run the sudo build within 2 steps (5/5). Slice 24: the 4 KB tail hid one of its denials (fixed). Slice 25: with head+tail output pro fixes ownership the step after the denial, fixes both errors, but its rewrite breaks an include (step cap).
+  to E); B done. Goal (a): a1–a4 each model-accepted, but not yet in one run. Goal (b): b1a's check passes on pro's
+  slice-18 edits; **b1b model-accepted on c3 (slice 26)** after slices 20–25 removed the harness faults (no-cost
+  settlement, 4 KB tail cut) and pro cleared the ownership stall; b2 not accepted (slice 26: NetBSD silent as BL33).
+- **C slice 26 (2026-10-28, run + D1 fix, $0.001540 metered + $0.42 GCE): pro's b1b continuation is accepted; b2, its
+  first live run, fails at the step cap.** Pre-check b1a pass, b1b fail, b2 fail.
+  - b1b `accepted checks_passed` at step 31: it fixed the include via `sudo sed`, and a 600 s build timed out (its
+    own choice); the 900 s rerun built in 609 s.
+  - b2 (same session) `failed step_cap` (30): 19 steps before the first TF-A build (`SPD=opteed`, BL32 = OP-TEE
+    v2 images, BL33 = `netbsd.img`). OP-TEE reaches `switching to normal world` and NetBSD prints nothing.
+  - Likely, untested: no `ARM_LINUX_KERNEL_AS_BL33=1`, which legacy ctl-run-3 and slice 9's control build set. Model fault.
+  - 13/31 b1b replies had no `buyer_cost_micro` and are absent from the export (unbilled so far).
+  - **D1 false positive fixed:** build.sh's banner `MAKECONF file: … (File not found)` matched on a successful build.
+    `core.BENIGN_TEXT` exempts it; the fixture case fails on old code; over 34 traces only that hit changes (11 → 10).
+  - Evidence: `~/evidence/pro-b1b-b2-c3-2026-10-28/RESULTS.md`.
 - **C slice 25 (2026-10-28, run + D1 fix, $0.001667 metered + $0.18 GCE): with head+tail output pro acts on ownership
   one step after the denial; b1b still `failed step_cap` (model fault in its own rewrite).** Pre-check b1a pass, b1b fail.
   Step 13's build.sh showed 11 `Permission denied` in the 1 KB head (0 in the last 3 KB); step 14 pro ran `sudo chown`,
@@ -137,9 +150,9 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. Continue b1b with pro on c3 as left (pro's rewrite, 1 include error, dev-owned obj tree; ≈ $0.002 + $0.18 GCE).
-     Primary outcome: b1b accepted by its executed checks. If accepted, b2 (TF-A + OP-TEE firmware booting NetBSD) on c3
-     is the next sub-goal to cut-test; if not, classify the new stall before any mechanism.
+  1. Continue b2 with pro on c3 as left (kernel built with the driver; pro's firmware with NetBSD silent; ≈ $0.001 +
+     $0.2 GCE). Primary outcome: b2 accepted by its executed checks. If it stalls on the BL33 hand-off again, that stall
+     is the candidate for a grounded-correction demo on the recorded trace (slices 22–23 showed pro acts on one).
   2. For the completion gate, run a1→a4 then b1a→b3 unattended from the clean snapshot on a fresh lab (ownership
      friction returns there: snapshot trees are darrenhidalgo's), then delete the c3 disk. Executor per sub-goal is an
-     open, measured choice (flash on a1–a4, pro on b1a/b1b so far).
+     open, measured choice (flash on a1–a4, pro on b1a/b1b/b2 so far).

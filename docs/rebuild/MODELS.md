@@ -165,6 +165,14 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
 - **Weak: a whole-file rewrite introduces a new error.** The step-34 rewrite added `#include <arm/smccc.h>` (the header
   is `arm/arm/smccc.h`); 3 steps were left. Evidence: `~/evidence/pro-b1b-headtail-2026-10-28/RESULTS.md`.
 
+## `deepseek-v4-pro` finishing b1b and a first b2 (C slice 26, lab c3, 31 + 30 steps)
+- **Strong: closes a one-line build fix end to end.** It found the wrong include from the build error, applied it via
+  `sudo sed` after a denied `sed -i`, rebuilt and ran the acceptance checks itself before `finish`. After its own
+  600 s timeout cut a full kernel build, it reran with 900 s (609 s needed).
+- **Weak: long reading before the first firmware build, and a missed hand-off flag.** On b2 it spent 19 of 30 steps on
+  48 reads, then built TF-A with OP-TEE as BL32 and `netbsd.img` as BL33, but without `ARM_LINUX_KERNEL_AS_BL33=1`
+  (likely cause of the silent NetBSD, untested). Evidence: `~/evidence/pro-b1b-b2-c3-2026-10-28/RESULTS.md`.
+
 ## Cheap baselines to beat
 - Keyword failure rule (`error|failed|fatal|…`): "did this command fail?" 23/30 (catches no silent failures,
   never false-alarms on writes); acceptance 14/16 by always saying pass. A model judge must beat this.
