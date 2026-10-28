@@ -40,6 +40,12 @@ Only then set `MISSION-STATUS: COMPLETE` and open the promotion PR to `main`.
   triggered by a measured stall), demonstrated first on the recorded stalls (b2 slice 27, b1 over-reading in
   c10/c11/slice 18) per the demo rule, then live. The developer's role is to build that capability, never to hand
   the executor the answer. Developer-found recipes are grading references only.
+  A *runtime probe* is a command that (1) a Conflux component (executor, critic, diagnostic model or deterministic
+  code) chose during the run, from only the task text, the run's trace and the environment, with no developer-written
+  input specific to this task or failure (deterministic code may decide *when* to diagnose, never name a task-specific
+  command, file or flag); (2) ran on the task's lab VM, in the task tree or a scratch copy; (3) is in the run's trace
+  and charged to its budget under a probe cap; (4) the correction is traceably built from its output. Developer runs
+  outside the loop (e.g. slice 27's out-of-tree TF-A builds) are not probes, only grading references.
 - **2026-10-27 — Demo first for any conjectured change to how Conflux uses agents.** This covers new
   mechanisms (detectors, classifiers, supervision or review layers), model or route choices, prompts,
   policies, panel/critic/decider wiring and loop changes, whether a developer or Conflux itself proposes
