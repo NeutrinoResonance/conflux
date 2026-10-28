@@ -5,11 +5,22 @@ evidence `RESULTS.md` and in the PR that landed it (`git log`); measured model b
 
 MISSION-STATUS: ACTIVE
 
-- **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred
-  to E); B done. Goal (a): a1–a4 each model-accepted, but not yet in one run. Goal (b): b1a's check passes on pro's
-  slice-18 edits; b1b model-accepted on c3 (slice 26). **b2 is not done:** slice 30 passed it only with a
-  developer-authored correction, which does not count (founder decision 2026-10-28, `MISSION.md`). **b3 failed** at
-  the step cap on its first run (slice 31). Top priority now: Conflux produces its own corrections at runtime.
+- **Goal:** work item C (minimal replacement core) aimed at the completion gate. The completion run's only task input is
+  `run12/task.txt` verbatim. The sub-goal fixtures (`optee_goal_a/b.json`: decomposition, locations, commands, flags,
+  proof criteria) were developer-written. They are grading references only (founder decision 2026-10-28, MISSION
+  773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
+  help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
+  and produces its own corrections.
+- **C slice 32 (2026-10-28, demo, $0.002378 metered + $0.45 GCE): a fresh pro diagnostic sub-run with runtime probes
+  does not produce the b2 correction: 0/3 grounded passes, hypothesis falsified.** This is a
+  reachable-with-developer-written-spec instrument: the input is the fixture's b2 text plus slice 27's trace to step 20.
+  c3 was reset to the slice-27 state (no-flag TF-A rebuilt, b2 check 2 fails, old job dirs archived and removed).
+  Each of the 3 sequential, isolated diagnoses had ≤ 10 probes. All 30 probes were reads (0 builds, 0 boots). None
+  called `correct`; 19 more probes were denied after the cap. All 3 named the right flag hypothesis in their
+  reasoning and never tested it: the executor's "names it, reads on" stall again. Do not build it.
+  - Demo harness fault caught before any paid call: TF-A `realclean` failed silently and relinked slice 30's flagged
+    objects (b2 passed). Fixed by `rm -rf build/qemu`.
+  - Evidence: `~/evidence/self-diagnosis-demo-2026-10-28/RESULTS.md`.
 - **C slice 31 (2026-10-28, run, $0.017228 metered + $0.62 GCE): pro's first b3 run fails at the step cap (40 steps,
   100 commands, 0 writes, 0 builds); hypothesis falsified.** No injection, but its starting state includes slice
   30's developer-helped b2 firmware. Pre-check: b1a, b1b and b2 pass, b3 fails. At step 19 pro correctly named the
@@ -196,16 +207,12 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. **Conflux generates the missing correction at runtime from its own trace and its own executed probes** (founder
-     decision 2026-10-28, top priority; "runtime probe" as defined in `MISSION.md`). Example triggers: a measured stall (e.g. N reads with no write or build), then
-     a stronger model, critic or diagnostic sub-run. First demo it on the recorded stalls:
-     - b2: slice 27 (`~/evidence/pro-b2-c3-2026-10-28/`);
-     - b1 over-reading: c10, c11 and slice 18;
-     - b3: slice 31.
-
-     Grade it against the developer-found fixes (e.g. `ARM_LINUX_KERNEL_AS_BL33=1`, the `arm,psci*` match in
-     `core-runs/2026-10-27-c9/reference/optee.c`). Those fixes are grading references only, never inputs. Then live.
-  2. b3 again only with a Conflux-generated correction, after fixing the check-2 vs task-text mismatch (slice 31).
-     b2 must also be redone without developer help.
-  3. Completion-gate run: a1→a4 then b1a→b3 unattended from the clean snapshot on a fresh lab; then delete the c3 disk.
-     Executor per sub-goal is an open, measured choice (flash on a1–a4, pro on b1a/b1b/b2 so far).
+  1. **Spec-derivation demo on the recorded runs** (founder decision 2026-10-28, MISSION 773b964): measure how much of
+     the developer-written spec (`optee_goal_a/b.json` sub-goals, locations, build commands/flags, design choices,
+     proof criteria) Conflux derives itself from `run12/task.txt` (219 bytes) plus runtime probes on a lab. Grade
+     against the fixtures and against where old runs 4–12 and slices 10–31 got lost. Build only what the numbers support.
+  2. Self-correction (founder decision 2026-10-28) stays open. Slices 28–32 show pro (as executor or as a
+     diagnostician) names the fix and does not test it. Next factor to change: a different diagnostician model, or a
+     structure that forces each stated hypothesis into an executed experiment. Demo it on the recorded stalls (b2 slice
+     27, b1 c10/c11/slice 18, b3 slice 31), with developer fixes as grading references only.
+  3. Completion-gate run: `run12/task.txt` only, unattended from the clean snapshot on a fresh lab; then delete the c3 disk.

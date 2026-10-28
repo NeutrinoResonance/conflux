@@ -48,6 +48,7 @@ USD comes from provider responses or documented prices — never estimated silen
 | 2026-10-28 | Surplus chat | `deepseek-v4-pro` 26 calls | 947221 | 12751 | 0.000971 | — | C slice 29 b2 recipe-correction demo (5 M step-1 + 15 C2 and 6 M step-2 continuations on lab c3 outputs); 26/26 export-matched |
 | 2026-10-28 | Surplus chat | `deepseek-v4-pro` 30 calls | 709620 | 16526 | 0.007037 | — | C slice 30 live b2 on lab c3 with recipe correction injected at step 20: accepted at the step cap; 30/30 export-matched |
 | 2026-10-28 | Surplus chat | `deepseek-v4-pro` 40 calls | 1291303 | 123928 | 0.017228 | — | C slice 31 first live b3 on lab c3 (no injection): failed step_cap, 0 writes; 40/40 export-matched |
+| 2026-10-28 | Surplus chat | `deepseek-v4-pro` 35 calls | 870706 | 91275 | 0.002378 | — | C slice 32 diagnostic sub-run demo on lab c3 (3 pro diagnoses × ≤ 10 runtime probes on slice 27's b2 stall: 0 corrections); 34/35 export-matched (1 transport-error call billed by time match), diag0.1 without `buyer_cost_micro` absent from the export (unbilled so far) |
 
 C slice 1 rows are reconciled with the export by `python -m conflux.core reconcile` (`~/evidence/core-runs/2026-10-27-c1*/reconciled.json`;
 export total for 2026-10-27: 83 rows, $0.001372).
@@ -60,7 +61,7 @@ charge-bound estimates) are only admission-time bounds. They are replaced by bil
 $0.0108 Jev and $0.0207 rejected-request estimates were billed $0.000006 and $0. Account credit after these runs
 is $9.369476 (`/v1/buyer/me`).
 
-**Metered total: $0.048923** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
+**Metered total: $0.051301** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
 
 ## GCE lab VMs (week 2026-W44 cap $60)
 
@@ -92,5 +93,6 @@ Rate: n2d-standard-8 ≈ $0.338/h running (GCE list price, us-central1) + 100 GB
 | 2026-10-28 | `conflux-dev-lab-c3` | 06:49:28–06:54:50 | 0.09 | 0.03 | C slice 29 state check + harness-only execution of 17 recorded read commands (slice 28 C draws, slice 29 M0/M4); stopped, disk kept (tree unchanged) |
 | 2026-10-28 | `conflux-dev-lab-c3` | 07:20:55–07:59:01 | 0.64 | 0.21 | C slice 30 state + harness-only pre-check + pro b2 with injected correction (accepted); stopped, disk kept (flagged b2 firmware, TF-A build dir rebuilt for NetBSD) |
 | 2026-10-28 | `conflux-dev-lab-c3` | 08:17:44–10:07:51 | 1.84 | 0.62 | C slice 31 state + harness-only pre-check (b1a/b1b/b2 pass, b3 fail) + pro b3 run (failed step_cap); stopped, disk kept (tree unchanged by the model) |
+| 2026-10-28 | `conflux-dev-lab-c3` | 10:36:12–10:49:39, 10:52:13–11:59:05 | 1.34 | 0.45 | C slice 32 diagnostic sub-run demo: try 2 stopped at setup (restore did not clean TF-A; b2 passed, no paid call), try 3 setup + 3 diagnoses + resets; 3 starts 10:23–10:27Z and 1 at 10:50Z failed on GCE stockouts ($0); stopped, disk kept (in-tree TF-A back to no-flag build) |
 
-**GCE lab total: $4.39** (plus the c3 disk while it exists)
+**GCE lab total: $4.84** (plus the c3 disk while it exists)

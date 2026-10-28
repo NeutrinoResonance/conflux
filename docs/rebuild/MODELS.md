@@ -204,6 +204,13 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   and NetBSD fdt reads. It also spent 10 commands on a guessed path (`/home/darrenhidalgo/optee`) that the task text
   never named. Evidence: `~/evidence/pro-b3-c3-2026-10-28/RESULTS.md`.
 
+## `deepseek-v4-pro` as diagnostician (C slice 32, lab c3, 3 sub-runs × ≤ 10 probes)
+- **Weak: a fresh diagnostic role does not make it experiment.** Given slice 27's b2 trace, the task and a prompt to
+  prefer a minimal experiment, it ran 30/30 read probes (0 builds, 0 boots). All 3 named the right hypothesis in
+  their reasoning (`ARM_LINUX_KERNEL_AS_BL33 := 1`?) and none tested it or called `correct`. 19 probes were requested
+  past the cap, and once it returned `run_shell` when only `correct` was offered. Evidence:
+  `~/evidence/self-diagnosis-demo-2026-10-28/RESULTS.md`.
+
 ## Cheap baselines to beat
 - Keyword failure rule (`error|failed|fatal|…`): "did this command fail?" 23/30 (catches no silent failures,
   never false-alarms on writes); acceptance 14/16 by always saying pass. A model judge must beat this.
