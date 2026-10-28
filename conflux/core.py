@@ -73,6 +73,9 @@ CEILINGS = {
     "deepseek-v4-pro": (2e-6, 7.6e-6),      # top list $1.73/M in, $3.796/M out (2026-10-27 /v1/prices, C slice 18)
 }
 CAMPAIGN_BUDGET = 50.00
+MIN_DISCOUNT = 90          # X-Min-Discount on every Surplus request (MISSION 5ee7a8b); never lowered
+FLOOR_WAIT_S = 60          # wait before retrying `minimum_discount_not_met`
+FLOOR_RETRIES = 5
 RUN_CAP = 0.20
 EXEC_TIMEOUT = 60
 CHAT_TIMEOUT = 900         # flash replies took up to 713 s (headroom demo); the lab deadline still bounds each call
@@ -751,25 +754,49 @@ def load_key(name: str) -> str:
     return (SECRETS / name).read_text().strip()
 
 
-def surplus_chat(key: str, model: str = MODEL, http: httpx.Client | None = None) -> Chat:
-    http = http or httpx.Client(timeout=CHAT_TIMEOUT)
+def _below_floor(status: int, body: object) -> bool:
+    err = body.get("error") if isinstance(body, dict) else None
+    return status == 404 and isinstance(err, dict) and err.get("code") == "minimum_discount_not_met"
 
-    def chat(messages: list, tools: list, timeout: float | None = None) -> tuple[int, object, float]:
-        t0 = time.monotonic()
+
+def surplus_post(http: httpx.Client, key: str, payload: dict, timeout: float | None = None,
+                 timeout_cap: float | None = None) -> tuple[int, object, float]:
+    """One Surplus chat completion bought only at >= MIN_DISCOUNT % off (MISSION 5ee7a8b). `404
+    minimum_discount_not_met` means no seller meets the floor now: wait FLOOR_WAIT_S and retry, at most
+    FLOOR_RETRIES times within `timeout`, then return the 404 (never a lower floor)."""
+    t0 = time.monotonic()
+    timeout_cap = CHAT_TIMEOUT if timeout_cap is None else timeout_cap
+    for attempt in range(FLOOR_RETRIES + 1):
+        left = None if timeout is None else timeout - (time.monotonic() - t0)
+        if left is not None and left <= 0:
+            return 0, {"error": "TimeoutBeforeSend"}, time.monotonic() - t0
         try:
-            resp = http.post(f"{SURPLUS}/chat/completions", timeout=CHAT_TIMEOUT if timeout is None
-                             else max(0.1, min(CHAT_TIMEOUT, timeout)),
+            resp = http.post(f"{SURPLUS}/chat/completions",
+                             timeout=timeout_cap if left is None else max(0.1, min(timeout_cap, left)),
                              # Surplus's compressed bodies break httpx decoding.
-                             headers={"Authorization": f"Bearer {key}", "Accept-Encoding": "identity"},
-                             json={"model": model, "messages": messages, "tools": tools,
-                                   **({"max_tokens": n} if (n := max_output(model, messages, tools)) else {})})
+                             headers={"Authorization": f"Bearer {key}", "Accept-Encoding": "identity",
+                                      "X-Min-Discount": str(MIN_DISCOUNT)},
+                             json=payload)
         except httpx.HTTPError as e:
             return 0, {"error": type(e).__name__}, time.monotonic() - t0
         try:
             body = resp.json()
         except ValueError:
             body = {"error": resp.text[:500]}
-        return resp.status_code, body, time.monotonic() - t0
+        if not _below_floor(resp.status_code, body) or attempt == FLOOR_RETRIES or (
+                left is not None and left <= FLOOR_WAIT_S):
+            return resp.status_code, body, time.monotonic() - t0
+        time.sleep(FLOOR_WAIT_S)
+    raise AssertionError("unreachable")
+
+
+def surplus_chat(key: str, model: str = MODEL, http: httpx.Client | None = None) -> Chat:
+    http = http or httpx.Client(timeout=CHAT_TIMEOUT)
+
+    def chat(messages: list, tools: list, timeout: float | None = None) -> tuple[int, object, float]:
+        n = max_output(model, messages, tools)
+        return surplus_post(http, key, {"model": model, "messages": messages, "tools": tools,
+                                        **({"max_tokens": n} if n else {})}, timeout)
 
     return chat
 

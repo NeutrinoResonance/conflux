@@ -1072,6 +1072,32 @@ def test_truncated_reply_is_named_to_the_model_and_is_not_a_finish(tmp_path):
     assert [e["finish_reason"] for e in trace.events if e["event"] == "model_call"][0] == "length"
 
 
+def test_every_surplus_request_sets_the_discount_floor_and_waits_out_a_refusal(monkeypatch):
+    # MISSION 5ee7a8b: without a floor kimi-k3.1-pro was billed at ~60% off while 96-99% offers existed.
+    # 404 minimum_discount_not_met = no seller at the floor now: wait and retry, never a lower floor.
+    seen, script = [], [404, 404, 200]
+
+    def handler(request):
+        seen.append(dict(request.headers))
+        st = script.pop(0)
+        if st == 404:
+            return httpx.Response(404, json={"error": {"code": "minimum_discount_not_met", "message": "no seller"}})
+        return httpx.Response(200, json={"id": "g", "choices": [{"message": {"role": "assistant", "content": ""}}],
+                                         "usage": {"prompt_tokens": 1, "completion_tokens": 1}})
+    slept = []
+    monkeypatch.setattr(core.time, "sleep", lambda s: slept.append(s))
+    chat = core.surplus_chat("k", "deepseek-v4-pro", httpx.Client(transport=httpx.MockTransport(handler)))
+    status, body, _ = chat([{"role": "user", "content": "hi"}], core.TOOLS)
+    assert status == 200 and len(seen) == 3 and slept == [core.FLOOR_WAIT_S] * 2
+    assert all(h["x-min-discount"] == "90" for h in seen)
+    script[:] = [404] * (core.FLOOR_RETRIES + 1)
+    status, body, _ = chat([{"role": "user", "content": "hi"}], core.TOOLS)
+    assert status == 404 and body["error"]["code"] == "minimum_discount_not_met" and not script
+    script[:] = [404, 200]  # too little time left to wait: the refusal is returned, not slept through
+    status, _, _ = chat([{"role": "user", "content": "hi"}], core.TOOLS, timeout=core.FLOOR_WAIT_S / 2)
+    assert status == 404 and script == [200]
+
+
 def test_every_call_requests_the_models_own_maximum_output(tmp_path, monkeypatch):
     # Fault (MISSION 90b27cd): max_tokens 8192 cut off 26/29 slice-34 calls; requests now carry the provider's
     # max_completion_tokens, less only what the context window cannot hold; unknown models omit max_tokens.
