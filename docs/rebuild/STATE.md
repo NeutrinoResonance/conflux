@@ -11,6 +11,18 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **C slice 33 (2026-10-28, demo, $0.001184 metered + $0.10 GCE): a pro planner given only `run12/task.txt` derives
+  none of the machine-specific spec; hypothesis unverified (1/3 probe samples, 2 lost to GCE stockouts).** Rubric of 17
+  fixture items, pre-registered, hand-audited (regex in brackets): no probes (N) 7, 5, 5 (9, 7, 8); with ≤ 20 runtime
+  probes on a fresh clean-snapshot lab (P0) 4 (7). 0/4 specs located the NetBSD project: no NetBSD tree, obj dir,
+  tooldir or ownership. P0's 20 probes were a host census, and none looked under `/home` or searched for NetBSD. Its
+  plan builds a standalone module, with no kernel, firmware or NetBSD boot. Known without probes: `repo init …
+  qemu_v8.xml`, `build.sh -m evbarm64`, an fdt attach stanza. Never derived: NetBSD as TF-A BL33, the BL33 kernel
+  flag, `linaro,optee-tz`, a no-OP-TEE control. N1 wrote 3 always-pass checks (`|| echo`). Build nothing.
+  - Demo-harness faults fixed in the demo: truncated/invalid specs are now resubmitted. A stockout leaves
+    `devbox-lab up`'s boot disk behind, so every retry fails `already exists`; the disk is now deleted before a
+    retry. `core.run_lab` does not retry, so it is unaffected.
+  - Evidence: `~/evidence/spec-derivation-demo-2026-10-28/RESULTS.md` (`audit.md`; 19/19 export rows).
 - **C slice 32 (2026-10-28, demo, $0.002378 metered + $0.45 GCE): a fresh pro diagnostic sub-run with runtime probes
   does not produce the b2 correction: 0/3 grounded passes, hypothesis falsified.** This is a
   reachable-with-developer-written-spec instrument: the input is the fixture's b2 text plus slice 27's trace to step 20.
@@ -207,10 +219,11 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. **Spec-derivation demo on the recorded runs** (founder decision 2026-10-28, MISSION 773b964): measure how much of
-     the developer-written spec (`optee_goal_a/b.json` sub-goals, locations, build commands/flags, design choices,
-     proof criteria) Conflux derives itself from `run12/task.txt` (219 bytes) plus runtime probes on a lab. Grade
-     against the fixtures and against where old runs 4–12 and slices 10–31 got lost. Build only what the numbers support.
+  1. **Spec derivation, continued** (founder decision 2026-10-28): run slice 33's 2 missing P samples when lab capacity
+     returns (≈ $0.001 + $0.20 GCE). Then demo arm P': the same planner plus one generic, task-agnostic probe policy,
+     "before planning, locate on this machine every project, tree or artifact the task names". Grade it against P
+     on fresh labs with the same rubric and `demo.py`. Build a planner stage only if the numbers support it.
+     Derived checks must be screened for vacuous `|| echo`/`|| true` forms before any acceptance use.
   2. Self-correction (founder decision 2026-10-28) stays open. Slices 28–32 show pro (as executor or as a
      diagnostician) names the fix and does not test it. Next factor to change: a different diagnostician model, or a
      structure that forces each stated hypothesis into an executed experiment. Demo it on the recorded stalls (b2 slice
