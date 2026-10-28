@@ -145,6 +145,13 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   `NETBSDSRCDIR` detour, as in control (0/5). Billed $0.000043/call, median ≈ 13 s.
   Evidence: `~/evidence/reasoning-carry-demo-2026-10-28/RESULTS.md`.
 
+## `deepseek-v4-pro` acting on a correction one step later (C slice 23, continuation of slice 22's 3 readers)
+- **The adopted correction becomes the action after one precondition read.** Fed its `ls -d tooldir.*/` result,
+  8/9 draws (3/3 samples) run the task's build.sh via `sudo -n -u darrenhidalgo`; the 9th runs a sudo cleanup first.
+  With slice 22: 5/5 act on the correction within 2 steps. Unprompted, pro fixes its own `Permission denied` within
+  2 steps in 3/5 recorded denials (s18, s20); slice 21 is the one stall. Evidence:
+  `~/evidence/correction-continuation-demo-2026-10-28/RESULTS.md`.
+
 ## Cheap baselines to beat
 - Keyword failure rule (`error|failed|fatal|…`): "did this command fail?" 23/30 (catches no silent failures,
   never false-alarms on writes); acceptance 14/16 by always saying pass. A model judge must beat this.

@@ -6,7 +6,17 @@ evidence `RESULTS.md` and in the PR that landed it (`git log`); measured model b
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred
-  to E); B done. Goal (a) a1–a4 each model-accepted (not yet as one run); goal (b) b1a's check passes on pro's slice-18 edits; b1b not accepted (slice 20 cut off; slice 21 pro never used sudo). Slice 22: a grounded correction is adopted (5/5) but only 2/5 act on it in one step.
+  to E); B done. Goal (a) a1–a4 each model-accepted (not yet as one run); goal (b) b1a's check passes on pro's slice-18 edits; b1b not accepted (slice 20 cut off; slice 21 pro never used sudo). Slices 22–23: a grounded correction at slice 21's stall makes pro run the sudo build within 2 steps (5/5).
+- **C slice 23 (2026-10-28, continuation demo + offline trigger, $0.000203 metered + $0 GCE): pro acts on the
+  adopted correction; a plain ownership trigger is mostly redundant; the 4 KB output tail may hide the cause.**
+  Slice 22's 3 correction samples that read `ls -d tooldir.*/` first, continued one step with the recorded listing
+  (3 draws each): 8/9 draws run the task's build.sh via `sudo -n -u darrenhidalgo` (3/3 samples) → **5/5 overall; the
+  rule fired.** Offline trigger (`Permission denied`, command under darrenhidalgo's home, no sudo) on 6 b1/b1b traces:
+  5 firings, all genuine, but 3 were self-fixed by pro within 2 steps (s18, s20). The pre-registered build rule fails
+  (redundancy); a post-hoc "no sudo 2 steps after a denial" variant fires only on s21 (steps 23, 39), but it was fitted on
+  these traces. Nothing built. **Harness-fault candidate:** s21's 7 build.sh-as-dev runs each returned a full
+  `core.TAIL` (4096 B) of one echoed nbmake line + `*** [cleandirkernlib] Error code 1`, with no `Permission denied`; the
+  full output is missing evidence (only on c3). Evidence: `~/evidence/correction-continuation-demo-2026-10-28/RESULTS.md`.
 - **C slice 22 (2026-10-28, replay demo, $0.000645 metered + $0 GCE): neither reasoning carry-back nor a grounded
   correction passes its rule on pro's b1b ownership stall.** Planning found that `run_task` replays assistant turns
   without `reasoning_content`. Pro's `content` is empty on 39/40 replies (flash: 38/40), so the executor never sees
@@ -111,9 +121,9 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. Demo (replay, ≤ $0.001, no lab): continue slice 22's 3 correction samples that ran `ls -d tooldir.*/` by one
-     step, feeding the recorded tooldir listing. Outcome: the sudo build (≥ 4/5 overall supports a correction).
-     If supported, demo a deterministic trigger (`Permission denied` on another user's path + a task granting sudo)
-     on the recorded traces of slices 18/20/21, then rerun b1b with it.
+  1. Harness-only on c3 (no model, ≈ $0.05 GCE): rerun slice 21's step-7 build.sh as `dev` with full output saved. If
+     `Permission denied` is cut by the 4 KB tail, it is a harness fault: structural fix (keep failing lines, not only
+     the tail) + regression test from the recorded case, then rerun b1b with pro. Otherwise demo the delayed trigger
+     on a trace it was not fitted to before building it.
   2. For the completion gate, run a1→a4 then b1a→b3 unattended from the clean snapshot on a fresh lab, then delete
      the c3 disk. Executor per sub-goal is an open, measured choice (flash on a1–a4, pro on b1a so far).
