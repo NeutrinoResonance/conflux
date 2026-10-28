@@ -128,6 +128,15 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   later. Billed $0.000670 for the other 20 (≈ $0.000034/call). Median 11.8 s, max 31 s.
   Evidence: `~/evidence/pro-b1b-run-2026-10-28/RESULTS.md`.
 
+## `deepseek-v4-pro` repairing its own driver, rerun (C slice 21, lab c3, b1b, 40 steps)
+- **Anchors on a self-made error and never uses sudo.** 9 `build.sh` runs as `dev` (0/71 commands with sudo, though
+  the task grants `sudo -n`); the darrenhidalgo-owned compile dir's `cleandir` failed. At step 13 its own hand-run
+  `nbmake -f …/libkern/Makefile` (no `NETBSDSRCDIR`) produced `Cannot open /usr/src/…`; it named the real cause at
+  steps 22–23 ("permission errors … likely belong to darrenhidalgo") and then returned to `NETBSDSRCDIR` for 13 steps.
+  In slice 20 an explicit `nbconfig … Permission denied` made it switch to sudo at step 15. 0 source edits.
+- Billed $0.001201 / 33 calls (≈ $0.000036/call); 7/40 replies again had no `buyer_cost_micro`. Median 12 s, max 27 s.
+  Evidence: `~/evidence/pro-b1b-rerun-2026-10-28/RESULTS.md`.
+
 ## Cheap baselines to beat
 - Keyword failure rule (`error|failed|fatal|…`): "did this command fail?" 23/30 (catches no silent failures,
   never false-alarms on writes); acceptance 14/16 by always saying pass. A model judge must beat this.
