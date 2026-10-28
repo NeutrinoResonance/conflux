@@ -11,7 +11,19 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
-- **C slice 32 (2026-10-28, demo, $0.002378 metered + $0.45 GCE): a fresh pro diagnostic sub-run with runtime probes
+- **C slice 33 (2026-10-28, single-model baseline demo, $0.001184 metered + $0.10 GCE): a pro planner given only `run12/task.txt` derives
+  none of the machine-specific spec; hypothesis unverified (1/3 probe samples, 2 lost to GCE stockouts).** Rubric of 17
+  fixture items, pre-registered, hand-audited (regex in brackets): no probes (N) 7, 5, 5 (9, 7, 8); with ≤ 20 runtime
+  probes on a fresh clean-snapshot lab (P0) 4 (7). 0/4 specs located the NetBSD project: no NetBSD tree, obj dir,
+  tooldir or ownership. P0's 20 probes were a host census, and none looked under `/home` or searched for NetBSD. Its
+  plan builds a standalone module, with no kernel, firmware or NetBSD boot. Known without probes: `repo init …
+  qemu_v8.xml`, `build.sh -m evbarm64`, an fdt attach stanza. Never derived: NetBSD as TF-A BL33, the BL33 kernel
+  flag, `linaro,optee-tz`, a no-OP-TEE control. N1 wrote 3 always-pass checks (`|| echo`). Build nothing.
+  - Demo-harness faults fixed in the demo: truncated/invalid specs are now resubmitted. A stockout leaves
+    `devbox-lab up`'s boot disk behind, so every retry fails `already exists`; the disk is now deleted before a
+    retry. `core.run_lab` does not retry, so it is unaffected.
+  - Evidence: `~/evidence/spec-derivation-demo-2026-10-28/RESULTS.md` (`audit.md`; 19/19 export rows).
+- **C slice 32 (2026-10-28, single-model baseline demo (pro diagnosing pro; MISSION 6eafcd8), $0.002378 metered + $0.45 GCE): a fresh pro diagnostic sub-run with runtime probes
   does not produce the b2 correction: 0/3 grounded passes, hypothesis falsified.** This is a
   reachable-with-developer-written-spec instrument: the input is the fixture's b2 text plus slice 27's trace to step 20.
   c3 was reset to the slice-27 state (no-flag TF-A rebuilt, b2 check 2 fails, old job dirs archived and removed).
@@ -207,12 +219,15 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. **Spec-derivation demo on the recorded runs** (founder decision 2026-10-28, MISSION 773b964): measure how much of
-     the developer-written spec (`optee_goal_a/b.json` sub-goals, locations, build commands/flags, design choices,
-     proof criteria) Conflux derives itself from `run12/task.txt` (219 bytes) plus runtime probes on a lab. Grade
-     against the fixtures and against where old runs 4–12 and slices 10–31 got lost. Build only what the numbers support.
-  2. Self-correction (founder decision 2026-10-28) stays open. Slices 28–32 show pro (as executor or as a
-     diagnostician) names the fix and does not test it. Next factor to change: a different diagnostician model, or a
-     structure that forces each stated hypothesis into an executed experiment. Demo it on the recorded stalls (b2 slice
-     27, b1 c10/c11/slice 18, b3 slice 31), with developer fixes as grading references only.
-  3. Completion-gate run: `run12/task.txt` only, unattended from the clean snapshot on a fresh lab; then delete the c3 disk.
+  1. **Work item D demo: a different model corrects and plans** (founder decision 2026-10-28, MISSION 6eafcd8). A
+     planner/executor plus at least one critic/corrector of a different family (Kimi K3/K3.1-pro, GLM-5.3, DeepSeek
+     pro/flash, Jev decisions; Claude/Codex where the economics allow). Roles are chosen by measured outcomes. Reuse or
+     demo the legacy senate/critic/decider/verifier (`conflux-baseline-20261026`) before writing new mechanisms.
+     - The recorded stalls are b2 slice 27, b1 c10/c11/slice 18 and b3 slice 31. The critic must turn the executor's
+       stated-but-untested hypothesis into an executed probe or a correction. Developer fixes are grading references
+       only. Slices 28–32 (pro on pro) are the single-model baseline.
+     - For spec derivation, the critic reviews the planner's plan and probe trace. Its first target is slice 33's
+       measured miss: probes went to a host census, not the task's named project. Grade with slice 33's rubric and
+       `demo.py` on fresh labs, and screen derived checks for vacuous `|| echo`/`|| true` forms. Slice 33 (pro alone)
+       is the baseline; its 2 missing P samples run when lab capacity returns (≈ $0.001 + $0.20 GCE).
+  2. Completion-gate run: `run12/task.txt` only, unattended from the clean snapshot on a fresh lab; then delete the c3 disk.

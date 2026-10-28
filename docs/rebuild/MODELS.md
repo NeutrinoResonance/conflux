@@ -211,6 +211,14 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   past the cap, and once it returned `run_shell` when only `correct` was offered. Evidence:
   `~/evidence/self-diagnosis-demo-2026-10-28/RESULTS.md`.
 
+## `deepseek-v4-pro` as planner from the founder's task text (C slice 33)
+- **Weak: probes the host, not the task's named project.** Given only `run12/task.txt` and ≤ 20 probes on the clean
+  snapshot, it used all 20 on OS, package, QEMU and download checks. None looked under `/home` or searched for "NetBSD",
+  and it planned a standalone driver module against fetched headers. Without probes, 2/3 specs assumed a NetBSD host.
+  It knows the public recipes (`repo init … qemu_v8.xml`, `build.sh -m evbarm64`) but never derives NetBSD as TF-A
+  BL33. 1/3 no-probe specs had always-pass checks (`|| echo`). Evidence:
+  `~/evidence/spec-derivation-demo-2026-10-28/RESULTS.md`.
+
 ## Cheap baselines to beat
 - Keyword failure rule (`error|failed|fatal|…`): "did this command fail?" 23/30 (catches no silent failures,
   never false-alarms on writes); acceptance 14/16 by always saying pass. A model judge must beat this.
