@@ -8,7 +8,17 @@ MISSION-STATUS: ACTIVE
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred
   to E); B done. Goal (a): a1–a4 each model-accepted, but not yet in one run. Goal (b): b1a's check passes on pro's
   slice-18 edits; **b1b model-accepted on c3 (slice 26)** after slices 20–25 removed the harness faults (no-cost
-  settlement, 4 KB tail cut) and pro cleared the ownership stall; b2 not accepted (slice 26: NetBSD silent as BL33).
+  settlement, 4 KB tail cut) and pro cleared the ownership stall; b2 not accepted (slices 26–27: NetBSD silent as BL33;
+  the cause, a missing `ARM_LINUX_KERNEL_AS_BL33=1`, is verified harness-only).
+- **C slice 27 (2026-10-28, diagnosis + run, $0.001710 metered + $0.32 GCE): the BL33 cause is verified; pro's b2
+  continuation fails at the step cap again (2nd identical b2 failure).** Pre-check b1a pass, b1b pass, b2 fail.
+  - Harness-only: two out-of-tree TF-A builds with pro's slice-26 flags, booted 150 s each. Without
+    `ARM_LINUX_KERNEL_AS_BL33=1`, serial0 ends after BL31 (= slice 26). With it, NetBSD prints the b1b kernel's banner
+    and autoconfigures. So pro's recipe plus that one flag meets b2's boot markers.
+  - Live b2, pro, unchanged task: `failed step_cap` (30), 77 commands, **0 builds, 0 writes**. It re-confirmed the
+    symptom with 3 boots, then read TF-A hand-off code; at step 30 it asked whether the kernel wants a DTB in x0.
+    Model fault (over-diagnosis); 30/30 export-matched; D1 0 hits. Tree unchanged.
+  - Evidence: `~/evidence/pro-b2-c3-2026-10-28/RESULTS.md`.
 - **C slice 26 (2026-10-28, run + D1 fix, $0.001540 metered + $0.42 GCE): pro's b1b continuation is accepted; b2, its
   first live run, fails at the step cap.** Pre-check b1a pass, b1b fail, b2 fail.
   - b1b `accepted checks_passed` at step 31: it fixed the include via `sudo sed`, and a 600 s build timed out (its
@@ -150,9 +160,13 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. Continue b2 with pro on c3 as left (kernel built with the driver; pro's firmware with NetBSD silent; ≈ $0.001 +
-     $0.2 GCE). Primary outcome: b2 accepted by its executed checks. If it stalls on the BL33 hand-off again, that stall
-     is the candidate for a grounded-correction demo on the recorded trace (slices 22–23 showed pro acts on one).
+  1. b2 has failed twice identically, so no third plain rerun. Run a grounded-correction demo on slice 27's recorded
+     trace (slices 22–23 pattern; ≈ $0.001, $0 GCE). Replay the b2 prefix after the symptom is confirmed (≈ step 20)
+     and sample pro's next replies, n=5 per arm: control vs a correction with the requirement (NetBSD banner on serial0),
+     the evidence (serial0 stops after BL31; slice 27's `flag` arm boots) and the action (rebuild TF-A with
+     `ARM_LINUX_KERNEL_AS_BL33=1`, copy `qemu_fw.bios`). Pre-registered rule: a flagged TF-A build within 2 steps in
+     ≥ 4/5 correction draws and ≤ 1/5 control draws. Run live b2 only if the rule passes. Where the correction comes
+     from (a stronger model or deterministic evidence) is a later, separate demo.
   2. For the completion gate, run a1→a4 then b1a→b3 unattended from the clean snapshot on a fresh lab (ownership
      friction returns there: snapshot trees are darrenhidalgo's), then delete the c3 disk. Executor per sub-goal is an
      open, measured choice (flash on a1–a4, pro on b1a/b1b/b2 so far).

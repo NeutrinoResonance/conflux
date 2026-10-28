@@ -43,6 +43,7 @@ USD comes from provider responses or documented prices — never estimated silen
 | 2026-10-28 | Surplus chat | `deepseek-v4-pro` 9 calls | 242643 | 2646 | 0.000203 | — | C slice 23 continuation demo: slice 22's 3 correction samples continued one step after the tooldir listing, 3 draws each, no lab; 9/9 export-matched |
 | 2026-10-28 | Surplus chat | `deepseek-v4-pro` 40 calls | 788286 | 10861 | 0.001667 | — | C slice 25 pro b1b rerun on lab c3 under head+tail output (failed step_cap; fixed ownership + both errors, rewrite broke an include); 40/40 export-matched |
 | 2026-10-28 | Surplus chat | `deepseek-v4-pro` 61 calls | 1272979 | 33670 | 0.001540 | — | C slice 26 pro on lab c3: b1b continuation (accepted, 31 calls) then b2 (failed step_cap, 30 calls); 48/61 export-matched, 13 b1b replies without `buyer_cost_micro` absent from the export at 05:10Z (unbilled so far) |
+| 2026-10-28 | Surplus chat | `deepseek-v4-pro` 30 calls | 791934 | 46488 | 0.001710 | — | C slice 27 pro b2 continuation on lab c3 (failed step_cap, 0 builds); 30/30 export-matched |
 
 C slice 1 rows are reconciled with the export by `python -m conflux.core reconcile` (`~/evidence/core-runs/2026-10-27-c1*/reconciled.json`;
 export total for 2026-10-27: 83 rows, $0.001372).
@@ -55,7 +56,7 @@ charge-bound estimates) are only admission-time bounds. They are replaced by bil
 $0.0108 Jev and $0.0207 rejected-request estimates were billed $0.000006 and $0. Account credit after these runs
 is $9.369476 (`/v1/buyer/me`).
 
-**Metered total: $0.038782** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
+**Metered total: $0.040492** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
 
 ## GCE lab VMs (week 2026-W44 cap $60)
 
@@ -83,5 +84,6 @@ Rate: n2d-standard-8 ≈ $0.338/h running (GCE list price, us-central1) + 100 GB
 | 2026-10-28 | `conflux-dev-lab-c3` | 02:31:18–02:33:25 | 0.04 | 0.01 | C slice 24 harness-only read of slice 21's job files (4 KB tail cut step 12's `Permission denied`); stopped, disk kept |
 | 2026-10-28 | `conflux-dev-lab-c3` | 03:01:56–03:34:26 | 0.54 | 0.18 | C slice 25 state check + harness-only pre-check + pro b1b rerun (failed step_cap); stopped, disk kept (pro's rewrite, obj tree now dev-owned) |
 | 2026-10-28 | `conflux-dev-lab-c3` | 03:47:19–05:01:14 | 1.23 | 0.42 | C slice 26 state + harness-only pre-check + pro b1b continuation (accepted) + b2 (failed step_cap); stopped, disk kept (b1b kernel built, pro's b2 firmware) |
+| 2026-10-28 | `conflux-dev-lab-c3` | 05:18:14–06:14:21 | 0.93 | 0.32 | C slice 27 state + harness-only pre-check + BL33 diagnosis (2 TF-A builds, 2 boots) + pro b2 continuation (failed step_cap); stopped, disk kept (tree unchanged) |
 
-**GCE lab total: $3.21** (plus the c3 disk while it exists)
+**GCE lab total: $3.53** (plus the c3 disk while it exists)

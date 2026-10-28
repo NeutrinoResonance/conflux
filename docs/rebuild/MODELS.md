@@ -171,7 +171,13 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   600 s timeout cut a full kernel build, it reran with 900 s (609 s needed).
 - **Weak: long reading before the first firmware build, and a missed hand-off flag.** On b2 it spent 19 of 30 steps on
   48 reads, then built TF-A with OP-TEE as BL32 and `netbsd.img` as BL33, but without `ARM_LINUX_KERNEL_AS_BL33=1`
-  (likely cause of the silent NetBSD, untested). Evidence: `~/evidence/pro-b1b-b2-c3-2026-10-28/RESULTS.md`.
+  (the cause of the silent NetBSD, verified harness-only in C slice 27). Evidence: `~/evidence/pro-b1b-b2-c3-2026-10-28/RESULTS.md`.
+
+## `deepseek-v4-pro` continuing b2 (C slice 27, lab c3, 30 steps)
+- **Weak: diagnoses without acting.** 77 commands, 0 builds, 0 writes: it re-confirmed the symptom (3 firmware boots, one
+  standalone kernel boot), then read TF-A's BL2/BL31 hand-off code; at step 30 it asked whether the kernel expects a DTB
+  in x0, the right question at the cap. Greps for `ARM_LINUX_KERNEL` in OP-TEE's build files find nothing (qemu_v8.mk
+  does not set it). Evidence: `~/evidence/pro-b2-c3-2026-10-28/RESULTS.md`.
 
 ## Cheap baselines to beat
 - Keyword failure rule (`error|failed|fatal|…`): "did this command fail?" 23/30 (catches no silent failures,
