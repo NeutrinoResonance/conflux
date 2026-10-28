@@ -6,7 +6,15 @@ evidence `RESULTS.md` and in the PR that landed it (`git log`); measured model b
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred
-  to E); B done. Goal (a) a1–a4 each model-accepted (not yet as one run); goal (b) b1 not yet accepted.
+  to E); B done. Goal (a) a1–a4 each model-accepted (not yet as one run); goal (b) b1a's check passes on pro's slice-18 edits; b1b not accepted.
+- **C slice 19 (2026-10-28, demo + fixture, $0.000040 metered + $0.16 GCE): b1 split; flash builds pro's driver but
+  never fixes it.** Fixture: `b1-driver-build` → `b1a-driver-source` (old check 1) + `b1b-kernel-build` (checks 1+2);
+  harness-only on c3: b1a pass, b1b fail, as expected. Live b1b, flash, c3 as pro left it: `failed step_cap`. Flash
+  ran `build.sh -T …` at step 25 (79 s): 2 `-Werror` errors in pro's `optee.c` (unused `faa`, unused
+  `optee_smc_call`). It had predicted both at step 24 and restated them at steps 36/40, yet made **no edit** in 15
+  steps (27 reads drifting to b3: optee_msg, PTAs, shm, DMA). Model fault; no harness fault. D1 false positive at
+  step 2 (`git diff; …; cat optee.c` flagged on the source text "failed"). Flash's write stall now spans c10, c11,
+  slices 12–16 and 19: it is not the b1 writer or repairer. Evidence: `~/evidence/b1b-flash-run-2026-10-27/RESULTS.md`.
 - **C slice 18 (2026-10-27, demo, $0.001838 metered + $0.18 GCE): pro in flash's seat writes b1 but runs out of
   steps before the build.** One live b1 run on c3, `deepseek-v4-pro`, else as c11 (wrapper sets pro admission
   ceilings and `max_usd` 1.00; nothing built). `failed step_cap`: check 1 **passed** (new `sys/dev/fdt/optee.c`,
@@ -75,10 +83,10 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. Re-cut b1 at the boundary slice 18 exposed: b1a = driver + `files.fdt` + GENERIC64 (check 1), b1b = build
-     GENERIC64 (check 2); validate the split checks harness-only. Then run b1b with flash on c3 **as pro left it**
-     (tests a pro-writes / flash-builds hand-off; compile errors become correction input). c3's `netbsd-src` now
-     holds pro's uncommitted edits: reset `sys/` to `7f2c5e73f` before any fresh b1/b1a attempt.
-  2. If pro becomes the b1a writer: per-model admission ceilings in `core.py` (demo numbers above), not a wrapper.
-  3. For the completion gate, run a1→a4 then b1→b3 unattended from the clean snapshot on a fresh lab, then delete
-     the c3 disk.
+  1. Per-model admission ceilings in `core.py` (slice 18 numbers: pro 2e-6 $/byte, 7.6e-6 $/token), then one b1b run
+     with `deepseek-v4-pro` on c3 as now (bounded repair of 2 known compile errors; reproducible in 79 s). Do not
+     reset `sys/` first.
+  2. Fix the D1 false positive (read-only `;` chain whose output quotes "failed") with a regression test from the
+     slice 19 step 2 trace row.
+  3. For the completion gate, run a1→a4 then b1a→b3 unattended from the clean snapshot on a fresh lab, then delete
+     the c3 disk. Executor per sub-goal is now an open measured choice (flash on a1–a4, pro on b1a so far).

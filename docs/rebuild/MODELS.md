@@ -113,6 +113,12 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
 - Billed $0.001838 / 40 calls (≈ $0.000046/call, ≈ 25× flash), 1.08M in / 25.7k out, median 8 s, max 71 s (flash up
   to 713 s). Evidence: `~/evidence/pro-b1-run-2026-10-27/RESULTS.md`.
 
+## `deepseek-v4.1-flash` repairing another model's driver (C slice 19, lab c3, b1b, 40 steps)
+- **Builds and diagnoses, then does not edit.** Ran the right `build.sh -T` at step 25; read the 2 `-Werror` errors
+  (unused variable, unused static function) correctly — it had predicted both at step 24 — and restated the
+  two-line fix at steps 36 and 40, but its 27 later commands were all reads that drifted to future sub-goal scope
+  ("make it a proper driver": optee_msg, PTAs, shared memory). 0 source edits; $0.000040 billed.
+
 ## Cheap baselines to beat
 - Keyword failure rule (`error|failed|fatal|…`): "did this command fail?" 23/30 (catches no silent failures,
   never false-alarms on writes); acceptance 14/16 by always saying pass. A model judge must beat this.
