@@ -185,6 +185,12 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   because slice 26's make line is not in this session. Without it (control), 4/5 already name `ARM_LINUX_KERNEL_AS_BL33`
   in their reasoning, yet 4/5 keep reading TF-A hand-off code. Evidence: `~/evidence/b2-correction-demo-2026-10-28/RESULTS.md`.
 
+## `deepseek-v4-pro` under a recipe-carrying b2 correction (C slice 29, same prefix)
+- **Executes a correction that hands it the command; does not reconstruct one it lacks.** With slice 27's verified
+  12-flag make line in the correction, 3/5 replies run it at once and the other 2 first `ls` its inputs (both then run
+  it, post-hoc). Without it, 0/15 two-step draws build: all keep listing toolchains and grepping build dirs for the
+  original flags. Evidence: `~/evidence/b2-recipe-continuation-demo-2026-10-28/RESULTS.md`.
+
 ## Cheap baselines to beat
 - Keyword failure rule (`error|failed|fatal|…`): "did this command fail?" 23/30 (catches no silent failures,
   never false-alarms on writes); acceptance 14/16 by always saying pass. A model judge must beat this.

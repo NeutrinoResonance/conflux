@@ -9,8 +9,16 @@ MISSION-STATUS: ACTIVE
   to E); B done. Goal (a): a1–a4 each model-accepted, but not yet in one run. Goal (b): b1a's check passes on pro's
   slice-18 edits; **b1b model-accepted on c3 (slice 26)** after slices 20–25 removed the harness faults (no-cost
   settlement, 4 KB tail cut) and pro cleared the ownership stall; b2 not accepted (slices 26–27: NetBSD silent as BL33;
-  the cause, a missing `ARM_LINUX_KERNEL_AS_BL33=1`, is verified harness-only; slice 28: a correction is adopted but
-  not acted on in one step).
+  the cause, a missing `ARM_LINUX_KERNEL_AS_BL33=1`, is verified harness-only; slices 28–29: a correction is acted on
+  only when it carries the executable make line).
+- **C slice 29 (2026-10-28, replay + continuation demo, $0.000971 metered + $0.03 GCE): a b2 correction that carries
+  slice 27's verified make line gets pro to build; one without it does not, even within 2 steps.** Same prefix as slice
+  28, pro, all 26 calls export-matched. Rule: flagged TF-A build (`make` + `ARM_LINUX_KERNEL_AS_BL33=1`).
+  - M (correction + recipe, 1 step): **3/5**, rule ≥ 4/5 not passed by one; the other 2 `ls` the recipe's inputs.
+    Post-hoc, those 2 continued on c3 build in 5/6 step-2 draws (5/5 samples by step 2).
+  - C2 (slice 28's recipe-free correction, its draws' reads executed on c3, 3 draws each): **0/5 samples, 0/15 draws**;
+    all 15 keep reconstructing the toolchain and the original flags.
+  - Evidence: `~/evidence/b2-recipe-continuation-demo-2026-10-28/RESULTS.md`.
 - **C slice 28 (2026-10-28, replay demo, $0.000423 metered + $0 GCE): pro adopts a grounded b2 correction but does
   not build in the next step; the rule is not passed at 1 step (2-step outcome unmeasured).** Slice 27 prefix at
   K=20 (symptom confirmed), pro, n=5 per arm; replay exact (35,233 prompt tokens = recorded). Flagged TF-A build in
@@ -168,11 +176,10 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. Measure the 2-step window that slice 28 could not (slice 23 pattern, ≈ $0.0005 + ≈ 0.2 lab h on c3). Execute
-     each slice-28 correction draw's recorded read commands on c3 (harness-only), feed the real outputs back, and
-     sample one more pro reply (3 draws per sample). Apply the same rule: a flagged TF-A build by step 2 in ≥ 4/5
-     samples. If that fails, add an arm whose correction carries slice 27's verified make line (`diag.json`). Run
-     live b2 only after a passing arm. Where the correction comes from is a later, separate demo.
+  1. One live b2 continuation on c3 (pro, unchanged task) with slice 29's correction M injected once as a `user`
+     message after the symptom is confirmed. This needs a minimal `run_task` hook (a scheduled message at a step, traced),
+     with a regression test; demo-backed by slice 29. Success = b2's executed check. If it fails, hand diagnosis to
+     `codex exec`. Where a recipe-carrying correction comes from at runtime is a later, separate demo.
   2. For the completion gate, run a1→a4 then b1a→b3 unattended from the clean snapshot on a fresh lab (ownership
      friction returns there: snapshot trees are darrenhidalgo's), then delete the c3 disk. Executor per sub-goal is an
      open, measured choice (flash on a1–a4, pro on b1a/b1b/b2 so far).
