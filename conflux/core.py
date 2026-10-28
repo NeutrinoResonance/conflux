@@ -128,6 +128,8 @@ class Task:
     setup: str = ""
     max_steps: int = 8
     max_usd: float = 0.05
+    inject_step: int = 0   # before this step's model call, `inject` goes to the model once as a user message
+    inject: str = ""
 
     @classmethod
     def from_dict(cls, d: dict) -> "Task":
@@ -633,6 +635,9 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
         if past_deadline():
             return end("unverified", "lab_deadline")
         steps += 1
+        if task.inject and steps == task.inject_step:
+            messages.append({"role": "user", "content": task.inject})
+            trace.write("inject", task=task.id, step=steps, content=task.inject)
         request = {"model": model, "messages": messages, "tools": TOOLS, "max_tokens": MAX_TOKENS}
         bound = len(json.dumps(request).encode()) * price_ceiling + MAX_TOKENS * output_ceiling
         # One retry when no HTTP response came back (transport error or timeout); each attempt is admitted and settled.

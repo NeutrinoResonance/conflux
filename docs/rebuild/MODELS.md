@@ -191,6 +191,12 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   it, post-hoc). Without it, 0/15 two-step draws build: all keep listing toolchains and grepping build dirs for the
   original flags. Evidence: `~/evidence/b2-recipe-continuation-demo-2026-10-28/RESULTS.md`.
 
+## `deepseek-v4-pro` live b2 with that correction injected at step 20 (C slice 30)
+- **Repairs a recipe that does not work in its context.** The verbatim make was a no-op in-tree (`Nothing to be done`). In
+  2 steps pro named the cause (make does not track the changed BL33/flags), ran `realclean` and rebuilt. Accepted at the
+  step cap. Before acting it spent 5 steps re-checking cwd and the recipe's inputs. Evidence:
+  `~/evidence/pro-b2-inject-c3-2026-10-28/RESULTS.md`.
+
 ## Cheap baselines to beat
 - Keyword failure rule (`error|failed|fatal|…`): "did this command fail?" 23/30 (catches no silent failures,
   never false-alarms on writes); acceptance 14/16 by always saying pass. A model judge must beat this.

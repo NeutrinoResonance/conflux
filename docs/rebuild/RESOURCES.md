@@ -52,6 +52,8 @@
   QEMU boot). Labs run kernel `6.1.0-54`, so plain `build.sh` finds no matching tooldir; pass `-T <existing tooldir>`.
 - The c3 disk holds a built qemu_v8 tree in `~/optee-work/optee`. `make check-only CHECK_TESTS=xtest XTEST_ARGS=1001`
   boots it and passes in ≈ 54 s. The snapshot has no `expect`; the a4 check installs it.
+  Since C slice 30 its in-tree TF-A build (`optee/trusted-firmware-a/build/qemu/release`) holds the NetBSD-as-BL33
+  firmware, and `netbsd-optee/qemu_fw.bios` passes b2. Goal (a)'s Linux firmware must be rebuilt before an a-check there.
 
 ## Workers
 
