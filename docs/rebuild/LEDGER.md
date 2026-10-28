@@ -50,6 +50,8 @@ USD comes from provider responses or documented prices — never estimated silen
 | 2026-10-28 | Surplus chat | `deepseek-v4-pro` 40 calls | 1291303 | 123928 | 0.017228 | — | C slice 31 first live b3 on lab c3 (no injection): failed step_cap, 0 writes; 40/40 export-matched |
 | 2026-10-28 | Surplus chat | `deepseek-v4-pro` 35 calls | 870706 | 91275 | 0.002378 | — | C slice 32 diagnostic sub-run demo on lab c3 (3 pro diagnoses × ≤ 10 runtime probes on slice 27's b2 stall: 0 corrections); 34/35 export-matched (1 transport-error call billed by time match), diag0.1 without `buyer_cost_micro` absent from the export (unbilled so far) |
 | 2026-10-28 | Surplus chat | `deepseek-v4-pro` 19 calls | 68564 | 73743 | 0.001184 | — | C slice 33 spec-derivation demo (3+4 no-probe planner calls, 12 planner calls with 20 runtime probes on fresh lab sd0); 19/19 export rows token-matched |
+| 2026-10-28 | Surplus chat | `kimi-k3.1-pro` 13 calls, `kimi-k3` 18, `glm-5.3` 17, `deepseek-v4-pro` 11 | 1176744 | 781373 | 0.589936 | — | C slice 34 work-item-D decider demo (legacy `DECIDER_PROMPT` on slice 27's b2 trace; 29 calls truncated at 8192 tokens, 30 at 24000); K3.1-pro $0.553023; 59/59 export-matched (1 `kimi-k3` reply had no usage: time-matched, tokens not counted) |
+| 2026-10-28 | Surplus chat | `deepseek-v4-pro` 12 calls | 540330 | 6289 | 0.001054 | — | C slice 34 post-hoc continuation (pro on slice 27 K=20 + K3.1-pro's 2 decisions, reasoning dropped vs passed back); 12/12 export-matched |
 
 C slice 1 rows are reconciled with the export by `python -m conflux.core reconcile` (`~/evidence/core-runs/2026-10-27-c1*/reconciled.json`;
 export total for 2026-10-27: 83 rows, $0.001372).
@@ -62,7 +64,7 @@ charge-bound estimates) are only admission-time bounds. They are replaced by bil
 $0.0108 Jev and $0.0207 rejected-request estimates were billed $0.000006 and $0. Account credit after these runs
 is $9.369476 (`/v1/buyer/me`).
 
-**Metered total: $0.052485** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
+**Metered total: $0.643475** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
 
 ## GCE lab VMs (week 2026-W44 cap $60)
 

@@ -11,6 +11,23 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **Harness fault reported by the founder (MISSION c36f507), not yet fixed: `run_task` drops `reasoning_content`.**
+  `conflux/core.py` `run_task()` rebuilds each assistant turn as `{role, content, tool_calls}`; DeepSeek requires the
+  reasoning to be passed back on every turn when tools are used. Every "names the fix, keeps reading" measurement
+  (slices 18, 27–32) ran with the executor's previous reasoning erased: those attributions to the model are
+  **confounded**. Measured so far with reasoning passed back: slice 22 (b1b, 0/5) and slice 34's post-hoc continuation
+  (b2, 0/6), both one step.
+- **C slice 34 (2026-10-28, work item D demo, $0.590990 metered + $0 GCE): a different-family decider does not
+  reliably turn pro's b2 stall into the experiment; hypothesis falsified at n=5.** Legacy `DECIDER_PROMPT` verbatim
+  (`conflux-baseline-20261026`), slice 27's trace to step 20 (no reasoning), only the model varied; rule ≥ 3/5 and
+  ≥ pro + 2. Hypothesis-testing decision (flagged TF-A rebuild + boot): pro 0/5, **kimi-k3.1-pro 2/5** (both grounded
+  in the executor's step-11 output), kimi-k3 and glm-5.3 **0/5 valid** (reason to the 24000-token cap, no JSON,
+  20/20). K3.1-pro is ≈ $0.055/call (≈ 370× pro). Post-hoc: pro given K3.1-pro's 2 decisions builds 0/12 in the next
+  step, with and without reasoning passback. It adopts the decision and hunts for the original make line, which neither
+  model has (= slice 28/29 recipe-free). Build nothing.
+  - Instrument fault caught in-run: the first 29 calls used `core.MAX_TOKENS` 8192 (legacy decider: 24000), 26/29
+    truncated; archived, counted in spend, re-run at 24000.
+  - Evidence: `~/evidence/decider-critic-demo-2026-10-28/RESULTS.md` (71/71 export-matched).
 - **C slice 33 (2026-10-28, single-model baseline demo, $0.001184 metered + $0.10 GCE): a pro planner given only `run12/task.txt` derives
   none of the machine-specific spec; hypothesis unverified (1/3 probe samples, 2 lost to GCE stockouts).** Rubric of 17
   fixture items, pre-registered, hand-audited (regex in brackets): no probes (N) 7, 5, 5 (9, 7, 8); with ≤ 20 runtime
@@ -219,15 +236,15 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. **Work item D demo: a different model corrects and plans** (founder decision 2026-10-28, MISSION 6eafcd8). A
-     planner/executor plus at least one critic/corrector of a different family (Kimi K3/K3.1-pro, GLM-5.3, DeepSeek
-     pro/flash, Jev decisions; Claude/Codex where the economics allow). Roles are chosen by measured outcomes. Reuse or
-     demo the legacy senate/critic/decider/verifier (`conflux-baseline-20261026`) before writing new mechanisms.
-     - The recorded stalls are b2 slice 27, b1 c10/c11/slice 18 and b3 slice 31. The critic must turn the executor's
-       stated-but-untested hypothesis into an executed probe or a correction. Developer fixes are grading references
-       only. Slices 28–32 (pro on pro) are the single-model baseline.
-     - For spec derivation, the critic reviews the planner's plan and probe trace. Its first target is slice 33's
-       measured miss: probes went to a host census, not the task's named project. Grade with slice 33's rubric and
-       `demo.py` on fresh labs, and screen derived checks for vacuous `|| echo`/`|| true` forms. Slice 33 (pro alone)
-       is the baseline; its 2 missing P samples run when lab capacity returns (≈ $0.001 + $0.20 GCE).
-  2. Completion-gate run: `run12/task.txt` only, unattended from the clean snapshot on a fresh lab; then delete the c3 disk.
+  1. **Fix the reasoning-passback harness fault** (founder, MISSION c36f507): `run_task` replays each assistant turn's
+     `reasoning_content`; regression test that fails on current code. Then re-measure the recorded stalls with cheap
+     replays first (b2 slice 27, b1 c10/c11/slice 18, b3 slice 31, using the existing demos with reasoning passed back)
+     before attributing any stall to the model.
+  2. **Model-switching demo on those stalls** (MISSION c36f507, 0290ed2): deterministic code flags a candidate stall,
+     Jev decides whether to intervene and whom to bring in, GLM/Kimi read the trace and correct **or take over the next
+     steps with tools**, then hand back; minimal developer prose. Slice 34 says advice alone is not enough (the make
+     line is missing) and that kimi-k3/glm-5.3 need a reasoning cap or a smaller context to answer at all; K3.1-pro
+     is the only measured catcher (2/5, expensive). Add a very cheap random-step inspector as Jev's fallback and to
+     measure Jev's miss rate. Candidates: `~/evidence/harness-survey-2026-10-28/`. Spec derivation follows the same
+     shape (slice 33 baseline; its 2 missing P samples when lab capacity allows).
+  3. Completion-gate run: `run12/task.txt` only, unattended from the clean snapshot on a fresh lab; then delete the c3 disk.

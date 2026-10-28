@@ -219,6 +219,21 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   BL33. 1/3 no-probe specs had always-pass checks (`|| echo`). Evidence:
   `~/evidence/spec-derivation-demo-2026-10-28/RESULTS.md`.
 
+## Different-family deciders on pro's b2 stall (C slice 34, legacy `DECIDER_PROMPT`, one call each, n=5)
+- **`kimi-k3.1-pro`: the only one that catches the stall, 2/5, at ≈ $0.055/call.** Its 2 hits decide a fresh TF-A build
+  with the Linux-kernel-as-BL33 flag set to 1 plus the harness boot, citing the executor's own step-11 output. The other
+  3 decide a read-only diagnosis (2 name the flag as something to inspect). It writes prose plus runnable checks,
+  5/5 valid JSON at 24000 tokens (8192: 2/8 valid), 290–500 s per call.
+- **`kimi-k3`, `glm-5.3`: no answer.** On a ≈ 20k-token trace they reason until `max_tokens` (8192 and 24000) and return no
+  JSON, 0/20 valid each across both runs. Cheap per call (k3 ≈ $0.0018, glm ≈ $0.0009 at 24000) but unusable here
+  without a reasoning cap or a smaller context. Kimi-k3 took up to 1065 s per call.
+- **`deepseek-v4-pro` in the same seat: 0/5.** It repeats the failed TF-A build without the flag (2), rebuilds OP-TEE
+  OS (1) or reads (2); it ignores "do not write code" in 2/5. ≈ $0.00015/call.
+- The executor's reasoning was **not** in the decider's input (legacy `clean_messages`). Evidence:
+  `~/evidence/decider-critic-demo-2026-10-28/RESULTS.md`.
+- **Confound (MISSION c36f507):** the executor stalls in slices 18 and 27–32 were measured with `run_task` dropping
+  `reasoning_content` between turns. The "names the fix, keeps reading" entries above are confounded until re-measured.
+
 ## Cheap baselines to beat
 - Keyword failure rule (`error|failed|fatal|…`): "did this command fail?" 23/30 (catches no silent failures,
   never false-alarms on writes); acceptance 14/16 by always saying pass. A model judge must beat this.
