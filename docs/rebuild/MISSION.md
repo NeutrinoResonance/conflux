@@ -31,6 +31,15 @@ Only then set `MISSION-STATUS: COMPLETE` and open the promotion PR to `main`.
 
 ## Founder decisions (binding; newest first)
 
+- **2026-10-28 — Lead prompt layout: data first, request and goals last; one goal per turn.** Founder experience with
+  the MoE models (GLM, Kimi, DeepSeek): the instruction and the goals to check belong at the END of the prompt, after
+  the data, not before it. Shape: "Analyze this: <all previous activity and bookkeeping>", then "Do X with regard to
+  our goals:", then the goals. Better still, run it as a conversation, which has worked before: after the data, give
+  one goal at a time and take the model's answer on it, then the next goal in a new message; when every goal has been
+  covered, a final message asks for the next steps (or whatever the call's output is). This is a layout rule, not
+  task content: no goal text is written by a developer, the goals come from the run's own goal list. Measure it like
+  any other change (e.g. against the single-message layout on the same inputs), but this is the default layout for
+  the lead from now on.
 - **2026-10-28 — The other model is asked to lead, not to fill a form; Jev comes later.** Slices 34–37 gave Kimi/GLM
   the developer-written b2 sub-goal, a stalled step-20 trace, and a fixed question ("up to 3 competing hypotheses,
   JSON"), or dropped them into the stalled conversation with 10 steps left. That imposes structure too early and
