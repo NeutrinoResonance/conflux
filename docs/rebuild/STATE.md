@@ -11,6 +11,20 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **C slice 36 (2026-10-28, model-switch takeover demo, $0.473384 metered (balance delta; export $0.131383) + $0.40
+  GCE): a different-family model taking over pro's stalled b2 run with tools does not fix it; hypothesis falsified.**
+  - Setup: K3.1-pro and GLM-5.3 each got slice 35's observable trace to step 20, no developer prose, and the
+    remaining 10 steps on c3, through `run_task` (demo-only initial-messages seam; offline seam check 4/4).
+  - Results: K3.1-pro **0/2** accepted (rule ≥ 2/3; pro baseline 0/2; run 3 skipped). GLM-5.3 0/2 (exploratory).
+    0 builds in all 4 runs; 0/40 replies named the BL33 kernel setting.
+  - What happened: both models reproduced the reading stall (TF-A headers, SPD, toolchain). K3.1-pro run 2 decided
+    "rebuild" at step 30 without the setting, as pro did. In the tool loop both reason briefly (≤ 280 tokens) and
+    are valid, fast and cheap: K3.1 ≈ $0.004/step cached, GLM ≈ $0.0001/step; 0/40 truncations. So switching
+    changes who reads, not what is read. Build nothing.
+  - Accounting fault: 7 replies without `buyer_cost_micro` are absent from the usage export and from `recent_usage`;
+    the balance delta is recorded.
+  - **Surplus credit is $8.23, below the weekly cap**: it binds paid work.
+  - Evidence: `~/evidence/takeover-demo-2026-10-28/RESULTS.md`.
 - **C slice 35 (2026-10-28, harness fix + live re-measure, $0.001271 metered + $0.17 GCE): reasoning passback fixed;
   pro's b2 stall survives it (failed `step_cap`, n=1); hypothesis falsified.** Harness fault (MISSION c36f507):
   `run_task` now passes each assistant turn's `reasoning_content` back; regression test fails on the old loop. Live
@@ -241,12 +255,15 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. **Model-switching demo on the recorded stalls** (MISSION c36f507, 0290ed2): deterministic code flags a candidate stall,
-     Jev decides whether to intervene and whom to bring in, GLM/Kimi read the trace and correct **or take over the next
-     steps with tools**, then hand back; minimal developer prose. Slice 34 says advice alone is not enough (the make
-     line is missing) and that kimi-k3/glm-5.3 need a reasoning cap or a smaller context to answer at all; K3.1-pro
-     is the only measured catcher (2/5, expensive). Add a very cheap random-step inspector as Jev's fallback and to
-     measure Jev's miss rate. Candidates: `~/evidence/harness-survey-2026-10-28/`. Spec derivation follows the same
-     shape (slice 33 baseline; its 2 missing P samples when lab capacity allows). b2 target: slice 35's
-     reasoning-carrying trace, where pro dismisses the BL33 setting at step 24 (wrong belief, not lost context).
+  1. **Hypothesis-testing switch demo on the same trace** (MISSION c36f507, 0290ed2). Slices 34–36 show:
+     - advice without the make line fails (34);
+     - carried context fails (35);
+     - a plain model switch fails (36).
+     The only measured catch is K3.1-pro in a long-reasoning one-shot decision (2/5). Demo, on slice 35's step-20
+     prefix:
+     - Jev (`choice`: read more vs test a hypothesis) at the switch point;
+     - then a K3.1-pro one-shot plan of competing hypotheses, each with its cheapest executed test;
+     - then a cheap switch model (GLM-5.3 or pro) executing those tests with tools, with no developer prose beyond a
+       generic plan format.
+     Add the random cheap inspector to measure Jev's miss rate. Mind the Surplus credit ($8.23).
   2. Completion-gate run: `run12/task.txt` only, unattended from the clean snapshot on a fresh lab; then delete the c3 disk.
