@@ -71,5 +71,6 @@ Rate: n2d-standard-8 ≈ $0.338/h running (GCE list price, us-central1) + 100 GB
 | 2026-10-27 | `conflux-dev-lab-c3` | 16:02:24–16:35:13 | 0.55 | 0.19 | C slice 11 run c11 (b1, failed at the step cap, model fault); stopped, disk kept |
 | 2026-10-27 | `conflux-dev-lab-c3` | 22:37:58–23:10:03 | 0.53 | 0.18 | C slice 18 pro b1 run (failed at step cap); 2 starts 22:32Z/22:33Z failed on GCE stockouts ($0); stopped, disk kept (holds pro's b1 edits) |
 | 2026-10-27/28 | `conflux-dev-lab-c3` | 23:33:15–00:01:29 | 0.47 | 0.16 | C slice 19 harness-only b1a/b1b checks + flash b1b run (failed at step cap); stopped, disk kept (pro's edits + flash's build log) |
+| 2026-10-28 | `conflux-dev-lab-c3` | 00:08:10–00:10:23, 00:10:57–00:14:30 | 0.10 | 0.03 | C slice 19 critic round 1: revised b1a check harness-only (pro tree pass; config-only and stanza-only clones fail; try 1 clone refused by git ownership); stopped, disk kept |
 
-**GCE lab total: $2.30** (plus the c3 disk while it exists)
+**GCE lab total: $2.33** (plus the c3 disk while it exists)
