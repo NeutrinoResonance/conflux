@@ -11,6 +11,18 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **C slice 37 (2026-10-28, hypothesis-plan demo, $0.467867 metered (balance delta; export $0.359383) + $0 GCE): a
+  K3.1-pro one-shot "competing hypotheses, each with its cheapest test" plan on pro's b2 stall never tests the BL33
+  kernel setting; hypothesis falsified, stage 2 not run.**
+  - Setup: slice 35's observable trace to step 20, flattened, plus a generic request (no task-specific words). n=5.
+  - P1 (a test that builds TF-A with that setting = 1): **0/5** (4 valid, 1 truncated twice). Slice 34 (legacy
+    decider prompt, clipped slice-27 trace, so not a like-for-like baseline): 2/5. The rule (≥ 3/5) failed, and with 0 P1 plans the pro hand-back stage (lab) did not run.
+  - Post-hoc: **12/12 hypotheses come with an executable QEMU-boot test (0 pure reads)**. 4/4 plans include a U-Boot-as-BL33
+    control boot. 3/4 name the real mechanism (x0 not pointing at the DTB at kernel entry) and test it with a QEMU exec
+    trace or a gdb break at entry. 2/4 reconstruct a full TF-A make line from the trace. None maps x0 to the build setting.
+  - Demo accounting fault, fixed in-run: replies without cost were settled at list-ceiling bounds and blocked samples;
+    re-settled from the balance delta (amendments in `started.txt`).
+  - Evidence: `~/evidence/hypothesis-plan-demo-2026-10-28/RESULTS.md`.
 - **C slice 36 (2026-10-28, model-switch takeover demo, $0.473384 metered (balance delta; export $0.131383) + $0.40
   GCE): a different-family model taking over pro's stalled b2 run with tools does not fix it; hypothesis falsified.**
   - Setup: K3.1-pro and GLM-5.3 each got slice 35's observable trace to step 20, no developer prose, and the
@@ -255,15 +267,9 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. **Hypothesis-testing switch demo on the same trace** (MISSION c36f507, 0290ed2). Slices 34–36 show:
-     - advice without the make line fails (34);
-     - carried context fails (35);
-     - a plain model switch fails (36).
-     The only measured catch is K3.1-pro in a long-reasoning one-shot decision (2/5). Demo, on slice 35's step-20
-     prefix:
-     - Jev (`choice`: read more vs test a hypothesis) at the switch point;
-     - then a K3.1-pro one-shot plan of competing hypotheses, each with its cheapest executed test;
-     - then a cheap switch model (GLM-5.3 or pro) executing those tests with tools, with no developer prose beyond a
-       generic plan format.
-     Add the random cheap inspector to measure Jev's miss rate. Mind the Surplus credit ($8.23).
+  1. **Probe-and-replan demo on the same prefix** (slice 37's 4 valid plans). Conflux runs each plan's `test_commands`
+     verbatim on c3 as traced, capped runtime probes (no developer edits), returns the outputs to K3.1-pro for one
+     re-plan, and measures P1 on round 2. This tests "hypothesis → executed probe → revised hypothesis" before an
+     executor is involved. Then measure Jev / random-inspector triggers only if a correction works. Surplus credit is
+     **$7.76**: it binds paid work.
   2. Completion-gate run: `run12/task.txt` only, unattended from the clean snapshot on a fresh lab; then delete the c3 disk.
