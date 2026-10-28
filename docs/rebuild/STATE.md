@@ -11,7 +11,7 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
-- **C slice 33 (2026-10-28, demo, $0.001184 metered + $0.10 GCE): a pro planner given only `run12/task.txt` derives
+- **C slice 33 (2026-10-28, single-model baseline demo, $0.001184 metered + $0.10 GCE): a pro planner given only `run12/task.txt` derives
   none of the machine-specific spec; hypothesis unverified (1/3 probe samples, 2 lost to GCE stockouts).** Rubric of 17
   fixture items, pre-registered, hand-audited (regex in brackets): no probes (N) 7, 5, 5 (9, 7, 8); with ≤ 20 runtime
   probes on a fresh clean-snapshot lab (P0) 4 (7). 0/4 specs located the NetBSD project: no NetBSD tree, obj dir,
@@ -23,7 +23,7 @@ MISSION-STATUS: ACTIVE
     `devbox-lab up`'s boot disk behind, so every retry fails `already exists`; the disk is now deleted before a
     retry. `core.run_lab` does not retry, so it is unaffected.
   - Evidence: `~/evidence/spec-derivation-demo-2026-10-28/RESULTS.md` (`audit.md`; 19/19 export rows).
-- **C slice 32 (2026-10-28, demo, $0.002378 metered + $0.45 GCE): a fresh pro diagnostic sub-run with runtime probes
+- **C slice 32 (2026-10-28, single-model baseline demo (pro diagnosing pro; MISSION 6eafcd8), $0.002378 metered + $0.45 GCE): a fresh pro diagnostic sub-run with runtime probes
   does not produce the b2 correction: 0/3 grounded passes, hypothesis falsified.** This is a
   reachable-with-developer-written-spec instrument: the input is the fixture's b2 text plus slice 27's trace to step 20.
   c3 was reset to the slice-27 state (no-flag TF-A rebuilt, b2 check 2 fails, old job dirs archived and removed).
@@ -219,15 +219,15 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. **Work item D: a different model corrects the executor** (founder decision 2026-10-28, MISSION 6eafcd8). Reuse
-     or demo the legacy senate/critic/decider/verifier (`conflux-baseline-20261026`) first. A critic of another family
-     (Kimi K3/K3.1-pro, GLM-5.3, Jev decisions; Claude/Codex where the economics allow) reads the executor's trace and
-     turns its stated-but-untested hypothesis into an executed probe or a correction. Demo it on the recorded stalls
-     (b2 slice 27, b1 c10/c11/slice 18, b3 slice 31), with developer fixes as grading references only. Slices 28–32
-     (pro on pro) are its single-model baseline.
-  2. **Spec derivation, same structure:** a planner plus at least one critic of a different family. Slice 33 (pro
-     alone) is its single-model baseline; its 2 missing P samples run when lab capacity returns (≈ $0.001 + $0.20 GCE).
-     The critic's first target is slice 33's measured miss: probes went to a host census, not the task's named
-     project. Grade with slice 33's rubric and `demo.py` on fresh labs, and screen derived checks for vacuous
-     `|| echo`/`|| true` forms.
-  3. Completion-gate run: `run12/task.txt` only, unattended from the clean snapshot on a fresh lab; then delete the c3 disk.
+  1. **Work item D demo: a different model corrects and plans** (founder decision 2026-10-28, MISSION 6eafcd8). A
+     planner/executor plus at least one critic/corrector of a different family (Kimi K3/K3.1-pro, GLM-5.3, DeepSeek
+     pro/flash, Jev decisions; Claude/Codex where the economics allow). Roles are chosen by measured outcomes. Reuse or
+     demo the legacy senate/critic/decider/verifier (`conflux-baseline-20261026`) before writing new mechanisms.
+     - The recorded stalls are b2 slice 27, b1 c10/c11/slice 18 and b3 slice 31. The critic must turn the executor's
+       stated-but-untested hypothesis into an executed probe or a correction. Developer fixes are grading references
+       only. Slices 28–32 (pro on pro) are the single-model baseline.
+     - For spec derivation, the critic reviews the planner's plan and probe trace. Its first target is slice 33's
+       measured miss: probes went to a host census, not the task's named project. Grade with slice 33's rubric and
+       `demo.py` on fresh labs, and screen derived checks for vacuous `|| echo`/`|| true` forms. Slice 33 (pro alone)
+       is the baseline; its 2 missing P samples run when lab capacity returns (≈ $0.001 + $0.20 GCE).
+  2. Completion-gate run: `run12/task.txt` only, unattended from the clean snapshot on a fresh lab; then delete the c3 disk.
