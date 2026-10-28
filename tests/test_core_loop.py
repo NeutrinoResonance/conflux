@@ -1,5 +1,6 @@
 """Offline tests of the slice-1 execution loop in conflux/core.py (scripted provider responses)."""
 
+import dataclasses
 import json
 import os
 import shutil
@@ -644,6 +645,32 @@ def test_admission_bound_covers_the_top_output_list_price(tmp_path):
     _, trace = run(TOUCH, chat, tmp_path)
     mc = [e for e in trace.events if e["event"] == "model_call"][0]
     assert mc["bound_usd"] >= core.MAX_TOKENS * 1.2e-6  # deepseek-v4.1-flash, priciest seller, 2026-10-27
+
+
+def test_admission_bound_uses_the_executors_own_ceilings(tmp_path):
+    chat = Scripted(resp(call("run_shell", {"command": "echo yes > ok.txt"})), resp(call("finish", {})))
+    trace = Trace(tmp_path / "trace.jsonl")
+    task = dataclasses.replace(TOUCH, max_usd=1.0)  # pro's smallest bound (output alone, $0.062) exceeds 0.05
+    run_task(task, chat, core.local_shell(tmp_path / "work"), trace, Budget(1.0), model="deepseek-v4-pro")
+    mc = [e for e in trace.events if e["event"] == "model_call"][0]
+    assert mc["bound_usd"] >= core.MAX_TOKENS * 3.796e-6  # deepseek-v4-pro, priciest seller, 2026-10-27
+
+
+def test_an_executor_without_ceilings_is_refused_before_any_call(tmp_path, monkeypatch):
+    chat = Scripted()
+    with pytest.raises(KeyError):
+        run_task(TOUCH, chat, core.local_shell(tmp_path / "work"), Trace(tmp_path / "t.jsonl"), Budget(1.0),
+                 model="some-expensive-model")
+    assert chat.seen == []
+    monkeypatch.setattr(core, "load_key", lambda name: pytest.fail("key loaded"))
+    with pytest.raises(SystemExit):
+        core.main(["run", "--tasks", "t.json", "--out", str(tmp_path), "--model", "some-expensive-model"])
+
+
+def test_d1_git_global_options_keep_a_read_a_read():
+    row = {"event": "exec", "source": "model", "step": 1, "exit": 0, "stdout": "error: in file content\n"}
+    assert core.audit([{**row, "command": "git -C src -c safe.directory='*' log -1"}]) == []
+    assert len(core.audit([{**row, "command": "git -c user.name=x commit -m y"}])) == 1
 
 
 def test_lab_shell_rides_out_transient_poll_failures(lab):

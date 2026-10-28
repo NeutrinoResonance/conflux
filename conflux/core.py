@@ -58,8 +58,12 @@ EXPORT = "https://api.surplusintelligence.ai/v1/buyer/usage/export"
 
 MODEL = "deepseek-v4.1-flash"
 MAX_TOKENS = 8192          # flash reasoning tokens count against this; 2048 cut off 5 tool calls in c10
-PRICE_CEILING = 4e-7       # $/byte of request, admission bound: tokens <= bytes, > v4.1-flash's top input list rate ($3e-7/tok)
-OUTPUT_CEILING = 2.4e-6    # $/output token, admission bound: 2x v4.1-flash's top output list rate ($1.2e-6/tok)
+# Admission bounds per executor: ($/byte of request, $/output token). Tokens <= bytes, so a $/byte above the top input
+# list rate bounds input; output is 2x the top output list rate. An executor without an entry is refused (KeyError).
+CEILINGS = {
+    "deepseek-v4.1-flash": (4e-7, 2.4e-6),  # top list $0.3/M in, $1.2/M out
+    "deepseek-v4-pro": (2e-6, 7.6e-6),      # top list $1.73/M in, $3.796/M out (2026-10-27 /v1/prices, C slice 18)
+}
 CAMPAIGN_BUDGET = 50.00
 RUN_CAP = 0.20
 EXEC_TIMEOUT = 60
@@ -508,7 +512,7 @@ def _goal_text(task: Task) -> str:
 FAIL_TEXT = re.compile(r"(?im)^.*\b(error|failed|fatal|cannot|can't|no such file|not found|denied|"
                        r"undefined reference|traceback|exception|\*\*\*)\b.*$")
 READ_ONLY = re.compile(r"^(cat|head|tail|sed -n|less|grep|rg|ls|find|wc|stat|file|readlink|du|df|echo|pwd|which|"
-                       r"type|command -v|git (log|show|diff|status|branch|remote|rev-parse|ls-files)|"
+                       r"type|command -v|git( -[cC] \S+)* (log|show|diff|status|branch|remote|rev-parse|ls-files)|"
                        r"apt(-cache)? (search|show|list|policy)|dpkg (-l|-s|-L)|strings|od|xxd|hexdump|"
                        r"(\S*/)?([\w.]+-)*(objdump|readelf|nm))\b")
 
@@ -569,6 +573,7 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
     t0 = time.monotonic()
     steps = retries = 0
     cost = 0.0
+    price_ceiling, output_ceiling = CEILINGS[model]
     trace.write("task_start", task=task.id, model=model, max_steps=task.max_steps, max_usd=task.max_usd)
 
     def end(status: str, reason: str) -> dict:
@@ -596,7 +601,7 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
             return end("unverified", "lab_deadline")
         steps += 1
         request = {"model": model, "messages": messages, "tools": TOOLS, "max_tokens": MAX_TOKENS}
-        bound = len(json.dumps(request).encode()) * PRICE_CEILING + MAX_TOKENS * OUTPUT_CEILING
+        bound = len(json.dumps(request).encode()) * price_ceiling + MAX_TOKENS * output_ceiling
         # One retry when no HTTP response came back (transport error or timeout); each attempt is admitted and settled.
         for attempt in (1, 2):
             if cost + bound > task.max_usd:
@@ -876,6 +881,8 @@ def main(argv: list[str] | None = None) -> int:
             rows = [json.loads(line) for line in p.read_text().splitlines() if line.strip()]
             print(json.dumps({"trace": str(p), "findings": audit(rows)}))
         return 0
+    if a.cmd == "run" and a.model not in CEILINGS:
+        ap.error(f"no admission ceilings for {a.model!r}; add it to core.CEILINGS")
     key = load_key("surplus.key")
 
     if a.cmd == "reconcile":

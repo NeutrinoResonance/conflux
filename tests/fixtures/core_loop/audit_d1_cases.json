@@ -128,6 +128,22 @@
     "stdout": "The load address in optee header %p - %p is not in reserved area: %p - %p.\nParse optee image failed.\nOPTEE header parse error.\nNo OPTEE provided by BL2 boot loader, Booting device without OPTEE initialization. SMC`s destined for OPTEE will return SMC_UNK\nopteed_std\nopteed_fast\ncore/arch/arm/kernel/thread_optee_smc.c\n/firmware/optee\nlinaro,optee-tz\noptee_core",
     "stderr": ""
    }
+  },
+  {
+   "trace": "~/evidence/b1b-flash-run-2026-10-27/run/b1b-kernel-build/trace.jsonl",
+   "sha256": "406654139f70b5b3d2f1c6d3d694dcdc21d8d07f5d46d7bd1cca83f9745f6993",
+   "step": 2,
+   "expect": "none",
+   "why": "read-only chain; `git -c safe.directory=... diff` is a read, so the driver source quoting \"failed\" is file content (stdout cut to lines 112-121 of 153, around the hit)",
+   "row": {
+    "event": "exec",
+    "source": "model",
+    "step": 2,
+    "command": "cd /home/darrenhidalgo/netbsd-src && git -c safe.directory='*' diff; echo ==== ; cat sys/dev/fdt/optee.c",
+    "exit": 0,
+    "stdout": "\n\t/* Get OP-TEE revision */\n\tret = smccc_call(OPTEE_SMC_CALLS_REVISION, 0, 0, 0, 0, &r1, NULL, NULL, NULL);\n\tif (ret < 0) {\n\t\taprint_error_dev(self, \"CALLS_REVISION failed: %d\\n\", ret);\n\t\treturn;\n\t}\n\taprint_normal_dev(self, \"API revision: %d.%d\\n\",\n\t    (int)ret, (int)r1);\n",
+    "stderr": ""
+   }
   }
  ]
 }
