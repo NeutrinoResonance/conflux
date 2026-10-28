@@ -152,6 +152,12 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   2 steps in 3/5 recorded denials (s18, s20); slice 21 is the one stall. Evidence:
   `~/evidence/correction-continuation-demo-2026-10-28/RESULTS.md`.
 
+## `deepseek-v4-pro` reducing its own build output (C slice 24, slice 21's recorded job files)
+- **Weak: pipes long builds through `tail -N` / `grep … | head`, dropping the cause.** 6 of slice 21's 7 build.sh-as-`dev`
+  runs reduced the output in the command itself; the `Permission denied` lines (printed first) were gone before the
+  harness saw them. The 7th (stderr only, 4966 B) had them, and the old 4 KB tail cut them (harness fault, fixed).
+  Evidence: `~/evidence/tail-cut-check-2026-10-28/RESULTS.md`.
+
 ## Cheap baselines to beat
 - Keyword failure rule (`error|failed|fatal|…`): "did this command fail?" 23/30 (catches no silent failures,
   never false-alarms on writes); acceptance 14/16 by always saying pass. A model judge must beat this.
