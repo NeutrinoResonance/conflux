@@ -4,7 +4,8 @@ DeepSeek (Surplus chat, plain OpenAI `tools`) proposes shell actions. Determinis
 admits each call against the budget, checks each proposal against a permissive policy,
 executes it, and owns acceptance: the task's checks are shell commands the harness runs
 itself. Every model call's cost is the provider's `buyer_cost_micro`; when absent, the
-call is settled at its admission bound (`cost_kind: "bound"`). After a run, `reconcile`
+call is settled at its reported token usage times the executor's ceilings (`cost_kind:
+"usage_bound"`), or at its admission bound when usage is absent too (`"bound"`). After a run, `reconcile`
 matches the calls against the Surplus buyer usage export, the authoritative billed cost.
 
 Commands run through a `Shell`: `local_shell` (a subprocess in a workdir) or `lab_shell`
@@ -58,8 +59,12 @@ EXPORT = "https://api.surplusintelligence.ai/v1/buyer/usage/export"
 
 MODEL = "deepseek-v4.1-flash"
 MAX_TOKENS = 8192          # flash reasoning tokens count against this; 2048 cut off 5 tool calls in c10
-PRICE_CEILING = 4e-7       # $/byte of request, admission bound: tokens <= bytes, > v4.1-flash's top input list rate ($3e-7/tok)
-OUTPUT_CEILING = 2.4e-6    # $/output token, admission bound: 2x v4.1-flash's top output list rate ($1.2e-6/tok)
+# Admission bounds per executor: ($/byte of request, $/output token). Tokens <= bytes, so a $/byte above the top input
+# list rate bounds input; output is 2x the top output list rate. An executor without an entry is refused (KeyError).
+CEILINGS = {
+    "deepseek-v4.1-flash": (4e-7, 2.4e-6),  # top list $0.3/M in, $1.2/M out
+    "deepseek-v4-pro": (2e-6, 7.6e-6),      # top list $1.73/M in, $3.796/M out (2026-10-27 /v1/prices, C slice 18)
+}
 CAMPAIGN_BUDGET = 50.00
 RUN_CAP = 0.20
 EXEC_TIMEOUT = 60
@@ -165,6 +170,17 @@ def billed_cost(body: object) -> float | None:
     if isinstance(v, (int, float)) and not isinstance(v, bool):
         return v / 1e6
     return None
+
+
+def usage_bound(body: object, price_ceiling: float, output_ceiling: float) -> float | None:
+    """Upper bound on a call's charge from its reported usage (ceilings exceed the top list rates per token);
+    None without token counts. Pro omitted `buyer_cost_micro` on 7/27 calls in C slice 20: settled at the request
+    bound instead, they summed to $0.94 against $0.0007 billed and ended the task at `task_budget`."""
+    usage = body.get("usage") if isinstance(body, dict) else None
+    p, c = (usage.get("prompt_tokens"), usage.get("completion_tokens")) if isinstance(usage, dict) else (None, None)
+    if not all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in (p, c)):
+        return None
+    return p * price_ceiling + c * output_ceiling
 
 
 _PS_MARK = "__CONFLUX_PIPESTATUS="
@@ -508,7 +524,7 @@ def _goal_text(task: Task) -> str:
 FAIL_TEXT = re.compile(r"(?im)^.*\b(error|failed|fatal|cannot|can't|no such file|not found|denied|"
                        r"undefined reference|traceback|exception|\*\*\*)\b.*$")
 READ_ONLY = re.compile(r"^(cat|head|tail|sed -n|less|grep|rg|ls|find|wc|stat|file|readlink|du|df|echo|pwd|which|"
-                       r"type|command -v|git (log|show|diff|status|branch|remote|rev-parse|ls-files)|"
+                       r"type|command -v|git( -[cC] \S+)* (log|show|diff|status|branch|remote|rev-parse|ls-files)|"
                        r"apt(-cache)? (search|show|list|policy)|dpkg (-l|-s|-L)|strings|od|xxd|hexdump|"
                        r"(\S*/)?([\w.]+-)*(objdump|readelf|nm))\b")
 
@@ -569,6 +585,7 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
     t0 = time.monotonic()
     steps = retries = 0
     cost = 0.0
+    price_ceiling, output_ceiling = CEILINGS[model]
     trace.write("task_start", task=task.id, model=model, max_steps=task.max_steps, max_usd=task.max_usd)
 
     def end(status: str, reason: str) -> dict:
@@ -596,7 +613,7 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
             return end("unverified", "lab_deadline")
         steps += 1
         request = {"model": model, "messages": messages, "tools": TOOLS, "max_tokens": MAX_TOKENS}
-        bound = len(json.dumps(request).encode()) * PRICE_CEILING + MAX_TOKENS * OUTPUT_CEILING
+        bound = len(json.dumps(request).encode()) * price_ceiling + MAX_TOKENS * output_ceiling
         # One retry when no HTTP response came back (transport error or timeout); each attempt is admitted and settled.
         for attempt in (1, 2):
             if cost + bound > task.max_usd:
@@ -606,6 +623,8 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
             status, body, latency = chat(messages, TOOLS,
                                          timeout=None if deadline is None else deadline - time.monotonic())
             c, kind = billed_cost(body), "billed"
+            if c is None:
+                c, kind = usage_bound(body, price_ceiling, output_ceiling), "usage_bound"
             if c is None:
                 c, kind = bound, "bound"
             budget.settle(bound, c)
@@ -876,6 +895,8 @@ def main(argv: list[str] | None = None) -> int:
             rows = [json.loads(line) for line in p.read_text().splitlines() if line.strip()]
             print(json.dumps({"trace": str(p), "findings": audit(rows)}))
         return 0
+    if a.cmd == "run" and a.model not in CEILINGS:
+        ap.error(f"no admission ceilings for {a.model!r}; add it to core.CEILINGS")
     key = load_key("surplus.key")
 
     if a.cmd == "reconcile":

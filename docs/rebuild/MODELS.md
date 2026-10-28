@@ -119,6 +119,15 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   two-line fix at steps 36 and 40, but its 27 later commands were all reads that drifted to future sub-goal scope
   ("make it a proper driver": optee_msg, PTAs, shared memory). 0 source edits; $0.000040 billed.
 
+## `deepseek-v4-pro` repairing its own driver (C slice 20, lab c3, b1b, cut off at step 28 by a harness fault)
+- **Builds early and edits at once, but edits clumsily.** `build.sh` at step 13 (no sudo: Permission denied) and
+  step 15 (with sudo); at step 16 it compiled `optee.c` alone and read both `-Werror` errors; it began editing at step 17
+  (flash never did). Steps 17–26 were 6 scripted edit attempts (patch file, python line filters, `.bak` restores).
+  Step 27: "The approach is getting fragile. Let me just write the whole file cleanly." Unfinished (n=1).
+- **Omits `buyer_cost_micro` on some replies:** 7/27 (`chatcmpl-…` ids), none in the export or `recent_usage` 5 min
+  later. Billed $0.000670 for the other 20 (≈ $0.000034/call). Median 11.8 s, max 31 s.
+  Evidence: `~/evidence/pro-b1b-run-2026-10-28/RESULTS.md`.
+
 ## Cheap baselines to beat
 - Keyword failure rule (`error|failed|fatal|…`): "did this command fail?" 23/30 (catches no silent failures,
   never false-alarms on writes); acceptance 14/16 by always saying pass. A model judge must beat this.
