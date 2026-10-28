@@ -31,6 +31,15 @@ Only then set `MISSION-STATUS: COMPLETE` and open the promotion PR to `main`.
 
 ## Founder decisions (binding; newest first)
 
+- **2026-10-28 — Do not cap model output below what the model supports.** Output-token limits chosen for budget
+  admission (`core.MAX_TOKENS` 8192, demo `LEAD_MAX_TOKENS` 24000) have repeatedly cut answers off: slice 34 (26/29
+  truncated at 8192), slice 37 (plan 4 truncated twice), and slice 39's GLM preflight (4/8 single-layout calls hit
+  24000 with no answer). A truncated answer is a harness fault, not a model result. Every model call (executor, lead,
+  critic, planner) requests the model's own maximum output (its documented/provider limit, or omit `max_tokens` where
+  the provider then applies the model maximum). Spend is controlled by the run/demo money caps, settled on actual
+  billed cost (`buyer_cost_micro`, else the balance delta), never by shrinking the answer; admission must not refuse
+  or shrink a call because max_tokens x list price is large. Measurements taken with a binding cap are confounded
+  and are labelled so.
 - **2026-10-28 — Lead prompt layout: data first, request and goals last; one goal per turn.** Founder experience with
   the MoE models (GLM, Kimi, DeepSeek): the instruction and the goals to check belong at the END of the prompt, after
   the data, not before it. Shape: "Analyze this: <all previous activity and bookkeeping>", then "Do X with regard to
