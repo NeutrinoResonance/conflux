@@ -37,6 +37,7 @@ USD comes from provider responses or documented prices — never estimated silen
 | 2026-10-27 | Surplus chat | `deepseek-v4-pro` 16 calls ($0.000909), `glm-5.3` 7 ($0.000171), `kimi-k3` 7 ($0.000192) | 897465 | 11746 | 0.001272 | — | C slice 16 stronger-executor demo: one next reply per model on replayed c11/b1 prefixes (3 smoke + 27 outcome), no lab; 30/30 export-matched |
 | 2026-10-27 | Surplus chat | `deepseek-v4-pro` 40 calls | 1080051 | 25684 | 0.001838 | — | C slice 18 pro b1 run on lab c3 (failed at step cap; wrote driver, never built); 40/40 export-matched |
 | 2026-10-28 | Surplus chat | `deepseek-v4.1-flash` 40 calls | 938565 | 48317 | 0.000040 | — | C slice 19 b1b run on lab c3 (flash on pro's driver: built, 2 compile errors, never fixed; step cap); 40/40 export-matched (exports of 10-27 + 10-28) |
+| 2026-10-28 | Surplus chat | `deepseek-v4-pro` 27 calls | 537301 | 9131 | 0.000670 | — | C slice 20 pro b1b run on lab c3 (unverified `task_budget` at step 28: harness charged 7 no-cost calls at their bound); 20/27 export-matched, 7 without `buyer_cost_micro` absent from export and `recent_usage` at 01:01Z (unbilled so far) |
 
 C slice 1 rows are reconciled with the export by `python -m conflux.core reconcile` (`~/evidence/core-runs/2026-10-27-c1*/reconciled.json`;
 export total for 2026-10-27: 83 rows, $0.001372).
@@ -49,7 +50,7 @@ charge-bound estimates) are only admission-time bounds. They are replaced by bil
 $0.0108 Jev and $0.0207 rejected-request estimates were billed $0.000006 and $0. Account credit after these runs
 is $9.369476 (`/v1/buyer/me`).
 
-**Metered total: $0.032856** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
+**Metered total: $0.033526** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
 
 ## GCE lab VMs (week 2026-W44 cap $60)
 
@@ -72,5 +73,6 @@ Rate: n2d-standard-8 ≈ $0.338/h running (GCE list price, us-central1) + 100 GB
 | 2026-10-27 | `conflux-dev-lab-c3` | 22:37:58–23:10:03 | 0.53 | 0.18 | C slice 18 pro b1 run (failed at step cap); 2 starts 22:32Z/22:33Z failed on GCE stockouts ($0); stopped, disk kept (holds pro's b1 edits) |
 | 2026-10-27/28 | `conflux-dev-lab-c3` | 23:33:15–00:01:29 | 0.47 | 0.16 | C slice 19 harness-only b1a/b1b checks + flash b1b run (failed at step cap); stopped, disk kept (pro's edits + flash's build log) |
 | 2026-10-28 | `conflux-dev-lab-c3` | 00:08:10–00:10:23, 00:10:57–00:14:30 | 0.10 | 0.03 | C slice 19 critic round 1: revised b1a check harness-only (pro tree pass; config-only and stanza-only clones fail; try 1 clone refused by git ownership); stopped, disk kept |
+| 2026-10-28 | `conflux-dev-lab-c3` | 00:37:45–00:56:23 | 0.31 | 0.11 | C slice 20 harness-only b1a/b1b pre-check + pro b1b run (unverified `task_budget`, harness fault); stopped, disk kept (pro's partial repair + `optee.c.bak`) |
 
-**GCE lab total: $2.33** (plus the c3 disk while it exists)
+**GCE lab total: $2.44** (plus the c3 disk while it exists)

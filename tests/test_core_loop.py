@@ -1,6 +1,7 @@
 """Offline tests of the slice-1 execution loop in conflux/core.py (scripted provider responses)."""
 
 import dataclasses
+import itertools
 import json
 import os
 import shutil
@@ -107,13 +108,46 @@ def test_a_real_check_failure_beats_a_timeout(tmp_path):
     assert res["status"] == "failed"
 
 
-def test_missing_cost_settles_at_bound_and_continues(tmp_path):
+def test_missing_cost_settles_at_usage_bound_and_continues(tmp_path):
     chat = Scripted(resp(call("run_shell", {"command": "echo yes > ok.txt"}), micro=None),
                     resp(call("finish", {})))
     res, trace = run(TOUCH, chat, tmp_path)
     assert res["status"] == "accepted"
     first = [e for e in trace.events if e["event"] == "model_call"][0]
-    assert first["cost_kind"] == "bound" and first["cost_usd"] == first["bound_usd"] > 0
+    p, o = core.CEILINGS[core.MODEL]
+    assert first["cost_kind"] == "usage_bound" and first["cost_usd"] == pytest.approx(300 * p + 40 * o)
+    assert 0 < first["cost_usd"] < first["bound_usd"]
+
+
+def test_missing_cost_without_usage_settles_at_the_admission_bound(tmp_path):
+    status, body, lat = resp(call("run_shell", {"command": "echo yes > ok.txt"}))
+    chat = Scripted((status, {**body, "usage": None}, lat), resp(call("finish", {})))
+    res, trace = run(TOUCH, chat, tmp_path)
+    first = [e for e in trace.events if e["event"] == "model_call"][0]
+    assert res["status"] == "accepted" and first["cost_kind"] == "bound" and first["cost_usd"] == first["bound_usd"]
+
+
+def test_pro_calls_without_cost_do_not_exhaust_the_task_budget(tmp_path):
+    # Fault (C slice 20, lab c3, b1b): deepseek-v4-pro omitted buyer_cost_micro on 7 of 27 calls; each was settled at
+    # its request bound ($0.08-0.24), so $0.94 of the $1.00 task cap was charged for $0.0007 billed and the task
+    # ended `unverified task_budget` at step 28, mid-repair. Replays the recorded usage and request growth.
+    calls = json.loads((FIXTURES / "pro_b1b_missing_cost_calls.json").read_text())["calls"]
+    p = core.CEILINGS["deepseek-v4-pro"][0]
+    replies = [resp(call("run_shell", {"command": "true"}), micro=micro, prompt=prompt, completion=completion)
+               for prompt, completion, micro, _ in calls]
+    task = Task(id="pro", goal="g", checks=[Check("test -f ok.txt")], max_steps=40, max_usd=1.0)
+    chat = Scripted(*replies, resp(call("run_shell", {"command": "echo yes > ok.txt"})), resp(call("finish", {})))
+    grow = itertools.chain((round((nxt[3] - cur[3]) / p) for cur, nxt in zip(calls, calls[1:])), itertools.repeat(0))
+
+    def padded(messages, tools, timeout=None):
+        status, body, lat = chat(messages, tools, timeout)
+        body["choices"][0]["message"]["content"] = "x" * max(next(grow), 0)  # request bytes grow as recorded
+        return status, body, lat
+
+    res = run_task(task, padded, core.local_shell(tmp_path / "work"), Trace(tmp_path / "t.jsonl"), Budget(1.0),
+                   model="deepseek-v4-pro")
+    assert res["status"] == "accepted", res
+    assert res["cost_usd"] < 0.3  # 20 billed calls + 7 usage bounds (recorded bound sum: $0.94)
 
 
 def test_run_budget_refusal_is_unverified_and_makes_no_call(tmp_path):

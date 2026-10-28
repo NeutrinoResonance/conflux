@@ -4,7 +4,8 @@ DeepSeek (Surplus chat, plain OpenAI `tools`) proposes shell actions. Determinis
 admits each call against the budget, checks each proposal against a permissive policy,
 executes it, and owns acceptance: the task's checks are shell commands the harness runs
 itself. Every model call's cost is the provider's `buyer_cost_micro`; when absent, the
-call is settled at its admission bound (`cost_kind: "bound"`). After a run, `reconcile`
+call is settled at its reported token usage times the executor's ceilings (`cost_kind:
+"usage_bound"`), or at its admission bound when usage is absent too (`"bound"`). After a run, `reconcile`
 matches the calls against the Surplus buyer usage export, the authoritative billed cost.
 
 Commands run through a `Shell`: `local_shell` (a subprocess in a workdir) or `lab_shell`
@@ -169,6 +170,17 @@ def billed_cost(body: object) -> float | None:
     if isinstance(v, (int, float)) and not isinstance(v, bool):
         return v / 1e6
     return None
+
+
+def usage_bound(body: object, price_ceiling: float, output_ceiling: float) -> float | None:
+    """Upper bound on a call's charge from its reported usage (ceilings exceed the top list rates per token);
+    None without token counts. Pro omitted `buyer_cost_micro` on 7/27 calls in C slice 20: settled at the request
+    bound instead, they summed to $0.94 against $0.0007 billed and ended the task at `task_budget`."""
+    usage = body.get("usage") if isinstance(body, dict) else None
+    p, c = (usage.get("prompt_tokens"), usage.get("completion_tokens")) if isinstance(usage, dict) else (None, None)
+    if not all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in (p, c)):
+        return None
+    return p * price_ceiling + c * output_ceiling
 
 
 _PS_MARK = "__CONFLUX_PIPESTATUS="
@@ -611,6 +623,8 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
             status, body, latency = chat(messages, TOOLS,
                                          timeout=None if deadline is None else deadline - time.monotonic())
             c, kind = billed_cost(body), "billed"
+            if c is None:
+                c, kind = usage_bound(body, price_ceiling, output_ceiling), "usage_bound"
             if c is None:
                 c, kind = bound, "bound"
             budget.settle(bound, c)

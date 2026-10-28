@@ -6,7 +6,16 @@ evidence `RESULTS.md` and in the PR that landed it (`git log`); measured model b
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred
-  to E); B done. Goal (a) a1–a4 each model-accepted (not yet as one run); goal (b) b1a's check passes on pro's slice-18 edits; b1b not accepted.
+  to E); B done. Goal (a) a1–a4 each model-accepted (not yet as one run); goal (b) b1a's check passes on pro's slice-18 edits; b1b not accepted (pro's repair cut off, slice 20).
+- **C slice 20 (2026-10-28, run + harness fixes, $0.000670 metered + $0.11 GCE): pro's b1b repair cut off by a
+  harness fault.** Harness: per-model admission ceilings `core.CEILINGS` (flash; pro 2e-6/7.6e-6; unknown model
+  refused before any call); D1 now treats `git -c/-C … diff|log|…` as a read (slice-19 step-2 false positive, fixture
+  case). Live b1b, pro, c3 (pre-check b1a pass, b1b fail): `unverified task_budget` at step 28. Pro built at step 15
+  (flash: 25), read both errors at 16, and edited from step 17 (6 fragile scripted edits; step 27: "write the whole
+  file cleanly"). **Harness fault:** 7/27 pro replies had no `buyer_cost_micro` (not in the export either). Each was
+  settled at its request bound ($0.08–0.24), $0.94 charged for $0.0007 billed. Fix: settle at usage × ceilings
+  (`usage_bound`); a regression test replays the 27 recorded calls (old code: `task_budget` at step 28). The hypothesis
+  is untested, not falsified. Evidence: `~/evidence/pro-b1b-run-2026-10-28/RESULTS.md`.
 - **C slice 19 (2026-10-28, demo + fixture, $0.000040 metered + $0.19 GCE): b1 split; flash builds pro's driver but
   never fixes it.** Fixture: `b1-driver-build` → `b1a-driver-source` + `b1b-kernel-build` (b1a's check + the build
   check). b1a's check needs a `files*` stanza (`device optee`, `attach optee at fdt`, `file <x>.c … optee`) whose
@@ -86,10 +95,8 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. Per-model admission ceilings in `core.py` (slice 18 numbers: pro 2e-6 $/byte, 7.6e-6 $/token), then one b1b run
-     with `deepseek-v4-pro` on c3 as now (bounded repair of 2 known compile errors; reproducible in 79 s). Do not
-     reset `sys/` first.
-  2. Fix the D1 false positive (read-only `;` chain whose output quotes "failed") with a regression test from the
-     slice 19 step 2 trace row.
-  3. For the completion gate, run a1→a4 then b1a→b3 unattended from the clean snapshot on a fresh lab, then delete
-     the c3 disk. Executor per sub-goal is now an open measured choice (flash on a1–a4, pro on b1a so far).
+  1. Rerun b1b with `deepseek-v4-pro` on c3 under the `usage_bound` fix (`--cap 1.0`, b1b `max_usd` 1.00). The run's
+     setup restores `sys/dev/fdt/optee.c` from pro's `optee.c.bak` (the 2-error slice-18 driver) and removes the
+     `.bak`. Same hypothesis: pro fixes the 2 errors and the GENERIC64 build passes within 40 steps.
+  2. For the completion gate, run a1→a4 then b1a→b3 unattended from the clean snapshot on a fresh lab, then delete
+     the c3 disk. Executor per sub-goal is an open, measured choice (flash on a1–a4, pro on b1a so far).

@@ -101,7 +101,9 @@ gcloud compute instances stop  conflux-dev-worker-1 --zone us-central1-a
 - Current per-seller offers: `GET https://api.surplusintelligence.ai/v1/prices` (same key; `models[].providers[].pricing`
   in $/M tokens). List price ≠ billed: v4.1-flash lists above v4-flash, but it billed < 1 micro-USD per call on 2026-10-27.
   `deepseek-v4-pro` offers on 2026-10-27: $0.875–1.73/M in, $1.75–3.80/M out (billed ≈ $0.000046/call in C slice 18).
-  `core.PRICE_CEILING`/`OUTPUT_CEILING` are v4.1-flash bounds; another executor needs its own (slice 18 set 2e-6/7.6e-6 in a wrapper).
+  Admission bounds are per executor in `core.CEILINGS` (v4.1-flash 4e-7 $/byte, 2.4e-6 $/out-token; pro 2e-6, 7.6e-6);
+  a model without an entry is refused before any call. Pro's per-call bound is ≥ $0.062, so pro tasks need `max_usd` ≫ 0.15.
+  A reply without `buyer_cost_micro` (pro: 7/27 in C slice 20) is settled at its usage × ceilings (`usage_bound`).
 - Executed capability matrix: `docs/rebuild/PROVIDERS.md`.
 - Measured model strengths/weaknesses with examples: `docs/rebuild/MODELS.md` (append new findings there).
 
