@@ -31,6 +31,15 @@ Only then set `MISSION-STATUS: COMPLETE` and open the promotion PR to `main`.
 
 ## Founder decisions (binding; newest first)
 
+- **2026-10-28 — Conflux must produce its own corrections; this is the point of the endeavor and the top
+  priority.** A sub-goal passed with a developer-authored intervention (a recipe, correction, diagnosis or
+  injected message written by Claude/Codex during development, e.g. slice 30's b2 correction M, whose recipe came
+  from the developer's slice-27 diagnosis) is **not done**: it shows the task is reachable, not that Conflux can
+  reach it. Before running further sub-goals with developer help, make Conflux generate the missing correction at
+  runtime from its own trace and its own executed probes (e.g. a stronger model, critic or diagnostic sub-run
+  triggered by a measured stall), demonstrated first on the recorded stalls (b2 slice 27, b1 over-reading in
+  c10/c11/slice 18) per the demo rule, then live. The developer's role is to build that capability, never to hand
+  the executor the answer. Developer-found recipes are grading references only.
 - **2026-10-27 — Demo first for any conjectured change to how Conflux uses agents.** This covers new
   mechanisms (detectors, classifiers, supervision or review layers), model or route choices, prompts,
   policies, panel/critic/decider wiring and loop changes, whether a developer or Conflux itself proposes
