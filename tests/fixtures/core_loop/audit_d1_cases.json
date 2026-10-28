@@ -200,6 +200,23 @@
     ],
     "failed_cmds": 2
    }
+  },
+  {
+   "trace": "~/evidence/pro-b1b-b2-c3-2026-10-28/run/b1b-kernel-build/trace.jsonl",
+   "sha256": "8e8ad8c659b4440839223f844ce03c54abd3d6ad52e84fd97a80279799fc00be",
+   "step": 27,
+   "expect": "none",
+   "why": "successful build.sh (pipestatus [0, 0], failed_cmds 0): its banner line `MAKECONF file: /etc/mk.conf (File not found)` is informational (stdout cut to lines 38-42 and the last 3 of 51)",
+   "row": {
+    "event": "exec",
+    "source": "model",
+    "step": 27,
+    "command": "cd /home/darrenhidalgo && TOOLDIR=/home/darrenhidalgo/netbsd-obj/tooldir.Linux-6.1.0-50-cloud-amd64-x86_64 && /home/darrenhidalgo/netbsd-src/build.sh -m evbarm -a aarch64 -U -O /home/darrenhidalgo/netbsd-obj -T $TOOLDIR kernel=GENERIC64 2>&1 | tail -50",
+    "exit": 0,
+    "failed_cmds": 0,
+    "stdout": "\t Build platform:      Linux 6.1.0-54-cloud-amd64 x86_64\n\t HOST_SH:             /usr/bin/sh\n\t MAKECONF file:       /etc/mk.conf (File not found)\n\t TOOLDIR path:        /home/darrenhidalgo/netbsd-obj/tooldir.Linux-6.1.0-50-cloud-amd64-x86_64\n\t DESTDIR path:        /home/darrenhidalgo/netbsd-obj/destdir.evbarm\n\t  /home/darrenhidalgo/netbsd-obj/sys/arch/evbarm/compile/GENERIC64/netbsd\n\t build.sh ended:      Wed Oct 28 04:29:49 UTC 2026\n===> .",
+    "stderr": ""
+   }
   }
  ]
 }
