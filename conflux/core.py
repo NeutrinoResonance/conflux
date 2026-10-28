@@ -670,7 +670,10 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
         if not isinstance(msg, dict):
             return end("unverified", f"provider_{status}")
         calls = msg.get("tool_calls") or []
+        reasoning = msg.get("reasoning_content")
+        # DeepSeek needs its reasoning passed back on every later turn of a tool-call loop (MISSION c36f507).
         messages.append({"role": "assistant", "content": msg.get("content") or "",
+                         **({"reasoning_content": reasoning} if isinstance(reasoning, str) and reasoning else {}),
                          **({"tool_calls": calls} if calls else {})})
         truncated = _truncated(body)
         finished = not calls and not truncated
