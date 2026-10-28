@@ -31,6 +31,15 @@ Only then set `MISSION-STATUS: COMPLETE` and open the promotion PR to `main`.
 
 ## Founder decisions (binding; newest first)
 
+- **2026-10-28 — Conflux gets from the founder's task text to the spec itself.** The completion run's only
+  task input is `~/evidence/optee-ctl-runs/run12/task.txt` verbatim (plus the machine itself). Everything the
+  developer has been writing into fixtures — sub-goal decomposition, file and tree locations, build commands and
+  flags, design choices (SMC, FDT attach, device name), boot command lines, what counts as proof — must be produced
+  by Conflux at runtime (planning, criticism, runtime probes as defined below), not supplied. The developer-written
+  sub-goal fixtures (`optee_goal_a.json`, `optee_goal_b.json`) and their checks remain grading references and
+  test instruments only; a sub-goal accepted under them shows reachability, not progress toward the gate. The
+  rebuild's measure of progress is how much of that spec Conflux now produces itself, demonstrated first on the
+  recorded runs (old runs 4–12 and slices 10–30 show where agents got lost without it), then live.
 - **2026-10-28 — Conflux must produce its own corrections; this is the point of the endeavor and the top
   priority.** A sub-goal passed with a developer-authored intervention (a recipe, correction, diagnosis or
   injected message written by Claude/Codex during development, e.g. slice 30's b2 correction M, whose recipe came
