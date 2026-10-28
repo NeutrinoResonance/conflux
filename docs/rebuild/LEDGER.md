@@ -78,5 +78,6 @@ Rate: n2d-standard-8 ≈ $0.338/h running (GCE list price, us-central1) + 100 GB
 | 2026-10-28 | `conflux-dev-lab-c3` | 00:08:10–00:10:23, 00:10:57–00:14:30 | 0.10 | 0.03 | C slice 19 critic round 1: revised b1a check harness-only (pro tree pass; config-only and stanza-only clones fail; try 1 clone refused by git ownership); stopped, disk kept |
 | 2026-10-28 | `conflux-dev-lab-c3` | 00:37:45–00:56:23 | 0.31 | 0.11 | C slice 20 harness-only b1a/b1b pre-check + pro b1b run (unverified `task_budget`, harness fault); stopped, disk kept (pro's partial repair + `optee.c.bak`) |
 | 2026-10-28 | `conflux-dev-lab-c3` | 01:17:18–01:46:17 | 0.48 | 0.16 | C slice 21 restore + harness-only pre-check + pro b1b rerun (failed step_cap); stopped, disk kept (2-error driver, no `.bak`) |
+| 2026-10-28 | `conflux-dev-lab-c3` | 02:31:18–02:33:25 | 0.04 | 0.01 | C slice 24 harness-only read of slice 21's job files (4 KB tail cut step 12's `Permission denied`); stopped, disk kept |
 
-**GCE lab total: $2.60** (plus the c3 disk while it exists)
+**GCE lab total: $2.61** (plus the c3 disk while it exists)

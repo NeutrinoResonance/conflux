@@ -79,7 +79,8 @@ LAB_ZONE = "us-central1-a"
 LAB_PREFIX = "conflux-dev-lab-"
 LAB_PROXY_PORT = 3128
 TUNNEL_RESTART_S = 5
-TAIL = 4096
+TAIL = 4096               # output returned per stream: its first HEAD and last TAIL - HEAD bytes
+HEAD = 1024               # build tools print the cause (e.g. `Permission denied`) first, the summary last
 MAX_COMMAND = 8192
 MATCH_WINDOW_S = 120
 
@@ -95,7 +96,8 @@ TOOLS = [
     {"type": "function", "function": {
         "name": "run_shell",
         "description": "Run one bash command in the workspace and return exit code, stdout and stderr "
-                       "(last 4 KB each). timeout_s defaults to 60; use up to 10800 for long jobs.",
+                       "(each up to 4 KB; longer output keeps its first 1 KB and last 3 KB around a "
+                       "'[... N bytes omitted ...]' line). timeout_s defaults to 60; use up to 10800 for long jobs.",
         "parameters": {"type": "object", "properties": {"command": {"type": "string"},
                                                         "timeout_s": {"type": "integer"}},
                        "required": ["command"], "additionalProperties": False}}},
@@ -195,6 +197,9 @@ PIPEFAIL = ("set -o pipefail\n"
             f"printf \"failed=%s\\n\" \"$__nf\"; }} >&2' EXIT\n")
 
 
+_OMIT = "\n[... %d bytes omitted ...]\n"
+
+
 def _wrap(command: str) -> str:
     return PIPEFAIL + command
 
@@ -208,13 +213,23 @@ def _split_pipestatus(stderr: str) -> tuple[str, list[int] | None, int | None]:
     return stderr[:m.start()], [int(x) for x in m[1].split()], int(m[2])
 
 
+def _clip(text: str) -> str:
+    """`text` if its UTF-8 fits in TAIL bytes, else its first HEAD and last TAIL - HEAD bytes around an
+    omission marker, like `lab_shell`'s head/tail (a character cut at either edge becomes U+FFFD)."""
+    b = text.encode()
+    if len(b) <= TAIL:
+        return text
+    return (b[:HEAD].decode(errors="replace") + _OMIT % (len(b) - TAIL)
+            + b[-(TAIL - HEAD):].decode(errors="replace"))
+
+
 def execute(command: str, workdir: Path, timeout: float = EXEC_TIMEOUT) -> dict:
     t0 = time.monotonic()
     try:
         p = subprocess.run(["bash", "-c", _wrap(command)], cwd=workdir, capture_output=True,
                            text=True, errors="replace", timeout=timeout)
         stderr, ps, nf = _split_pipestatus(p.stderr)
-        out = {"exit": p.returncode, "stdout": p.stdout[-TAIL:], "stderr": stderr[-TAIL:],
+        out = {"exit": p.returncode, "stdout": _clip(p.stdout), "stderr": _clip(stderr),
                "pipestatus": ps, "failed_cmds": nf, "timed_out": False}
     except subprocess.TimeoutExpired:
         out = {"exit": None, "stdout": "", "stderr": "", "pipestatus": None, "failed_cmds": None,
@@ -415,7 +430,10 @@ def lab_shell(remote: Callable[[str], list[str]], workdir: str, deadline: float 
         tails, unavailable = {}, []
         for stream in ("stdout", "stderr"):
             f = "out" if stream == "stdout" else "err"
-            q = call(f'd={d}; tail -c {TAIL} "$d/{f}" 2>/dev/null; true', collect_by)
+            q = call(f'd={d}; f="$d/{f}"; n=$(wc -c 2>/dev/null <"$f") || n=0; '
+                     f'if [ "$n" -le {TAIL} ]; then cat "$f" 2>/dev/null; else head -c {HEAD} "$f"; '
+                     f'printf {shlex.quote(_OMIT)} $((n - {TAIL})); tail -c {TAIL - HEAD} "$f"; fi; true',
+                     collect_by)
             tails[stream] = q.stdout if q else ""
             if q is None:
                 unavailable.append(stream)

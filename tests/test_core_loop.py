@@ -1144,3 +1144,28 @@ def test_transport_failure_past_the_deadline_is_not_retried(tmp_path):
 
 def test_chat_timeout_covers_measured_latency():
     assert core.CHAT_TIMEOUT >= 713  # slowest measured flash reply (headroom demo, 2026-10-27)
+
+
+@pytest.mark.parametrize("redirect", ["", ">&2"])
+def test_long_output_keeps_its_head_where_the_cause_is(any_shell, redirect):
+    """C slice 21 step 12 (recorded job output, 4966 B): build.sh's `Permission denied` lines come first, so
+    the old last-4096-bytes view returned only the cleandir failure summary and the model never saw the cause."""
+    f = FIXTURES / "s21_step12_build_out.txt"
+    r = any_shell(f"cat '{f}' {redirect}", 10)
+    text = r["stderr" if redirect else "stdout"]
+    marker = core._OMIT % (f.stat().st_size - core.TAIL)  # lab stderr also omits its PIPESTATUS bytes
+    assert "Permission denied" in text and text.endswith("EXIT: 1\n") and "bytes omitted" in text
+    assert len(text) <= core.TAIL + len(marker)
+
+
+def test_output_that_fits_is_returned_whole(any_shell):
+    r = any_shell(f"head -c {core.TAIL} /dev/zero | tr '\\0' x", 10)
+    assert r["stdout"] == "x" * core.TAIL
+
+
+def test_long_non_ascii_output_is_clipped_by_bytes(any_shell):
+    """5000 x `é` is 10000 UTF-8 bytes: 5904 omitted, at most TAIL content bytes kept, on both paths."""
+    r = any_shell("printf '%.0sé' $(seq 5000)", 10)
+    marker = core._OMIT % (10000 - core.TAIL)
+    head, sep, tail = r["stdout"].partition(marker)
+    assert sep and head == "é" * (core.HEAD // 2) and tail == "é" * ((core.TAIL - core.HEAD) // 2)
