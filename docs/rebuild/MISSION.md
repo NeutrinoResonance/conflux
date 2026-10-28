@@ -31,6 +31,18 @@ Only then set `MISSION-STATUS: COMPLETE` and open the promotion PR to `main`.
 
 ## Founder decisions (binding; newest first)
 
+- **2026-10-28 — The other model is asked to lead, not to fill a form; Jev comes later.** Slices 34–37 gave Kimi/GLM
+  the developer-written b2 sub-goal, a stalled step-20 trace, and a fixed question ("up to 3 competing hypotheses,
+  JSON"), or dropped them into the stalled conversation with 10 steps left. That imposes structure too early and
+  under-uses the resources at hand (founder: "a piss poor result given the abundant resources"). Instead the
+  other model gets the previous activity plus the run's bookkeeping (the goal list derived from `task.txt`, progress
+  recorded so far, claims made) and an open request of the form "look at where we are on the goal list, update
+  progress, provide next steps". It decides for itself whether the problem is one bug, a wrong plan, or a false
+  progress claim. No developer-chosen answer shape beyond what the harness needs to parse. The goal list and
+  progress are kept and revised by the models, which is also how the spec is derived from `task.txt`. Jev (deciding
+  *when* to call this) is an optimization: first show that calling the other model regularly helps on the real
+  task, then add Jev and the random cheap inspector to cut cost. Measure on the full `task.txt` run, at a scale the
+  cheap models allow (GLM ≈ $0.0001/step), not n=2 on one developer-written sub-goal.
 - **2026-10-28 — Correction is model switching, with as few hardcoded prompts as possible.** Prefer changing *who*
   acts over writing *what to say*. The intended shape: deterministic code detects a candidate stall from the trace;
   Jev (`/v1/decisions`) decides whether to intervene and whom to bring in; GLM, Kimi, or both, read the executor's
