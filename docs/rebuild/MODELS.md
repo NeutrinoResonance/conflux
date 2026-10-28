@@ -179,6 +179,12 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   in x0, the right question at the cap. Greps for `ARM_LINUX_KERNEL` in OP-TEE's build files find nothing (qemu_v8.mk
   does not set it). Evidence: `~/evidence/pro-b2-c3-2026-10-28/RESULTS.md`.
 
+## `deepseek-v4-pro` under a b2 correction (C slice 28, one next reply on slice 27's step-20 prefix)
+- **Adopts the correction; acts on it only after it rediscovers the build recipe.** With the correction, 5/5 replies
+  plan the flagged TF-A rebuild and 0/5 run it: all 5 first look for the cross-compiler and the original make flags,
+  because slice 26's make line is not in this session. Without it (control), 4/5 already name `ARM_LINUX_KERNEL_AS_BL33`
+  in their reasoning, yet 4/5 keep reading TF-A hand-off code. Evidence: `~/evidence/b2-correction-demo-2026-10-28/RESULTS.md`.
+
 ## Cheap baselines to beat
 - Keyword failure rule (`error|failed|fatal|…`): "did this command fail?" 23/30 (catches no silent failures,
   never false-alarms on writes); acceptance 14/16 by always saying pass. A model judge must beat this.

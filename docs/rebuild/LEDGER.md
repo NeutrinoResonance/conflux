@@ -44,6 +44,7 @@ USD comes from provider responses or documented prices — never estimated silen
 | 2026-10-28 | Surplus chat | `deepseek-v4-pro` 40 calls | 788286 | 10861 | 0.001667 | — | C slice 25 pro b1b rerun on lab c3 under head+tail output (failed step_cap; fixed ownership + both errors, rewrite broke an include); 40/40 export-matched |
 | 2026-10-28 | Surplus chat | `deepseek-v4-pro` 61 calls | 1272979 | 33670 | 0.001540 | — | C slice 26 pro on lab c3: b1b continuation (accepted, 31 calls) then b2 (failed step_cap, 30 calls); 48/61 export-matched, 13 b1b replies without `buyer_cost_micro` absent from the export at 05:10Z (unbilled so far) |
 | 2026-10-28 | Surplus chat | `deepseek-v4-pro` 30 calls | 791934 | 46488 | 0.001710 | — | C slice 27 pro b2 continuation on lab c3 (failed step_cap, 0 builds); 30/30 export-matched |
+| 2026-10-28 | Surplus chat | `deepseek-v4-pro` 10 calls | 353765 | 10845 | 0.000423 | — | C slice 28 b2 correction replay demo (slice 27 prefix, K=20, 5 control + 5 correction); 10/10 export-matched; no lab |
 
 C slice 1 rows are reconciled with the export by `python -m conflux.core reconcile` (`~/evidence/core-runs/2026-10-27-c1*/reconciled.json`;
 export total for 2026-10-27: 83 rows, $0.001372).
@@ -56,7 +57,7 @@ charge-bound estimates) are only admission-time bounds. They are replaced by bil
 $0.0108 Jev and $0.0207 rejected-request estimates were billed $0.000006 and $0. Account credit after these runs
 is $9.369476 (`/v1/buyer/me`).
 
-**Metered total: $0.040492** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
+**Metered total: $0.040915** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
 
 ## GCE lab VMs (week 2026-W44 cap $60)
 

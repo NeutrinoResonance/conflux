@@ -9,7 +9,15 @@ MISSION-STATUS: ACTIVE
   to E); B done. Goal (a): a1–a4 each model-accepted, but not yet in one run. Goal (b): b1a's check passes on pro's
   slice-18 edits; **b1b model-accepted on c3 (slice 26)** after slices 20–25 removed the harness faults (no-cost
   settlement, 4 KB tail cut) and pro cleared the ownership stall; b2 not accepted (slices 26–27: NetBSD silent as BL33;
-  the cause, a missing `ARM_LINUX_KERNEL_AS_BL33=1`, is verified harness-only).
+  the cause, a missing `ARM_LINUX_KERNEL_AS_BL33=1`, is verified harness-only; slice 28: a correction is adopted but
+  not acted on in one step).
+- **C slice 28 (2026-10-28, replay demo, $0.000423 metered + $0 GCE): pro adopts a grounded b2 correction but does
+  not build in the next step; the rule is not passed at 1 step (2-step outcome unmeasured).** Slice 27 prefix at
+  K=20 (symptom confirmed), pro, n=5 per arm; replay exact (35,233 prompt tokens = recorded). Flagged TF-A build in
+  the next reply: control 0/5, correction 0/5. All 5 correction replies plan the flagged rebuild in their reasoning,
+  then look for the cross-compiler and the original make flags. Slice 26's make line is not in this session. Control
+  names the flag in its reasoning in 4/5 draws, yet 4/5 keep reading TF-A hand-off code (= slice 27's
+  over-diagnosis). No live b2. Evidence: `~/evidence/b2-correction-demo-2026-10-28/RESULTS.md`.
 - **C slice 27 (2026-10-28, diagnosis + run, $0.001710 metered + $0.32 GCE): the BL33 cause is verified; pro's b2
   continuation fails at the step cap again (2nd identical b2 failure).** Pre-check b1a pass, b1b pass, b2 fail.
   - Harness-only: two out-of-tree TF-A builds with pro's slice-26 flags, booted 150 s each. Without
@@ -160,13 +168,11 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. b2 has failed twice identically, so no third plain rerun. Run a grounded-correction demo on slice 27's recorded
-     trace (slices 22–23 pattern; ≈ $0.001, $0 GCE). Replay the b2 prefix after the symptom is confirmed (≈ step 20)
-     and sample pro's next replies, n=5 per arm: control vs a correction with the requirement (NetBSD banner on serial0),
-     the evidence (serial0 stops after BL31; slice 27's `flag` arm boots) and the action (rebuild TF-A with
-     `ARM_LINUX_KERNEL_AS_BL33=1`, copy `qemu_fw.bios`). Pre-registered rule: a flagged TF-A build within 2 steps in
-     ≥ 4/5 correction draws and ≤ 1/5 control draws. Run live b2 only if the rule passes. Where the correction comes
-     from (a stronger model or deterministic evidence) is a later, separate demo.
+  1. Measure the 2-step window that slice 28 could not (slice 23 pattern, ≈ $0.0005 + ≈ 0.2 lab h on c3). Execute
+     each slice-28 correction draw's recorded read commands on c3 (harness-only), feed the real outputs back, and
+     sample one more pro reply (3 draws per sample). Apply the same rule: a flagged TF-A build by step 2 in ≥ 4/5
+     samples. If that fails, add an arm whose correction carries slice 27's verified make line (`diag.json`). Run
+     live b2 only after a passing arm. Where the correction comes from is a later, separate demo.
   2. For the completion gate, run a1→a4 then b1a→b3 unattended from the clean snapshot on a fresh lab (ownership
      friction returns there: snapshot trees are darrenhidalgo's), then delete the c3 disk. Executor per sub-goal is an
      open, measured choice (flash on a1–a4, pro on b1a/b1b/b2 so far).
