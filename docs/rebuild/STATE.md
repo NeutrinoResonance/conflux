@@ -219,13 +219,15 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. **Spec derivation, continued** (founder decision 2026-10-28): run slice 33's 2 missing P samples when lab capacity
-     returns (≈ $0.001 + $0.20 GCE). Then demo arm P': the same planner plus one generic, task-agnostic probe policy,
-     "before planning, locate on this machine every project, tree or artifact the task names". Grade it against P
-     on fresh labs with the same rubric and `demo.py`. Build a planner stage only if the numbers support it.
-     Derived checks must be screened for vacuous `|| echo`/`|| true` forms before any acceptance use.
-  2. Self-correction (founder decision 2026-10-28) stays open. Slices 28–32 show pro (as executor or as a
-     diagnostician) names the fix and does not test it. Next factor to change: a different diagnostician model, or a
-     structure that forces each stated hypothesis into an executed experiment. Demo it on the recorded stalls (b2 slice
-     27, b1 c10/c11/slice 18, b3 slice 31), with developer fixes as grading references only.
+  1. **Work item D: a different model corrects the executor** (founder decision 2026-10-28, MISSION 6eafcd8). Reuse
+     or demo the legacy senate/critic/decider/verifier (`conflux-baseline-20261026`) first. A critic of another family
+     (Kimi K3/K3.1-pro, GLM-5.3, Jev decisions; Claude/Codex where the economics allow) reads the executor's trace and
+     turns its stated-but-untested hypothesis into an executed probe or a correction. Demo it on the recorded stalls
+     (b2 slice 27, b1 c10/c11/slice 18, b3 slice 31), with developer fixes as grading references only. Slices 28–32
+     (pro on pro) are its single-model baseline.
+  2. **Spec derivation, same structure:** a planner plus at least one critic of a different family. Slice 33 (pro
+     alone) is its single-model baseline; its 2 missing P samples run when lab capacity returns (≈ $0.001 + $0.20 GCE).
+     The critic's first target is slice 33's measured miss: probes went to a host census, not the task's named
+     project. Grade with slice 33's rubric and `demo.py` on fresh labs, and screen derived checks for vacuous
+     `|| echo`/`|| true` forms.
   3. Completion-gate run: `run12/task.txt` only, unattended from the clean snapshot on a fresh lab; then delete the c3 disk.
