@@ -254,3 +254,12 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   ≈ $0.004/step with prompt caching at 40k tokens (first call ≈ $0.031). GLM-5.3 ≈ $0.0001/step, no reasoning field.
 - Accounting: 7/40 replies lacked `buyer_cost_micro` and never appeared in the usage export.
   Evidence: `~/evidence/takeover-demo-2026-10-28/RESULTS.md`.
+
+## `kimi-k3.1-pro` as a one-shot hypothesis planner on pro's b2 stall (C slice 37, no tools, n=5)
+- **Weak: a "competing hypotheses + cheapest test" request moves it off the fix.** 0/5 plans named the BL33 kernel
+  setting (slice 34's legacy decider prompt on the same trace: 4/5 named it, 2/5 tested it). 1/5 truncated twice
+  (`length` at 8767 / 15050 output tokens, below `max_tokens` 24000, with no usage in the reply).
+- **Strong: it designs discriminating experiments, not reads.** 12/12 hypotheses carry an executable test with a QEMU boot.
+  4/4 plans swap BL33 for U-Boot as a control. 3/4 name the real mechanism (x0 ≠ DTB at kernel entry) and test it with
+  a QEMU exec trace or a gdb break at entry. 2/4 rebuild a full out-of-tree TF-A make line from the trace.
+- ≈ $0.055–0.108 per plan, 439–1081 s, 10–19k reasoning tokens. Evidence: `~/evidence/hypothesis-plan-demo-2026-10-28/RESULTS.md`.

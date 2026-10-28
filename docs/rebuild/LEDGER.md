@@ -54,6 +54,7 @@ USD comes from provider responses or documented prices — never estimated silen
 | 2026-10-28 | Surplus chat | `deepseek-v4-pro` 12 calls | 540330 | 6289 | 0.001054 | — | C slice 34 post-hoc continuation (pro on slice 27 K=20 + K3.1-pro's 2 decisions, reasoning dropped vs passed back); 12/12 export-matched |
 | 2026-10-28 | Surplus chat | `deepseek-v4-pro` 30 calls | 1021138 | 10814 | 0.001271 | — | C slice 35 live b2 on lab c3 with reasoning passed back (no injection): failed step_cap, 0 builds; 30/30 export-matched |
 | 2026-10-28 | Surplus chat | `kimi-k3.1-pro` 22 calls, `glm-5.3` 22 calls | 1646387 | 4568 | 0.473384 | — | C slice 36 takeover demo (preflight + 4 lab runs, all failed step_cap): balance delta $8.699060 → $8.225676; export matched 37/44 calls = $0.131383, the 7 replies without `buyer_cost_micro` are absent from the export (upper bound recorded) |
+| 2026-10-28 | Surplus chat | `kimi-k3.1-pro` 6 calls | 191826 | 86888 | 0.467867 | — | C slice 37 hypothesis-plan demo (5 one-shot plans on slice 35's b2 prefix, 1 resubmit; P1 0/5, no lab): balance delta $8.225676 → $7.757809; export matched 5/6 requests = $0.359383, plan 2 (no `buyer_cost_micro`) absent from the export; tokens: export rows + plan 2's reply usage, the 2 refused admissions made no request |
 
 C slice 1 rows are reconciled with the export by `python -m conflux.core reconcile` (`~/evidence/core-runs/2026-10-27-c1*/reconciled.json`;
 export total for 2026-10-27: 83 rows, $0.001372).
