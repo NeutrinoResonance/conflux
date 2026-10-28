@@ -6,7 +6,14 @@ evidence `RESULTS.md` and in the PR that landed it (`git log`); measured model b
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred
-  to E); B done. Goal (a) a1–a4 each model-accepted (not yet as one run); goal (b) b1a's check passes on pro's slice-18 edits; b1b not accepted (pro's repair cut off, slice 20).
+  to E); B done. Goal (a) a1–a4 each model-accepted (not yet as one run); goal (b) b1a's check passes on pro's slice-18 edits; b1b not accepted (slice 20 cut off; slice 21 pro never used sudo).
+- **C slice 21 (2026-10-28, run + D1 fix, $0.001201 metered + $0.16 GCE): pro reruns b1b, `failed step_cap`;
+  model fault.** Setup restored the 2-error driver; pre-check b1a pass, b1b fail. Under `usage_bound` the 7 no-cost
+  replies were settled at $0.274 and the run reached the cap (fix holds). Pro ran `build.sh` 9× as `dev`, never with
+  sudo: the darrenhidalgo-owned compile dir's `cleandir` failed; it named ownership at steps 22–23, then chased a
+  `NETBSDSRCDIR` error its own hand-run `nbmake` caused. Never reached `optee.c`; 0 edits. D1 false positive (`nbmake
+  -n` dry run) fixed: `READ_ONLY` covers `…make … -n`, fixture case. Lab stop now in a `finally` (3 failure paths
+  tested). Evidence: `~/evidence/pro-b1b-rerun-2026-10-28/RESULTS.md`.
 - **C slice 20 (2026-10-28, run + harness fixes, $0.000670 metered + $0.11 GCE): pro's b1b repair cut off by a
   harness fault.** Harness: per-model admission ceilings `core.CEILINGS` (flash; pro 2e-6/7.6e-6; unknown model
   refused before any call); D1 now treats `git -c/-C … diff|log|…` as a read (slice-19 step-2 false positive, fixture
@@ -95,8 +102,8 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. Rerun b1b with `deepseek-v4-pro` on c3 under the `usage_bound` fix (`--cap 1.0`, b1b `max_usd` 1.00). The run's
-     setup restores `sys/dev/fdt/optee.c` from pro's `optee.c.bak` (the 2-error slice-18 driver) and removes the
-     `.bak`. Same hypothesis: pro fixes the 2 errors and the GENERIC64 build passes within 40 steps.
+  1. Demo (replay, ≤ $0.01, no lab): this trace's prefix at step 23, control vs a grounded correction (violated
+     requirement + the `Permission denied` evidence + "build via `sudo -n -u darrenhidalgo`"), n=5 each; outcome:
+     pro's next command builds with sudo. Ownership friction cost steps in slices 18, 20, 21. If it works, rerun b1b.
   2. For the completion gate, run a1→a4 then b1a→b3 unattended from the clean snapshot on a fresh lab, then delete
      the c3 disk. Executor per sub-goal is an open, measured choice (flash on a1–a4, pro on b1a so far).
