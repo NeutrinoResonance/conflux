@@ -6,7 +6,16 @@ evidence `RESULTS.md` and in the PR that landed it (`git log`); measured model b
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred
-  to E); B done. Goal (a) a1–a4 each model-accepted (not yet as one run); goal (b) b1a's check passes on pro's slice-18 edits; b1b not accepted (slice 20 cut off; slice 21 pro never used sudo). Slices 22–23: a grounded correction at slice 21's stall makes pro run the sudo build within 2 steps (5/5). Slice 24: the 4 KB tail hid one of its denials (fixed).
+  to E); B done. Goal (a) a1–a4 each model-accepted (not yet as one run); goal (b) b1a's check passes on pro's slice-18 edits; b1b not accepted (slice 20 cut off; slice 21 pro never used sudo). Slices 22–23: a grounded correction at slice 21's stall makes pro run the sudo build within 2 steps (5/5). Slice 24: the 4 KB tail hid one of its denials (fixed). Slice 25: with head+tail output pro fixes ownership the step after the denial, fixes both errors, but its rewrite breaks an include (step cap).
+- **C slice 25 (2026-10-28, run + D1 fix, $0.001667 metered + $0.18 GCE): with head+tail output pro acts on ownership
+  one step after the denial; b1b still `failed step_cap` (model fault in its own rewrite).** Pre-check b1a pass, b1b fail.
+  Step 13's build.sh showed 11 `Permission denied` in the 1 KB head (0 in the last 3 KB); step 14 pro ran `sudo chown`,
+  by step 24 it had `chown -R dev:dev` the whole obj tree, built as dev, hit the 2 known `-Werror` errors (step 26),
+  fixed them via `sudo sed`/`sudo dd` rewrite, and the rebuild (step 37) failed on its new `#include <arm/smccc.h>`
+  (header is `arm/arm/smccc.h`); step cap at 40. 40/40 export-matched. **D1 false-positive class fixed:** all 9 D1 hits
+  since `failed_cmds` exists (slice 7) had `failed_cmds ≥ 1` in the header the model saw; `core.audit` now skips them
+  (10 older hits incl. both demo true positives unchanged; 2 fixture cases fail on old code). **c3 state changed:** obj
+  tree now owned by `dev`. Evidence: `~/evidence/pro-b1b-headtail-2026-10-28/RESULTS.md`.
 - **C slice 24 (2026-10-28, harness-only + fix, $0 metered + $0.01 GCE): the 4 KB tail cut build.sh's `Permission
   denied` on slice 21 step 12; harness fault, fixed.** Read slice 21's 7 build.sh job files on c3 (no rerun): step 12's
   output (stderr only, 4966 B) starts with 3 `Permission denied` lines on the darrenhidalgo-owned tooldir wrapper
@@ -128,9 +137,9 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. Rerun b1b with pro on c3 under the fix (≈ $0.002 metered + $0.16 GCE; restore the 2-error driver first). Primary
-     outcome: does pro run the build via `sudo -n -u darrenhidalgo` (or fix ownership) once a full-output run shows
-     the denial? If it stalls again, demo the delayed "no sudo 2 steps after a denial" trigger on a trace it was not
-     fitted to (this rerun's) before building it.
-  2. For the completion gate, run a1→a4 then b1a→b3 unattended from the clean snapshot on a fresh lab, then delete
-     the c3 disk. Executor per sub-goal is an open, measured choice (flash on a1–a4, pro on b1a so far).
+  1. Continue b1b with pro on c3 as left (pro's rewrite, 1 include error, dev-owned obj tree; ≈ $0.002 + $0.18 GCE).
+     Primary outcome: b1b accepted by its executed checks. If accepted, b2 (TF-A + OP-TEE firmware booting NetBSD) on c3
+     is the next sub-goal to cut-test; if not, classify the new stall before any mechanism.
+  2. For the completion gate, run a1→a4 then b1a→b3 unattended from the clean snapshot on a fresh lab (ownership
+     friction returns there: snapshot trees are darrenhidalgo's), then delete the c3 disk. Executor per sub-goal is an
+     open, measured choice (flash on a1–a4, pro on b1a/b1b so far).

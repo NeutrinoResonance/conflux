@@ -158,6 +158,13 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   harness saw them. The 7th (stderr only, 4966 B) had them, and the old 4 KB tail cut them (harness fault, fixed).
   Evidence: `~/evidence/tail-cut-check-2026-10-28/RESULTS.md`.
 
+## `deepseek-v4-pro` repairing its own driver with head+tail output (C slice 25, lab c3, b1b, 40 steps)
+- **Strong: acts on a visible `Permission denied` at once.** Step 13's denials (in the 1 KB head) → `sudo chown` at
+  step 14; it reached and fixed both known `-Werror` errors (slice 21, tail-only: never). Its ownership fix was blunt:
+  `sudo chown -R dev:dev` on darrenhidalgo's whole obj tree instead of building via `sudo -n -u darrenhidalgo`.
+- **Weak: a whole-file rewrite introduces a new error.** The step-34 rewrite added `#include <arm/smccc.h>` (the header
+  is `arm/arm/smccc.h`); 3 steps were left. Evidence: `~/evidence/pro-b1b-headtail-2026-10-28/RESULTS.md`.
+
 ## Cheap baselines to beat
 - Keyword failure rule (`error|failed|fatal|…`): "did this command fail?" 23/30 (catches no silent failures,
   never false-alarms on writes); acceptance 14/16 by always saying pass. A model judge must beat this.
