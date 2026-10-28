@@ -11,6 +11,12 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **C slice 38 (2026-10-28, probe-and-replan demo, $0.071824 metered (balance delta, export-matched) + $0.07 GCE):
+  stopped by founder decision (MISSION a7322df) before any re-plan reply; outcome is missing evidence.** Stage 1 ran
+  slice 37's 21 test commands verbatim on c3 as harness probes (c3 restored, TERMINATED). Raw observations: U-Boot as
+  BL33 boots in 4/4, `-d int` shows NetBSD entered at EL1 and silent, both TF-A rebuilds fail on a missing
+  cross-compiler in PATH, no gdb on the lab. 2 stage-2 K3.1-pro requests were billed with no reply recorded (1 killed
+  externally, 1 stopped). Not resumed. Evidence: `~/evidence/probe-replan-demo-2026-10-28/RESULTS.md`, `STOPPED.txt`.
 - **C slice 37 (2026-10-28, hypothesis-plan demo, $0.467867 metered (balance delta; export $0.359383) + $0 GCE): a
   K3.1-pro one-shot "competing hypotheses, each with its cheapest test" plan on pro's b2 stall never tests the BL33
   kernel setting; hypothesis falsified, stage 2 not run.**
@@ -267,9 +273,12 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. **Probe-and-replan demo on the same prefix** (slice 37's 4 valid plans). Conflux runs each plan's `test_commands`
-     verbatim on c3 as traced, capped runtime probes (no developer edits), returns the outputs to K3.1-pro for one
-     re-plan, and measures P1 on round 2. This tests "hypothesis → executed probe → revised hypothesis" before an
-     executor is involved. Then measure Jev / random-inspector triggers only if a correction works. Surplus credit is
-     **$7.76**: it binds paid work.
+  (Founder decision MISSION a7322df: the fixed hypothesis-JSON format and narrow b2-sub-goal demos of slices 34–38
+  are rejected as imposing structure too early.)
+  1. **"Other model leads" demo on the full `task.txt` run.** Kimi/GLM gets the previous activity plus the run's
+     bookkeeping (goal list derived by the models from `task.txt`, progress so far, claims made) and an open request:
+     look at where we are on the goal list, update progress, provide next steps. No answer shape beyond what the
+     harness must parse. Demo first (throwaway, cost-capped) at the scale the cheap models allow (GLM ≈ $0.0001/step),
+     measuring whether regular other-model calls help on the real task. Jev and the random cheap inspector come later,
+     to cut cost. Surplus credit is **$7.69**: it binds paid work.
   2. Completion-gate run: `run12/task.txt` only, unattended from the clean snapshot on a fresh lab; then delete the c3 disk.
