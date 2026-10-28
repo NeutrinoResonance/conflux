@@ -6,7 +6,16 @@ evidence `RESULTS.md` and in the PR that landed it (`git log`); measured model b
 MISSION-STATUS: ACTIVE
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred
-  to E); B done. Goal (a) a1–a4 each model-accepted (not yet as one run); goal (b) b1a's check passes on pro's slice-18 edits; b1b not accepted (slice 20 cut off; slice 21 pro never used sudo).
+  to E); B done. Goal (a) a1–a4 each model-accepted (not yet as one run); goal (b) b1a's check passes on pro's slice-18 edits; b1b not accepted (slice 20 cut off; slice 21 pro never used sudo). Slice 22: a grounded correction is adopted (5/5) but only 2/5 act on it in one step.
+- **C slice 22 (2026-10-28, replay demo, $0.000645 metered + $0 GCE): neither reasoning carry-back nor a grounded
+  correction passes its rule on pro's b1b ownership stall.** Planning found that `run_task` replays assistant turns
+  without `reasoning_content`. Pro's `content` is empty on 39/40 replies (flash: 38/40), so the executor never sees
+  its own reasoning, although DeepSeek's thinking-mode guide says to pass it back. Slice 21 prefix at step 23, pro,
+  n=5 per arm, all complete and valid (B's delivery was verified by +3,083 prompt tokens). Ownership action
+  (`sudo`/`chown`): control 0/5; reasoning replayed 0/5 (the same 3/5 `NETBSDSRCDIR` detour); correction
+  (requirement + `Permission denied` evidence + `sudo -n -u darrenhidalgo`) 2/5. All 5 correction replies adopt it
+  in their reasoning; the other 3 list the tooldir first. Neither rule fired; nothing built. H1 is falsified at this
+  prefix; it is untested on flash's b1 stall. Evidence: `~/evidence/reasoning-carry-demo-2026-10-28/RESULTS.md`.
 - **C slice 21 (2026-10-28, run + D1 fix, $0.001201 metered + $0.16 GCE): pro reruns b1b, `failed step_cap`;
   model fault.** Setup restored the 2-error driver; pre-check b1a pass, b1b fail. Under `usage_bound` the 7 no-cost
   replies were settled at $0.274 and the run reached the cap (fix holds). Pro ran `build.sh` 9× as `dev`, never with
@@ -102,8 +111,9 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. Demo (replay, ≤ $0.01, no lab): this trace's prefix at step 23, control vs a grounded correction (violated
-     requirement + the `Permission denied` evidence + "build via `sudo -n -u darrenhidalgo`"), n=5 each; outcome:
-     pro's next command builds with sudo. Ownership friction cost steps in slices 18, 20, 21. If it works, rerun b1b.
+  1. Demo (replay, ≤ $0.001, no lab): continue slice 22's 3 correction samples that ran `ls -d tooldir.*/` by one
+     step, feeding the recorded tooldir listing. Outcome: the sudo build (≥ 4/5 overall supports a correction).
+     If supported, demo a deterministic trigger (`Permission denied` on another user's path + a task granting sudo)
+     on the recorded traces of slices 18/20/21, then rerun b1b with it.
   2. For the completion gate, run a1→a4 then b1a→b3 unattended from the clean snapshot on a fresh lab, then delete
      the c3 disk. Executor per sub-goal is an open, measured choice (flash on a1–a4, pro on b1a so far).
