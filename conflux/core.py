@@ -96,7 +96,8 @@ TOOLS = [
     {"type": "function", "function": {
         "name": "run_shell",
         "description": "Run one bash command in the workspace and return exit code, stdout and stderr "
-                       "(last 4 KB each). timeout_s defaults to 60; use up to 10800 for long jobs.",
+                       "(each up to 4 KB; longer output keeps its first 1 KB and last 3 KB around a "
+                       "'[... N bytes omitted ...]' line). timeout_s defaults to 60; use up to 10800 for long jobs.",
         "parameters": {"type": "object", "properties": {"command": {"type": "string"},
                                                         "timeout_s": {"type": "integer"}},
                        "required": ["command"], "additionalProperties": False}}},
@@ -213,10 +214,13 @@ def _split_pipestatus(stderr: str) -> tuple[str, list[int] | None, int | None]:
 
 
 def _clip(text: str) -> str:
-    """`text` if it fits in TAIL, else its head and tail around an omission marker."""
-    if len(text) <= TAIL:
+    """`text` if its UTF-8 fits in TAIL bytes, else its first HEAD and last TAIL - HEAD bytes around an
+    omission marker, like `lab_shell`'s head/tail (a character cut at either edge becomes U+FFFD)."""
+    b = text.encode()
+    if len(b) <= TAIL:
         return text
-    return f"{text[:HEAD]}{_OMIT % (len(text) - TAIL)}{text[-(TAIL - HEAD):]}"
+    return (b[:HEAD].decode(errors="replace") + _OMIT % (len(b) - TAIL)
+            + b[-(TAIL - HEAD):].decode(errors="replace"))
 
 
 def execute(command: str, workdir: Path, timeout: float = EXEC_TIMEOUT) -> dict:

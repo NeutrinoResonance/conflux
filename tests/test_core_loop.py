@@ -1161,3 +1161,11 @@ def test_long_output_keeps_its_head_where_the_cause_is(any_shell, redirect):
 def test_output_that_fits_is_returned_whole(any_shell):
     r = any_shell(f"head -c {core.TAIL} /dev/zero | tr '\\0' x", 10)
     assert r["stdout"] == "x" * core.TAIL
+
+
+def test_long_non_ascii_output_is_clipped_by_bytes(any_shell):
+    """5000 x `é` is 10000 UTF-8 bytes: 5904 omitted, at most TAIL content bytes kept, on both paths."""
+    r = any_shell("printf '%.0sé' $(seq 5000)", 10)
+    marker = core._OMIT % (10000 - core.TAIL)
+    head, sep, tail = r["stdout"].partition(marker)
+    assert sep and head == "é" * (core.HEAD // 2) and tail == "é" * ((core.TAIL - core.HEAD) // 2)
