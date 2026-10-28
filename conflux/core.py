@@ -6,7 +6,9 @@ executes it, and owns acceptance: the task's checks are shell commands the harne
 itself. Every model call's cost is the provider's `buyer_cost_micro`; when absent, the
 call is settled at its reported token usage times the executor's ceilings (`cost_kind:
 "usage_bound"`), or at its admission bound when usage is absent too (`"bound"`). After a run, `reconcile`
-matches the calls against the Surplus buyer usage export, the authoritative billed cost.
+matches the calls against the Surplus buyer usage export, the authoritative billed cost. Every call requests the
+model's maximum output (`max_output`); admission bounds the request's input only, never max_tokens x price
+(founder decision MISSION 90b27cd: a capped answer is a harness fault).
 
 Commands run through a `Shell`: `local_shell` (a subprocess in a workdir) or `lab_shell`
 (a detached job on a `devbox-lab` VM, polled over ssh, all waits capped by one deadline that
@@ -58,9 +60,14 @@ SURPLUS = "https://www.surplusintelligence.ai/api/inference/v1"
 EXPORT = "https://api.surplusintelligence.ai/v1/buyer/usage/export"
 
 MODEL = "deepseek-v4.1-flash"
-MAX_TOKENS = 8192          # flash reasoning tokens count against this; 2048 cut off 5 tool calls in c10
+# Output limit and context per model: the provider's `top_provider.max_completion_tokens` / `context_length` (Surplus
+# /models, 2026-10-28). Every call requests the model's maximum (MISSION 90b27cd; 8192 cut off 26/29 slice-34 calls).
+MAX_OUTPUT = {"deepseek-v4.1-flash": 384000, "deepseek-v4-pro": 128000, "glm-5.3": 131072, "kimi-k3.1-pro": 943718}
+CONTEXT = {"deepseek-v4.1-flash": 1048576, "deepseek-v4-pro": 1000000, "glm-5.3": 1000000, "kimi-k3.1-pro": 1048576}
+CONTEXT_MARGIN = 1024
 # Admission bounds per executor: ($/byte of request, $/output token). Tokens <= bytes, so a $/byte above the top input
-# list rate bounds input; output is 2x the top output list rate. An executor without an entry is refused (KeyError).
+# list rate bounds input; output is 2x the top output list rate (used only to settle a reply that reports usage but no
+# cost). Admission charges the input bound alone. An executor without an entry is refused (KeyError).
 CEILINGS = {
     "deepseek-v4.1-flash": (4e-7, 2.4e-6),  # top list $0.3/M in, $1.2/M out
     "deepseek-v4-pro": (2e-6, 7.6e-6),      # top list $1.73/M in, $3.796/M out (2026-10-27 /v1/prices, C slice 18)
@@ -469,17 +476,30 @@ def run_checks(checks: list[Check], shell: Shell) -> tuple[str | None, list[dict
     return "pass", results
 
 
-TRUNCATED = (f"your reply was cut off at the {MAX_TOKENS}-token output limit (reasoning counts against it); "
+TRUNCATED = ("your reply was cut off at the model's output limit (reasoning counts against it); "
              "write large files in several smaller commands")
 
 
-def _truncated(body: object) -> bool:
-    """The reply hit the output limit: finish_reason "length", or completion tokens at the cap."""
+def max_output(model: str, messages: list, tools: list | None = None) -> int | None:
+    """max_tokens for a request: the model's own maximum, less only what the context window cannot hold
+    (request bytes bound its tokens). None (omit max_tokens: the provider applies the model maximum) for a
+    model without a known limit."""
+    cap = MAX_OUTPUT.get(model)
+    if cap is None:
+        return None
+    if model in CONTEXT:
+        used = len(json.dumps({"messages": messages, "tools": tools}).encode())
+        cap = min(cap, max(1, CONTEXT[model] - used - CONTEXT_MARGIN))
+    return cap
+
+
+def _truncated(body: object, limit: int | None) -> bool:
+    """The reply hit the output limit: finish_reason "length", or completion tokens at the requested limit."""
     choices = body.get("choices") if isinstance(body, dict) else None
     if choices and choices[0].get("finish_reason") == "length":
         return True
     usage = body.get("usage") if isinstance(body, dict) else None
-    return isinstance(usage, dict) and (usage.get("completion_tokens") or 0) >= MAX_TOKENS
+    return limit is not None and isinstance(usage, dict) and (usage.get("completion_tokens") or 0) >= limit
 
 
 def policy(call: dict) -> tuple[str, dict, str | None]:
@@ -638,8 +658,11 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
         if task.inject and steps == task.inject_step:
             messages.append({"role": "user", "content": task.inject})
             trace.write("inject", task=task.id, step=steps, content=task.inject)
-        request = {"model": model, "messages": messages, "tools": TOOLS, "max_tokens": MAX_TOKENS}
-        bound = len(json.dumps(request).encode()) * price_ceiling + MAX_TOKENS * output_ceiling
+        limit = max_output(model, messages, TOOLS)
+        request = {"model": model, "messages": messages, "tools": TOOLS,
+                   **({"max_tokens": limit} if limit is not None else {})}
+        # Input only: the output's cost is settled from the reply, never reserved at max_tokens x price (90b27cd).
+        bound = len(json.dumps(request).encode()) * price_ceiling
         # One retry when no HTTP response came back (transport error or timeout); each attempt is admitted and settled.
         for attempt in (1, 2):
             if cost + bound > task.max_usd:
@@ -675,7 +698,7 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
         messages.append({"role": "assistant", "content": msg.get("content") or "",
                          **({"reasoning_content": reasoning} if isinstance(reasoning, str) and reasoning else {}),
                          **({"tool_calls": calls} if calls else {})})
-        truncated = _truncated(body)
+        truncated = _truncated(body, limit)
         finished = not calls and not truncated
         if truncated and not calls:
             messages.append({"role": "user", "content": TRUNCATED})
@@ -739,7 +762,7 @@ def surplus_chat(key: str, model: str = MODEL, http: httpx.Client | None = None)
                              # Surplus's compressed bodies break httpx decoding.
                              headers={"Authorization": f"Bearer {key}", "Accept-Encoding": "identity"},
                              json={"model": model, "messages": messages, "tools": tools,
-                                   "max_tokens": MAX_TOKENS})
+                                   **({"max_tokens": n} if (n := max_output(model, messages, tools)) else {})})
         except httpx.HTTPError as e:
             return 0, {"error": type(e).__name__}, time.monotonic() - t0
         try:

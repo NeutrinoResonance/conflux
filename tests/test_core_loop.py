@@ -8,6 +8,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import httpx
 import pytest
 
 from conflux import core
@@ -687,20 +688,17 @@ def test_optee_goal_b_boots_only_the_package_verified_qemu(tmp_path, monkeypatch
         assert not (tmp_path / "netbsd-optee/serial0.log").exists()  # rejected before it ran
 
 
-def test_admission_bound_covers_the_top_output_list_price(tmp_path):
-    chat = Scripted(resp(call("run_shell", {"command": "echo yes > ok.txt"}), micro=None), resp(call("finish", {})))
-    _, trace = run(TOUCH, chat, tmp_path)
-    mc = [e for e in trace.events if e["event"] == "model_call"][0]
-    assert mc["bound_usd"] >= core.MAX_TOKENS * 1.2e-6  # deepseek-v4.1-flash, priciest seller, 2026-10-27
-
-
-def test_admission_bound_uses_the_executors_own_ceilings(tmp_path):
+def test_admission_bound_is_the_request_input_at_the_executors_ceiling(tmp_path):
+    # MISSION 90b27cd: admission never reserves max_tokens x output price (pro at 128000 tokens: ~$0.97 per call).
     chat = Scripted(resp(call("run_shell", {"command": "echo yes > ok.txt"})), resp(call("finish", {})))
     trace = Trace(tmp_path / "trace.jsonl")
-    task = dataclasses.replace(TOUCH, max_usd=1.0)  # pro's smallest bound (output alone, $0.062) exceeds 0.05
-    run_task(task, chat, core.local_shell(tmp_path / "work"), trace, Budget(1.0), model="deepseek-v4-pro")
+    task = dataclasses.replace(TOUCH, max_usd=0.05)
+    res = run_task(task, chat, core.local_shell(tmp_path / "work"), trace, Budget(0.05), model="deepseek-v4-pro")
+    assert res["status"] == "accepted", res  # the old output-reserving bound ($0.062+) refused pro under $0.05
     mc = [e for e in trace.events if e["event"] == "model_call"][0]
-    assert mc["bound_usd"] >= core.MAX_TOKENS * 3.796e-6  # deepseek-v4-pro, priciest seller, 2026-10-27
+    req = {"model": "deepseek-v4-pro", "messages": chat.seen[0], "tools": core.TOOLS, "max_tokens": 128000}
+    assert mc["bound_usd"] == pytest.approx(len(json.dumps(req).encode()) * core.CEILINGS["deepseek-v4-pro"][0])
+    assert mc["bound_usd"] < 0.01
 
 
 def test_an_executor_without_ceilings_is_refused_before_any_call(tmp_path, monkeypatch):
@@ -1060,9 +1058,9 @@ def test_audit_subcommand_needs_no_key(tmp_path, monkeypatch, capsys):
 def test_truncated_reply_is_named_to_the_model_and_is_not_a_finish(tmp_path):
     # c10/b1 steps 19-37: flash's reasoning filled max_tokens and cut the tool call off (arguments "{").
     cut = {"id": "c1", "type": "function", "function": {"name": "run_shell", "arguments": "{"}}
-    cut_call = resp(cut, completion=core.MAX_TOKENS)
+    cut_call = resp(cut, completion=1000)
     cut_call[1]["choices"][0]["finish_reason"] = "length"
-    cut_plain = resp(completion=core.MAX_TOKENS)  # no tool call at all: not a finish
+    cut_plain = resp(completion=core.MAX_OUTPUT[core.MODEL])  # at the requested limit, no finish_reason: not a finish
     chat = Scripted(cut_call, cut_plain,
                     resp(call("run_shell", {"command": "echo yes > ok.txt"})), resp(call("finish", {})))
     res, trace = run(TOUCH, chat, tmp_path)
@@ -1074,9 +1072,24 @@ def test_truncated_reply_is_named_to_the_model_and_is_not_a_finish(tmp_path):
     assert [e["finish_reason"] for e in trace.events if e["event"] == "model_call"][0] == "length"
 
 
-def test_output_limit_leaves_room_for_reasoning_and_a_file_write():
-    # c10/b1: up to 2017 reasoning tokens per call; a write may be MAX_COMMAND chars (>= 1 token per 4 chars).
-    assert core.MAX_TOKENS >= 2048 + core.MAX_COMMAND // 4 + 2048
+def test_every_call_requests_the_models_own_maximum_output(tmp_path, monkeypatch):
+    # Fault (MISSION 90b27cd): max_tokens 8192 cut off 26/29 slice-34 calls; requests now carry the provider's
+    # max_completion_tokens, less only what the context window cannot hold; unknown models omit max_tokens.
+    sent = []
+
+    def handler(request):
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, json={"id": "g", "choices": [{"message": {"role": "assistant", "content": ""}}],
+                                         "usage": {"prompt_tokens": 1, "completion_tokens": 1}})
+    http_ = httpx.Client(transport=httpx.MockTransport(handler))
+    small = [{"role": "user", "content": "hi"}]
+    for model in ("deepseek-v4-pro", "deepseek-v4.1-flash", "glm-5.3", "kimi-k3.1-pro", "unknown-model"):
+        core.surplus_chat("k", model, http_)(small, core.TOOLS)
+    assert [r.get("max_tokens") for r in sent] == [128000, 384000, 131072, 943718, None]
+    assert "max_tokens" not in sent[-1]
+    big = [{"role": "user", "content": "x" * 200_000}]
+    core.surplus_chat("k", "kimi-k3.1-pro", http_)(big, core.TOOLS)
+    assert 943718 - 210_000 < sent[-1]["max_tokens"] <= 1048576 - 200_000 - core.CONTEXT_MARGIN
 
 
 # ---------------------------------------------------------------- slice 17: slow provider replies
