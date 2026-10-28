@@ -8,9 +8,19 @@ MISSION-STATUS: ACTIVE
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. A done offline (live rerun deferred
   to E); B done. Goal (a): a1–a4 each model-accepted, but not yet in one run. Goal (b): b1a's check passes on pro's
   slice-18 edits; **b1b model-accepted on c3 (slice 26)** after slices 20–25 removed the harness faults (no-cost
-  settlement, 4 KB tail cut) and pro cleared the ownership stall; b2 not accepted (slices 26–27: NetBSD silent as BL33;
-  the cause, a missing `ARM_LINUX_KERNEL_AS_BL33=1`, is verified harness-only; slices 28–29: a correction is acted on
-  only when it carries the executable make line).
+  settlement, 4 KB tail cut) and pro cleared the ownership stall; **b2 accepted on c3 (slice 30)** with a supervisor's
+  recipe-carrying correction injected once at step 20 (slices 26–27 failed at the step cap without it). That correction
+  was developer-authored, so b2 is not yet done unattended. b3 not attempted.
+- **C slice 30 (2026-10-28, hook + run, $0.007037 metered + $0.21 GCE): with slice 29's correction M injected once at
+  step 20, pro's live b2 is accepted at the step cap (30/30, 0 steps to spare).** Harness: `Task.inject_step`/`inject`
+  appends one `user` message before that step's model call and traces it (`inject` row); 2 regression tests fail on old
+  code. The evidence sentence was restated as the slice-27 harness diagnosis, the rest verbatim. Pre-check b1a/b1b pass, b2 fail.
+  - Steps 1–19: 50 reads chasing the original flags (= slices 27–29). After the correction: 5 steps of input checks,
+    step 25 ran the recipe verbatim, which was a **no-op in-tree** (`Nothing to be done`). The recipe was verified
+    out-of-tree, and TF-A does not track flag/BL33 changes. Pro ran `realclean` itself (27), rebuilt (28), copied the
+    bios (29), boot-tested (30); the cap checks passed.
+  - D1 0 hits; 30/30 export-matched. c3 now holds the flagged b2 firmware; its TF-A build dir was rebuilt for NetBSD.
+  - Evidence: `~/evidence/pro-b2-inject-c3-2026-10-28/RESULTS.md`.
 - **C slice 29 (2026-10-28, replay + continuation demo, $0.000971 metered + $0.03 GCE): a b2 correction that carries
   slice 27's verified make line gets pro to build; one without it does not, even within 2 steps.** Same prefix as slice
   28, pro, all 26 calls export-matched. Rule: flagged TF-A build (`make` + `ARM_LINUX_KERNEL_AS_BL33=1`).
@@ -176,10 +186,11 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. One live b2 continuation on c3 (pro, unchanged task) with slice 29's correction M injected once as a `user`
-     message after the symptom is confirmed. This needs a minimal `run_task` hook (a scheduled message at a step, traced),
-     with a regression test; demo-backed by slice 29. Success = b2's executed check. If it fails, hand diagnosis to
-     `codex exec`. Where a recipe-carrying correction comes from at runtime is a later, separate demo.
-  2. For the completion gate, run a1→a4 then b1a→b3 unattended from the clean snapshot on a fresh lab (ownership
+  1. b3 (driver proof incl. the no-SPD control boot, `optee_goal_b.json`) on c3 as slice 30 left it, pro: harness-only
+     pre-check (b2 pass, b3 fail), then one live run.
+  2. Demo where a recipe-carrying b2 correction comes from at runtime (e.g. a stronger model or Jev-gated critic given
+     the stalled trace), on slice 27's recorded trace, before any wiring. Fixed-step injection is an instrument, not
+     the mechanism.
+  3. For the completion gate, run a1→a4 then b1a→b3 unattended from the clean snapshot on a fresh lab (ownership
      friction returns there: snapshot trees are darrenhidalgo's), then delete the c3 disk. Executor per sub-goal is an
      open, measured choice (flash on a1–a4, pro on b1a/b1b/b2 so far).
