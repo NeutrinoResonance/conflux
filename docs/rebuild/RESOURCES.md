@@ -56,7 +56,8 @@
 - The c3 disk holds a built qemu_v8 tree in `~/optee-work/optee`. `make check-only CHECK_TESTS=xtest XTEST_ARGS=1001`
   boots it and passes in ≈ 54 s. The snapshot has no `expect`; the a4 check installs it.
   Since C slice 32 its in-tree TF-A build (`optee/trusted-firmware-a/build/qemu/release`) and `netbsd-optee/qemu_fw.bios`
-  are pro's slice-26 no-flag NetBSD-as-BL33 build again (b2 check 2 fails; unchanged by slice 35's read-only run),
+  are pro's slice-26 no-flag NetBSD-as-BL33 build again (b2 check 2 fails; unchanged by slices 35–36; slice 36's
+  pre-run backup of that state is `~/takeover-reset/` on c3),
   and `~/.conflux-jobs` also holds slice 35's jobs (older jobs archived in `~/evidence/self-diagnosis-demo-2026-10-28/`). TF-A does not track flag changes, and
   `make realclean` failed there: to rebuild with different flags, `rm -rf optee/trusted-firmware-a/build/qemu` first.
   Goal (a)'s Linux firmware must be rebuilt before an a-check there.
@@ -89,7 +90,11 @@ gcloud compute instances stop  conflux-dev-worker-1 --zone us-central1-a
   per-option `probabilities` and token usage, but no billed cost.
 - **Surplus chat returns no logprobs.** `deepseek-v4-pro` rejects the parameter with 400. Flash and the other models accept it and return
   nothing, even though the catalogue lists `logprobs`.
-- Surplus chat usage reports the charge as `buyer_cost_micro` (micro-USD). Jev decisions carry no cost field.
+- Surplus chat usage reports the charge as `buyer_cost_micro` (micro-USD). Some replies omit it (C slice 36: 7/40
+  `kimi-k3.1-pro`/`glm-5.3` replies), and those requests are also missing from the usage export: use the `/v1/buyer/me`
+  balance delta as the bound.
+- `kimi-k3.1-pro` and `glm-5.3` do native tool calls on Surplus chat (C slice 36). Prompt caching makes K3.1-pro
+  ≈ $0.004/step at 40k tokens. Jev decisions carry no cost field.
 - **Accounting source (authoritative):** the Surplus buyer API on `https://api.surplusintelligence.ai`, with the same key.
   - `GET /v1/buyer/usage/export?format=csv&from=YYYY-MM-DD&to=YYYY-MM-DD` returns a 302 to a pre-signed URL. Follow it
     **without** the Authorization header. The CSV columns are `request_id, created_at, model, input_tokens,

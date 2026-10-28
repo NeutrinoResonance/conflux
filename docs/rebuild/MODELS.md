@@ -244,3 +244,13 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   reasoning ("this should be fine" for NetBSD), then chased a missing FIP entry. At step 26–27 it decided to rebuild
   (slice 27 never did) with a flag list that omits that setting, and spent steps 27–30 locating the toolchain.
   Passback changed when it chose to act, not what it believed. Evidence: `~/evidence/pro-b2-passback-c3-2026-10-28/RESULTS.md`.
+
+## `kimi-k3.1-pro` / `glm-5.3` taking over pro's b2 run with tools (C slice 36, lab c3, steps 21–30, no prose)
+- **Weak: a model switch alone does not break the reading stall.** Given pro's observable trace to step 20, both
+  continued reading: K3.1-pro 0/2, GLM-5.3 0/2, 0 builds, 0/40 replies naming the BL33 kernel setting. GLM read it in
+  a tool output and passed over it. K3.1-pro decided a no-flag rebuild at its last step, as pro did.
+- **Strong: both are usable tool-loop executors on Surplus.** Native tool calls; 0/40 truncations at max_tokens 24000;
+  replies ≤ 16.5 s. K3.1-pro reasons 70–280 tokens per step here (slice 34's one-shot: to the 24k cap) and bills
+  ≈ $0.004/step with prompt caching at 40k tokens (first call ≈ $0.031). GLM-5.3 ≈ $0.0001/step, no reasoning field.
+- Accounting: 7/40 replies lacked `buyer_cost_micro` and never appeared in the usage export.
+  Evidence: `~/evidence/takeover-demo-2026-10-28/RESULTS.md`.
