@@ -237,3 +237,10 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
 ## Cheap baselines to beat
 - Keyword failure rule (`error|failed|fatal|…`): "did this command fail?" 23/30 (catches no silent failures,
   never false-alarms on writes); acceptance 14/16 by always saying pass. A model judge must beat this.
+
+## `deepseek-v4-pro` live b2 with its reasoning passed back (C slice 35, lab c3, 30 steps, no injection)
+- **Weak: a wrong belief, not lost context.** With its own reasoning on every turn it still failed at the cap (70
+  commands, 0 builds, 0 writes). At step 24 it read the Linux-kernel-as-BL33 setting at its default and dismissed it in
+  reasoning ("this should be fine" for NetBSD), then chased a missing FIP entry. At step 26–27 it decided to rebuild
+  (slice 27 never did) with a flag list that omits that setting, and spent steps 27–30 locating the toolchain.
+  Passback changed when it chose to act, not what it believed. Evidence: `~/evidence/pro-b2-passback-c3-2026-10-28/RESULTS.md`.
