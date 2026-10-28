@@ -256,8 +256,10 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   Evidence: `~/evidence/takeover-demo-2026-10-28/RESULTS.md`.
 
 ## `kimi-k3.1-pro` as a one-shot hypothesis planner on pro's b2 stall (C slice 37, no tools, n=5)
-- **Weak: a "competing hypotheses + cheapest test" request moves it off the fix.** 0/5 plans named the BL33 kernel
-  setting (slice 34's legacy decider prompt on the same trace: 4/5 named it, 2/5 tested it). 1/5 truncated twice
+- **Weak: with this request it never reached the fix.** 0/5 plans named the BL33 kernel setting. Slice 34's K3.1-pro
+  named it in 4/5 and tested it in 2/5, but on different input: the legacy decider prompt over slice 27's steps 1–20
+  with clipped outputs (500+1000 chars). Slice 37 used slice 35's steps 1–20 as full tool messages. So the drop is
+  confounded (prompt, source run and clipping all differ) and is not a measured prompt effect. 1/5 truncated twice
   (`length` at 8767 / 15050 output tokens, below `max_tokens` 24000, with no usage in the reply).
 - **Strong: it designs discriminating experiments, not reads.** 12/12 hypotheses carry an executable test with a QEMU boot.
   4/4 plans swap BL33 for U-Boot as a control. 3/4 name the real mechanism (x0 ≠ DTB at kernel entry) and test it with

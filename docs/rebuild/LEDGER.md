@@ -67,7 +67,7 @@ charge-bound estimates) are only admission-time bounds. They are replaced by bil
 $0.0108 Jev and $0.0207 rejected-request estimates were billed $0.000006 and $0. Account credit after these runs
 is $9.369476 (`/v1/buyer/me`).
 
-**Metered total: $1.118130** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
+**Metered total: $1.585997** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
 
 ## GCE lab VMs (week 2026-W44 cap $60)
 

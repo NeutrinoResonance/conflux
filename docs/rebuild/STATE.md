@@ -15,8 +15,8 @@ MISSION-STATUS: ACTIVE
   K3.1-pro one-shot "competing hypotheses, each with its cheapest test" plan on pro's b2 stall never tests the BL33
   kernel setting; hypothesis falsified, stage 2 not run.**
   - Setup: slice 35's observable trace to step 20, flattened, plus a generic request (no task-specific words). n=5.
-  - P1 (a test that builds TF-A with that setting = 1): **0/5** (4 valid, 1 truncated twice). Slice 34's legacy
-    decider format: 2/5. The rule (≥ 3/5) failed, and with 0 P1 plans the pro hand-back stage (lab) did not run.
+  - P1 (a test that builds TF-A with that setting = 1): **0/5** (4 valid, 1 truncated twice). Slice 34 (legacy
+    decider prompt, clipped slice-27 trace, so not a like-for-like baseline): 2/5. The rule (≥ 3/5) failed, and with 0 P1 plans the pro hand-back stage (lab) did not run.
   - Post-hoc: **12/12 hypotheses come with an executable QEMU-boot test (0 pure reads)**. 4/4 plans include a U-Boot-as-BL33
     control boot. 3/4 name the real mechanism (x0 not pointing at the DTB at kernel entry) and test it with a QEMU exec
     trace or a gdb break at entry. 2/4 reconstruct a full TF-A make line from the trace. None maps x0 to the build setting.
