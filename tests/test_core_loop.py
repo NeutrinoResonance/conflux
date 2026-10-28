@@ -1169,3 +1169,25 @@ def test_long_non_ascii_output_is_clipped_by_bytes(any_shell):
     marker = core._OMIT % (10000 - core.TAIL)
     head, sep, tail = r["stdout"].partition(marker)
     assert sep and head == "é" * (core.HEAD // 2) and tail == "é" * ((core.TAIL - core.HEAD) // 2)
+
+
+# ---------------------------------------------------------------- slice 30: a scheduled supervisor message
+
+
+def test_inject_is_sent_once_before_its_step(tmp_path):
+    task = dataclasses.replace(TOUCH, inject_step=2, inject="Correction: write yes to ok.txt")
+    chat = Scripted(resp(call("run_shell", {"command": "true"})),
+                    resp(call("run_shell", {"command": "echo yes > ok.txt"})), resp(call("finish", {})))
+    res, trace = run(task, chat, tmp_path)
+    assert res["status"] == "accepted" and res["steps"] == 3
+    assert all(m.get("content") != task.inject for m in chat.seen[0])
+    assert chat.seen[1][-1] == {"role": "user", "content": task.inject}
+    assert [m.get("content") for m in chat.seen[2]].count(task.inject) == 1
+    assert [(e["step"], e["content"]) for e in trace.events if e["event"] == "inject"] == [(2, task.inject)]
+
+
+def test_inject_after_finish_is_never_sent(tmp_path):
+    task = dataclasses.replace(TOUCH, inject_step=3, inject="late")
+    chat = Scripted(resp(call("run_shell", {"command": "echo yes > ok.txt"})), resp(call("finish", {})))
+    res, trace = run(task, chat, tmp_path)
+    assert res["status"] == "accepted" and not [e for e in trace.events if e["event"] == "inject"]
