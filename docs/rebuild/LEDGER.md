@@ -55,6 +55,7 @@ USD comes from provider responses or documented prices — never estimated silen
 | 2026-10-28 | Surplus chat | `deepseek-v4-pro` 30 calls | 1021138 | 10814 | 0.001271 | — | C slice 35 live b2 on lab c3 with reasoning passed back (no injection): failed step_cap, 0 builds; 30/30 export-matched |
 | 2026-10-28 | Surplus chat | `kimi-k3.1-pro` 22 calls, `glm-5.3` 22 calls | 1646387 | 4568 | 0.473384 | — | C slice 36 takeover demo (preflight + 4 lab runs, all failed step_cap): balance delta $8.699060 → $8.225676; export matched 37/44 calls = $0.131383, the 7 replies without `buyer_cost_micro` are absent from the export (upper bound recorded) |
 | 2026-10-28 | Surplus chat | `kimi-k3.1-pro` 6 calls | 191826 | 86888 | 0.467867 | — | C slice 37 hypothesis-plan demo (5 one-shot plans on slice 35's b2 prefix, 1 resubmit; P1 0/5, no lab): balance delta $8.225676 → $7.757809; export matched 5/6 requests = $0.359383, plan 2 (no `buyer_cost_micro`) absent from the export; tokens: export rows + plan 2's reply usage, the 2 refused admissions made no request |
+| 2026-10-28 | Surplus chat | `kimi-k3.1-pro` 2 calls | 57188 | 6700 | 0.071824 | — | C slice 38 probe-and-replan demo, stopped by founder decision (MISSION a7322df): 2 stage-2 re-plan requests billed, no reply recorded (1 killed externally, 1 stopped); balance delta $7.757809 → $7.685985; export matched 2/2 |
 
 C slice 1 rows are reconciled with the export by `python -m conflux.core reconcile` (`~/evidence/core-runs/2026-10-27-c1*/reconciled.json`;
 export total for 2026-10-27: 83 rows, $0.001372).
@@ -103,5 +104,6 @@ Rate: n2d-standard-8 ≈ $0.338/h running (GCE list price, us-central1) + 100 GB
 | 2026-10-28 | `conflux-dev-lab-sd0` | 12:41:22–12:56:55 (created 12:39:04Z) | 0.30 | 0.10 | C slice 33 spec-derivation planner with 20 probes, fresh lab from the clean snapshot; deleted 12:56Z. sd1: 21 starts 12:56–13:54Z failed on GCE stockouts ($0 compute; one stray boot disk 12:57–13:15Z ≈ $0.004, deleted) |
 | 2026-10-28 | `conflux-dev-lab-c3` | 17:34:51–18:05:26 | 0.51 | 0.17 | C slice 35 harness-only pre-check (b1a/b1b pass, b2 fail) + pro b2 run with reasoning passback (failed step_cap, no writes); stopped, disk kept (tree unchanged by the model) |
 | 2026-10-28 | `conflux-dev-lab-c3` | ≈ 18:32–18:47, 18:46–19:04, 19:06–19:23, 19:22–19:38, 19:41–19:46 | 1.18 | 0.40 | C slice 36 takeover demo: 4 restore + pre-check + takeover runs (K3.1-pro ×2, GLM-5.3 ×2) + final restore; 3 starts failed on GCE stockouts ($0); stopped, disk kept (slice-27 state) |
+| 2026-10-28 | `conflux-dev-lab-c3` | 21:50:55–22:03:02 | 0.20 | 0.07 | C slice 38 stage-1 runtime probes (21 slice-37 test commands, 5 restores); stopped, disk kept (slice-27 state) |
 
-**GCE lab total: $5.51** (plus the c3 disk while it exists)
+**GCE lab total: $5.58** (plus the c3 disk while it exists)
