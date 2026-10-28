@@ -31,6 +31,18 @@ Only then set `MISSION-STATUS: COMPLETE` and open the promotion PR to `main`.
 
 ## Founder decisions (binding; newest first)
 
+- **2026-10-28 — Corrections and the spec come from Conflux's other models, not from the executor grading
+  itself.** The executor's measured failure (it names the fix, then keeps reading; it does not look for what it
+  needs) is the failure the multi-model layer exists to catch: a different model (critic, planner, decider/Jev,
+  stronger or differently-trained model) reads the executor's trace and plan, states what is wrong with evidence,
+  and turns it into an executed probe or a correction. A demo where the executor's own model diagnoses, corrects or
+  plans for itself (e.g. slice 32: pro diagnosing pro) is a single-model baseline, not a test of Conflux. Work item D
+  is therefore next, and spec derivation (decision below) is done the same way: a planner plus at least one critic of
+  a different model family. Candidates are the configured routes (Kimi K3/K3.1-pro, GLM-5.3, DeepSeek pro/flash,
+  Jev decisions, and Claude/Codex via subscription where the measured economics allow); which models play which role
+  is chosen by measured outcomes on the recorded stalls (b2 slice 27, b1 c10/c11/slice 18, b3 slice 31) and the
+  spec-derivation grade, never by a developer's guess. The legacy senate/critic/decider/verifier code
+  (`conflux-baseline-20261026`) is the first thing to reuse or demo before writing new mechanisms.
 - **2026-10-28 — Conflux gets from the founder's task text to the spec itself.** The completion run's only
   task input is `~/evidence/optee-ctl-runs/run12/task.txt` verbatim (plus the machine itself). Everything the
   developer has been writing into fixtures — sub-goal decomposition, file and tree locations, build commands and
