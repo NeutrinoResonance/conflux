@@ -444,24 +444,30 @@ def _git(*args, cwd):
                           capture_output=True, text=True).stdout.strip()
 
 
+OPTEE_FDT_STANZA = "device\toptee: smccc\nattach\toptee at fdt\nfile\tdev/fdt/optee.c\t\toptee\n"
+
+
 def _netbsd_root(tmp_path, monkeypatch):
     """A stand-in NetBSD project: a git source tree with the driver enabled, a built kernel, a tooldir nm.
     Its first commit plays the snapshot baseline (NETBSD_BASE)."""
     nb = tmp_path / "nb"
     conf, kdir, tools = (nb / "netbsd-src/sys/arch/evbarm/conf", nb / "netbsd-obj/sys/arch/evbarm/compile/GENERIC64",
                          nb / "netbsd-obj/tooldir.Linux-x/bin")
-    for d in (conf, kdir, tools):
+    fdt = nb / "netbsd-src/sys/dev/fdt"
+    for d in (conf, kdir, tools, fdt):
         d.mkdir(parents=True)
     (conf / "GENERIC64").write_text("simplebus*\tat fdt? pass 0\n")
+    (fdt / "files.fdt").write_text("device\tsimplebus\n")
     src = nb / "netbsd-src"
     _git("init", "-q", cwd=src)
     _git("add", ".", cwd=src)
     _git("commit", "-q", "-m", "base", cwd=src)
     monkeypatch.setenv("NETBSD_BASE", _git("rev-parse", "HEAD", cwd=src))
     (conf / "GENERIC64").write_text("simplebus*\tat fdt? pass 0\noptee*\t\tat fdt? pass 0\n")
-    (src / "sys/arch/evbarm/optee.c").write_text("/* driver */\n")
-    os.utime(conf / "GENERIC64", (1_000, 1_000))
-    os.utime(src / "sys/arch/evbarm/optee.c", (1_000, 1_000))
+    (fdt / "files.fdt").write_text("device\tsimplebus\n" + OPTEE_FDT_STANZA)
+    (fdt / "optee.c").write_text("CFATTACH_DECL_NEW(optee, 0, optee_match, optee_attach, NULL, NULL);\n")
+    for f in (conf / "GENERIC64", fdt / "files.fdt", fdt / "optee.c"):
+        os.utime(f, (1_000, 1_000))
     (kdir / "netbsd").write_text("kernel")
     (kdir / "netbsd.img").write_text("image")
     (tools / "aarch64--netbsd-nm").write_text("#!/bin/sh\necho 'ffffc00001234567 D optee_cd'\n")
@@ -472,7 +478,7 @@ def _netbsd_root(tmp_path, monkeypatch):
 
 def test_optee_goal_b_checks_execute_and_reject_an_empty_workdir(tmp_path, monkeypatch):
     tasks = _goal_b()
-    assert list(tasks) == ["b1-driver-build", "b2-firmware-boot", "b3-driver-proof"]
+    assert list(tasks) == ["b1a-driver-source", "b1b-kernel-build", "b2-firmware-boot", "b3-driver-proof"]
     monkeypatch.setenv("NETBSD_ROOT", str(tmp_path / "absent"))
     for t in tasks.values():
         assert core.run_checks(t.checks, core.local_shell(tmp_path))[0] == "fail"
@@ -482,12 +488,14 @@ def test_optee_goal_b_kernel_and_firmware_must_be_newer_than_the_driver_source(t
     # Changes are measured against the fixed snapshot commit, so unstaged, staged and committed edits all count.
     src, kdir = _netbsd_root(tmp_path, monkeypatch)
     b = _goal_b()
-    b1, fresh = b["b1-driver-build"].checks, [b["b2-firmware-boot"].checks[0], b["b3-driver-proof"].checks[0]]
+    b1a, b1 = b["b1a-driver-source"].checks, b["b1b-kernel-build"].checks
+    fresh = [b["b2-firmware-boot"].checks[0], b["b3-driver-proof"].checks[0]]
+    assert b1[0].cmd == b1a[0].cmd  # b1b re-checks b1a's source: removing the driver cannot pass the build
     assert fresh[0].cmd == fresh[1].cmd
     work = tmp_path / "w"
     (work / "netbsd-optee").mkdir(parents=True)
     (work / "netbsd-optee/qemu_fw.bios").write_text("fw")
-    driver = src / "sys/arch/evbarm/optee.c"
+    driver = src / "sys/dev/fdt/optee.c"
 
     def verdict(checks):
         return core.run_checks(checks, core.local_shell(work))[0]
@@ -499,6 +507,7 @@ def test_optee_goal_b_kernel_and_firmware_must_be_newer_than_the_driver_source(t
     assert verdict(b1) == "pass" and verdict(fresh[:1]) == "pass"
     at(driver, 3_000)  # driver edited after the build
     assert verdict(b1) == "fail" and verdict(fresh[:1]) == "fail"
+    assert verdict(b1a) == "pass"  # b1a is source only: a stale kernel does not matter
     at(kdir / "netbsd.img", 4_000)  # kernel rebuilt, firmware not
     assert verdict(b1) == "pass" and verdict(fresh[:1]) == "fail"
     at(work / "netbsd-optee/qemu_fw.bios", 5_000)  # firmware rebuilt
@@ -513,6 +522,36 @@ def test_optee_goal_b_kernel_and_firmware_must_be_newer_than_the_driver_source(t
     assert verdict(b1) == "pass" and verdict(fresh[:1]) == "pass"
     (tmp_path / "nb/netbsd-obj/tooldir.Linux-x/bin/aarch64--netbsd-nm").write_text("#!/bin/sh\necho 'x D other_cd'\n")
     assert verdict(b1) == "fail"  # kernel without the optee cfdriver
+    (src / "sys/arch/evbarm/conf/GENERIC64").write_text("simplebus*\tat fdt? pass 0\n")
+    assert verdict(b1a) == "fail"  # driver not enabled in GENERIC64
+
+
+def test_optee_goal_b_b1a_needs_a_registered_changed_driver_not_only_a_config_line(tmp_path, monkeypatch):
+    src, _ = _netbsd_root(tmp_path, monkeypatch)
+    b1a = _goal_b()["b1a-driver-source"].checks
+    fdt = src / "sys/dev/fdt"
+
+    def verdict():
+        return core.run_checks(b1a, core.local_shell(tmp_path))[0]
+    assert verdict() == "pass"
+    (fdt / "optee.c").unlink()
+    (fdt / "files.fdt").write_text("device\tsimplebus\n")
+    assert verdict() == "fail"  # only `optee* at fdt?` in GENERIC64
+    (fdt / "files.fdt").write_text("device\tsimplebus\n" + OPTEE_FDT_STANZA)
+    assert verdict() == "fail"  # registered, but the source file is missing
+    (fdt / "optee.c").write_text("/* no autoconf glue */\n")
+    assert verdict() == "fail"  # source without CFATTACH_DECL
+    (fdt / "optee.c").write_text("CFATTACH_DECL_NEW(optee, 0, m, a, NULL, NULL);\n")
+    assert verdict() == "pass"
+    (fdt / "files.fdt").write_text("device\tsimplebus\ndevice\toptee: smccc\nfile\tdev/fdt/optee.c\toptee\n")
+    assert verdict() == "fail"  # no `attach optee at fdt`
+    (fdt / "files.fdt").write_text("device\tsimplebus\nattach\toptee at fdt\nfile\tdev/fdt/optee.c\toptee\n")
+    assert verdict() == "fail"  # no `device optee`
+    (fdt / "files.fdt").write_text("device\tsimplebus\n" + OPTEE_FDT_STANZA)
+    _git("add", "-A", "sys", cwd=src)
+    _git("commit", "-q", "-m", "driver", cwd=src)
+    monkeypatch.setenv("NETBSD_BASE", _git("rev-parse", "HEAD", cwd=src))
+    assert verdict() == "fail"  # driver already in the snapshot: not written by this sub-goal
 
 
 def test_optee_goal_b_literal_guard_rejects_hard_coded_uid_words_and_build_hash(tmp_path, monkeypatch):
