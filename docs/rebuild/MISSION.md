@@ -31,6 +31,16 @@ Only then set `MISSION-STATUS: COMPLETE` and open the promotion PR to `main`.
 
 ## Founder decisions (binding; newest first)
 
+- **2026-10-28 — Only buy Surplus inference at a 90% or deeper discount.** Every Surplus request (executor, lead,
+  critic, planner, Jev, demos) sends `X-Min-Discount: 90` (or uses the `/min90/` URL mirror). Without a floor the
+  marketplace routed some calls to near-list sellers: kimi-k3.1-pro was billed $1.22 of the first $1.37 total, about a
+  60% discount, while 96–99% offers existed. A `404 minimum_discount_not_met` means no seller meets the floor right
+  now: treat the model as unavailable for that call (wait/retry or use another model), never fall back to a lower
+  floor or full price. Which models are usable at the floor is measured and recorded (2026-10-28 ~23:40Z: glm-5.3 and
+  deepseek-v4-pro served; kimi-k3.1-pro refused; jev-1.14 live discount 80%). The account-wide preferences PUT ignores
+  `min_discount_pct`; a key-level floor is for the founder to set in the dashboard. Also: Surplus holds each in-flight
+  request's worst case (`/v1/payments/balance` `fiat_held_usdc`); budget checks use available + held, not
+  `credit_balance_usdc` alone.
 - **2026-10-28 — Do not cap model output below what the model supports.** Output-token limits chosen for budget
   admission (`core.MAX_TOKENS` 8192, demo `LEAD_MAX_TOKENS` 24000) have repeatedly cut answers off: slice 34 (26/29
   truncated at 8192), slice 37 (plan 4 truncated twice), and slice 39's GLM preflight (4/8 single-layout calls hit
