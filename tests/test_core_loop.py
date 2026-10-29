@@ -1144,6 +1144,25 @@ def test_every_surplus_request_sets_the_discount_floor_and_waits_out_a_refusal(m
     assert status == 404 and script == [200] and clock.slept == []
 
 
+def test_a_retry_never_outlasts_the_availability_window(monkeypatch):
+    # PR #47 review: near the end of the window a retry could still be sent with the full CHAT_TIMEOUT (900 s). Each
+    # retry's request timeout is now bounded by the window's remainder as well as the caller's deadline.
+    clock = FakeClock()
+    monkeypatch.setattr(core, "time", clock)
+    monkeypatch.setattr(core, "AVAILABILITY_WINDOW_S", 100)
+    monkeypatch.setattr(core, "AVAILABILITY_BACKOFF_S", (30,))
+    timeouts = []
+
+    def handler(request):
+        timeouts.append(request.extensions["timeout"]["read"])
+        clock.now += 25  # each refusal takes 25 s
+        return httpx.Response(404, json={"error": {"code": "minimum_discount_not_met"}})
+    chat = core.surplus_chat("k", "deepseek-v4-pro", httpx.Client(transport=httpx.MockTransport(handler)))
+    status, body, _ = chat([{"role": "user", "content": "hi"}], core.TOOLS)
+    # sent at 0 (900 s), refused at 25, slept 30, retry sent at 55 with <= 45 s left, refused at 80: 80 + 30 > 100
+    assert status == 404 and timeouts[0] == core.CHAT_TIMEOUT and len(timeouts) == 2 and timeouts[1] <= 45
+
+
 def test_a_provider_outage_never_ends_the_task_as_the_executors_doing(tmp_path, monkeypatch):
     # Slice 39 pair 1: HTTP 200 {"error": no_healthy_sellers} with no choices/usage ended both runs `unverified
     # provider_200` (lead at step 40, control at 107) and was settled at its input bound ($0.24, $0.66). Outages
@@ -1193,6 +1212,20 @@ def test_every_call_requests_the_models_own_maximum_output(tmp_path, monkeypatch
     # cut a 900 KB pro request to 99 k): ~300 k tokens + 128 k output fit pro's 1 M context.
     core.surplus_chat("k", "deepseek-v4-pro", http_)([{"role": "user", "content": "x" * 900_000}], core.TOOLS)
     assert sent[-1]["max_tokens"] == 128000
+    # Once the provider has counted the conversation, its count replaces the estimate: a 2.9 MB prompt is estimated at
+    # ~967 k tokens (cold call clamped), but the provider reports 300 k, so the next turn gets the full 128 k.
+    counted = []
+
+    def counting(request):
+        counted.append(json.loads(request.content))
+        return httpx.Response(200, json={"id": "g", "choices": [{"message": {"role": "assistant", "content": "ok"}}],
+                                         "usage": {"prompt_tokens": 300_000, "completion_tokens": 1_000}})
+    chat = core.surplus_chat("k", "deepseek-v4-pro", httpx.Client(transport=httpx.MockTransport(counting)))
+    convo = [{"role": "user", "content": "x" * 2_900_000}]
+    chat(convo, core.TOOLS)
+    convo += [{"role": "assistant", "content": "ok"}, {"role": "user", "content": "next"}]
+    chat(convo, core.TOOLS)
+    assert counted[0]["max_tokens"] < 128000 and counted[1]["max_tokens"] == 128000
     # Only what the context cannot hold is taken off: 2.4 MB (~800 k tokens) leaves kimi-k3.1-pro ~247 k of 943,718.
     core.surplus_chat("k", "kimi-k3.1-pro", http_)([{"role": "user", "content": "x" * 2_400_000}], core.TOOLS)
     assert 1048576 - 2_400_000 // 3 - 2000 < sent[-1]["max_tokens"] < 1048576 - 2_400_000 // 3 - core.CONTEXT_MARGIN

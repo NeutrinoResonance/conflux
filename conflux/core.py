@@ -69,8 +69,9 @@ MAX_OUTPUT = {"deepseek-v4.1-flash": 384000, "deepseek-v4-pro": 128000, "glm-5.3
 CONTEXT = {"deepseek-v4.1-flash": 1048576, "deepseek-v4-pro": 1000000, "glm-5.3": 1000000, "kimi-k3.1-pro": 1048576,
            "glm-5.3-flash": 1048576, "kimi-k3": 1000000}
 CONTEXT_MARGIN = 1024
-# Request bytes per token for the context estimate: JSON, code and English run ~3.5-4.5 bytes/token on these tokenizers;
-# 3 keeps the estimate on the high side without counting every byte as a token (PR #47 review).
+# Input tokens come from the provider's own count (`usage.prompt_tokens + completion_tokens` of the last reply covers the
+# message prefix it saw); only messages added since are estimated, at BYTES_PER_TOKEN (JSON/code/English run ~3.5-4.5
+# bytes/token on these tokenizers, so 3 errs high). A cold first call is estimated whole (PR #47 review).
 BYTES_PER_TOKEN = 3
 # Admission bounds per executor: ($/byte of request, $/output token). Tokens <= bytes, so a $/byte above the top input
 # list rate bounds input; output is 2x the top output list rate (used only to settle a reply that reports usage but no
@@ -491,16 +492,32 @@ TRUNCATED = ("your reply was cut off at the model's output limit (reasoning coun
              "write large files in several smaller commands")
 
 
-def max_output(model: str, messages: list, tools: list | None = None) -> int | None:
+def reported_tokens(messages: list, body: object) -> tuple[int, int] | None:
+    """(messages the reply's usage covers, tokens): the request's messages plus the reply's own assistant turn."""
+    usage = body.get("usage") if isinstance(body, dict) else None
+    p, c = (usage.get("prompt_tokens"), usage.get("completion_tokens")) if isinstance(usage, dict) else (None, None)
+    if isinstance(p, int) and isinstance(c, int) and not isinstance(p, bool) and not isinstance(c, bool):
+        return len(messages) + 1, p + c
+    return None
+
+
+def input_tokens(messages: list, tools: list | None, known: tuple[int, int] | None = None) -> int:
+    """The provider's count for the known prefix plus an estimate (bytes / BYTES_PER_TOKEN) for the rest."""
+    n, base = known if known and known[0] <= len(messages) else (0, 0)
+    rest = len(json.dumps({"messages": messages[n:], "tools": tools}).encode())
+    return base + -(-rest // BYTES_PER_TOKEN)
+
+
+def max_output(model: str, messages: list, tools: list | None = None,
+               known: tuple[int, int] | None = None) -> int | None:
     """max_tokens for a request: the model's own maximum, less only what the context window cannot hold
-    (input tokens estimated as request bytes / BYTES_PER_TOKEN). None (omit max_tokens: the provider applies the
-    model maximum) for a model without a known limit."""
+    (`input_tokens`). None (omit max_tokens: the provider applies the model maximum) for a model without a
+    known limit."""
     cap = MAX_OUTPUT.get(model)
     if cap is None:
         return None
     if model in CONTEXT:
-        used = -(-len(json.dumps({"messages": messages, "tools": tools}).encode()) // BYTES_PER_TOKEN)
-        cap = min(cap, max(1, CONTEXT[model] - used - CONTEXT_MARGIN))
+        cap = min(cap, max(1, CONTEXT[model] - input_tokens(messages, tools, known) - CONTEXT_MARGIN))
     return cap
 
 
@@ -662,6 +679,7 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
             return end("unverified", "setup_failed")
 
     messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": _goal_text(task)}]
+    known = None  # provider-reported tokens of the conversation so far (`reported_tokens`)
     while steps < task.max_steps:
         if past_deadline():
             return end("unverified", "lab_deadline")
@@ -669,7 +687,7 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
         if task.inject and steps == task.inject_step:
             messages.append({"role": "user", "content": task.inject})
             trace.write("inject", task=task.id, step=steps, content=task.inject)
-        limit = max_output(model, messages, TOOLS)
+        limit = max_output(model, messages, TOOLS, known)
         request = {"model": model, "messages": messages, "tools": TOOLS,
                    **({"max_tokens": limit} if limit is not None else {})}
         # Input only: the output's cost is settled from the reply, never reserved at max_tokens x price (90b27cd).
@@ -704,6 +722,7 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
                 return end("unverified", "lab_deadline")
             if status != 0:
                 break
+        known = reported_tokens(messages, body) or known
         if not isinstance(msg, dict):
             # No seller for the whole availability window: the provider's state, never the executor failing.
             return end("unverified", "provider_unavailable" if _unavailable(status, body) else f"provider_{status}")
@@ -785,12 +804,14 @@ def surplus_post(http: httpx.Client, key: str, payload: dict, timeout: float | N
     t0 = time.monotonic()
     timeout_cap = CHAT_TIMEOUT if timeout_cap is None else timeout_cap
     for attempt in itertools.count():
-        left = None if timeout is None else timeout - (time.monotonic() - t0)
-        if left is not None and left <= 0:
-            return 0, {"error": "TimeoutBeforeSend"}, time.monotonic() - t0
+        elapsed = time.monotonic() - t0
+        limit = timeout_cap if timeout is None else min(timeout_cap, timeout - elapsed)
+        if attempt:  # a retry also ends with the availability window (PR #47 review)
+            limit = min(limit, AVAILABILITY_WINDOW_S - elapsed)
+        if limit <= 0:
+            return (resp.status_code, body, elapsed) if attempt else (0, {"error": "TimeoutBeforeSend"}, elapsed)
         try:
-            resp = http.post(f"{SURPLUS}/chat/completions",
-                             timeout=timeout_cap if left is None else max(0.1, min(timeout_cap, left)),
+            resp = http.post(f"{SURPLUS}/chat/completions", timeout=max(0.1, limit),
                              # Surplus's compressed bodies break httpx decoding.
                              headers={"Authorization": f"Bearer {key}", "Accept-Encoding": "identity",
                                       "X-Min-Discount": str(MIN_DISCOUNT)},
@@ -812,10 +833,14 @@ def surplus_post(http: httpx.Client, key: str, payload: dict, timeout: float | N
 def surplus_chat(key: str, model: str = MODEL, http: httpx.Client | None = None) -> Chat:
     http = http or httpx.Client(timeout=CHAT_TIMEOUT)
 
+    known = [None]  # provider-reported tokens of this conversation's prefix (`reported_tokens`)
+
     def chat(messages: list, tools: list, timeout: float | None = None) -> tuple[int, object, float]:
-        n = max_output(model, messages, tools)
-        return surplus_post(http, key, {"model": model, "messages": messages, "tools": tools,
-                                        **({"max_tokens": n} if n else {})}, timeout)
+        n = max_output(model, messages, tools, known[0])
+        status, body, latency = surplus_post(http, key, {"model": model, "messages": messages, "tools": tools,
+                                                         **({"max_tokens": n} if n else {})}, timeout)
+        known[0] = reported_tokens(messages, body) or known[0]
+        return status, body, latency
 
     return chat
 
