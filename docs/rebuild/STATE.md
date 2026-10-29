@@ -11,6 +11,14 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **C slice 42 (2026-10-29, goal-list review demo, offline, $0.001207 metered + $0 GCE): a different-family review of
+  the kimi-k3 lead's initial goal list does not restore goal (a)'s Linux proof; registered rule falsified.**
+  - Inputs: slice 40's 3 recorded init replies (goal (a) read as "QEMU + OP-TEE with NetBSD as normal world"), generic
+    request "does it cover everything the task asks for, read the way the user most likely means it? corrected list".
+  - Linux/xtest boot goal with goal (b) kept: glm-5.3 low **2/15** (rule ≥ 8), kimi-k3 low self-review 5/15, no
+    review 0/9; reference build env (qemu_v8/repo): 0, 3, 0. Every hit came from c3's reply, whose free-text next
+    steps already named the stock qemu_v8 boot; from c1/c2 0/10 per model. Review promotes, never derives. Build nothing.
+  - Evidence: `~/evidence/goal-review-demo-2026-10-29/RESULTS.md` (36/36 export-matched).
 - **C slice 41 (2026-10-29, D1 classification of slice 40's 25 hits, $0): 12 are real masking in the executor's own
   commands, 6 were audit false positives (now fixed), 7 are residual false positives, and one harness fault was fixed.**
   - Harness fault H1: with a trailing `cmd &`, a background child's late stderr pushed the `__CONFLUX_PIPESTATUS=` marker
@@ -314,10 +322,9 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. **Change one more lead factor (68ad22c), keeping kimi-k3 low and the registered measure.** The lead moves goal (b)
-     (G5/G6 reached) but its runs drop goal (a) (no `qemu_v8` sync with TF-A, no Linux boot) and hit the 120-step cap while
-     progressing. Candidates: a longer step cap for both arms, or a second different-family reviewer of the lead's goal
-     list. No developer goal text either way. Secondary measure from slice 41: does any lead review name the executor's
-     masked failures (D1 true hits) in its trace? Harness: `~/evidence/lead-factor-demo-2026-10-29/demo.py`. Surplus
-     credit: $7.41 available.
+  1. **Change one more lead factor (68ad22c): the step cap, kimi-k3 low lead unchanged.** Lead runs hit 120 steps
+     while progressing (G5 2/3, G6 1/3); controls finished by step 93, so slice 39's controls stay valid. Slice 42 ruled
+     out a goal-list reviewer for goal (a)'s loss. Secondary: does any lead review name the executor's masked failures
+     (slice 41 D1 true hits)? Harness: `~/evidence/lead-factor-demo-2026-10-29/demo.py` (`MAX_STEPS`). Surplus credit:
+     $7.55 available.
   2. Completion-gate run: `run12/task.txt` only, unattended from the clean snapshot on a fresh lab; then delete the c3 disk.
