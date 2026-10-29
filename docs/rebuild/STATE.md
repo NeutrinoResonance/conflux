@@ -17,10 +17,11 @@ MISSION-STATUS: ACTIVE
     off the end, so `pipestatus`/`failed_cmds` were lost and the marker was shown to the model (3/1,553 execs).
     `_split_pipestatus` now takes the last marker line anywhere. Regression tests on recorded stderr, local, and a
     fake-remote lab fail on the old parser.
-  - D1 false positives fixed: `sleep N && tail log` is a read (5), cross-prefixed `strings` (1), and lines equal to the
-    command's own echo literal (0 in slice 40, 1 in slice 39). Residual (recorded only): file text from mixed read+write
-    commands (4) and `touch … || echo` writability probes (3). After the fix slice 40 has 19 hits, slice 39 has 10 (was 11);
-    no hit was added.
+  - D1 false positives fixed: `sleep N && tail log` is a read (5), cross-prefixed `strings` (1). Residual (recorded
+    only): file text from mixed read+write commands (4), `touch … || echo` writability probes (3), and the model's own
+    echo text (1 in slice 39). An echo-literal exemption was dropped in review: it hid a tool error whose text equals
+    an unexecuted `|| echo` fallback (regression test). After the fix slice 40 has 19 hits, slice 39 is unchanged (11),
+    and no hit was added.
   - Real masking (model, for the lead/critic): `curl -s` without `-f`, `… &`, `| tee log; echo EXIT $?` inside
     `sh -c`, `|| true`.
   - Evidence: `~/evidence/d1-slice40-classify-2026-10-29/RESULTS.md`.

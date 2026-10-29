@@ -599,8 +599,6 @@ READ_ONLY = re.compile(r"^(cat|head|tail|sed -n|less|grep|rg|ls|find|wc|stat|fil
                        r"type|command -v|git( -[cC] \S+)* (log|show|diff|status|branch|remote|rev-parse|ls-files)|"
                        r"apt(-cache)? (search|show|list|policy)|dpkg (-l|-s|-L)|od|xxd|hexdump|"
                        r"(\S*/)?([\w.]+-)*(objdump|readelf|nm|strings)|(\S*/)?[\w.-]*make( \S+)* -n|sleep)\b")
-# A quoted literal the command itself prints (`|| echo "Cannot write to X"`): the model's own message, not a tool's.
-OWN_TEXT = re.compile(r"""^(?:echo|printf)(?:\s+-\w+)*\s+(["'])(.*)\1\s*$""", re.S)
 
 
 def _scan(cmd: str) -> tuple[list[str], bool]:
@@ -638,8 +636,8 @@ def _scan(cmd: str) -> tuple[list[str], bool]:
 def audit(rows: list[dict]) -> list[dict]:
     """D1: a model step that exited 0 although its own output reports a failure, i.e. a failure that looked like
     success. Exempt: the model capturing `$?` itself, and `failed_cmds` > 0 (the result header named the failure).
-    For pure reads only stderr counts (stdout is file content); known informational lines (`BENIGN_TEXT`) and lines
-    that equal a literal the command echoes itself (`OWN_TEXT`) never count."""
+    For pure reads only stderr counts (stdout is file content); known informational lines (`BENIGN_TEXT`) never
+    count."""
     findings = []
     for r in rows:
         if r.get("event") != "exec" or r.get("source") != "model" or r.get("exit") != 0 or r.get("failed_cmds"):
@@ -650,9 +648,7 @@ def audit(rows: list[dict]) -> list[dict]:
             continue
         reads = bool(segs) and all(READ_ONLY.match(s) for s in segs)
         text = ("" if reads else (r.get("stdout") or "")) + "\n" + (r.get("stderr") or "")
-        own = {m[2].replace("\\n", "").strip() for m in map(OWN_TEXT.match, segs) if m}
-        hits = [h for h in FAIL_TEXT.finditer(text)
-                if not BENIGN_TEXT.match(h.group(0)) and h.group(0).strip() not in own]
+        hits = [h for h in FAIL_TEXT.finditer(text) if not BENIGN_TEXT.match(h.group(0))]
         if hits:
             findings.append({"check": "D1", "step": r.get("step"), "command": cmd[:200],
                              "evidence": hits[-1].group(0).strip()[:200]})

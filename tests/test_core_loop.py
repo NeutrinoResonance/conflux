@@ -1063,13 +1063,11 @@ def test_d1_keeps_stderr_diagnostics_of_reads():
     assert core.audit([{**row, "stdout": "error: in file content\n", "stderr": ""}]) == []
 
 
-def test_d1_skips_only_the_literal_text_the_command_echoes_itself():
-    row = {"event": "exec", "source": "model", "step": 1, "exit": 0,
-           "command": "touch /ro/x 2>&1 || echo \"Cannot write to /ro\"; printf 'build failed\\n'",
-           "stdout": "Cannot write to /ro\nbuild failed\n"}
-    assert core.audit([row]) == []
-    tool = {**row, "stdout": "touch: cannot touch '/ro/x': Permission denied\n" + row["stdout"]}
-    assert [f["evidence"] for f in core.audit([tool])] == ["touch: cannot touch '/ro/x': Permission denied"]
+def test_d1_keeps_a_tool_error_that_an_unexecuted_fallback_echo_would_also_print():
+    """An `|| echo` literal equal to the tool's error must not hide it: the audit cannot tell whether the echo ran."""
+    row = next(c["row"] for c in D1_CASES if c["expect"] == "hit" and "curl -sL" in c["row"]["command"])
+    row = {**row, "command": row["command"] + ' || echo "404: Not Found"'}
+    assert [f["evidence"] for f in core.audit([row])] == ["404: Not Found"]
 
 
 @pytest.mark.parametrize("cmd, exempt", [

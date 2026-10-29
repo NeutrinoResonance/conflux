@@ -261,26 +261,6 @@
    }
   },
   {
-   "trace": "~/evidence/other-model-leads-demo-2026-10-28/control/run/run12/trace.jsonl",
-   "sha256": "be39b98463a62540a17f3b881c874bf39f6bb08e68723a6b8ae47ecaeccf980c",
-   "step": 2,
-   "expect": "none",
-   "why": "the only failure text is the model's own `|| echo \"qemu-system-arm not found\"` literal; the tool exists (C slice 39) (outputs cut to the last 10 lines)",
-   "row": {
-    "event": "exec",
-    "source": "model",
-    "step": 2,
-    "command": "echo \"=== Available tools ===\" && which gcc g++ git make cmake qemu-system-arm qemu-system-aarch64 python3 curl wget 2>&1 && echo \"=== git version ===\" && git --version 2>&1 && echo \"=== gcc version ===\" && gcc --version 2>&1 | head -3 && echo \"=== qemu ===\" && qemu-system-arm --version 2>&1 || echo \"qemu-system-arm not found\" && qemu-system-aarch64 --version 2>&1 || echo \"qemu-system-aarch64 not found\"",
-    "exit": 0,
-    "pipestatus": [
-     0
-    ],
-    "failed_cmds": 0,
-    "stdout": "/usr/bin/git\n/usr/bin/make\n/usr/bin/qemu-system-arm\n/usr/bin/qemu-system-aarch64\n/usr/bin/python3\n/usr/bin/curl\n/usr/bin/wget\nqemu-system-arm not found\nQEMU emulator version 7.2.22 (Debian 1:7.2+dfsg-7+deb12u18+b3)\nCopyright (c) 2003-2022 Fabrice Bellard and the QEMU Project developers\n",
-    "stderr": ""
-   }
-  },
-  {
    "trace": "~/evidence/lead-factor-demo-2026-10-29/lead-c1/run/run12/trace.jsonl",
    "sha256": "02b4d2fba5831bce5a54eada3afbcbe6100e1b8beeff4a5a076dda631c8d63a5",
    "step": 14,
