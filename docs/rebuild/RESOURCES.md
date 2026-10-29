@@ -23,6 +23,9 @@
 
 ## Lab VMs (`devbox-lab`)
 
+- One lab at a time (MISSION budgets table). `~/.config/devbox/lab.env` has `LAB_MAX=2`; C slice 39 ran two labs at
+  once on an explicit operator note (2026-10-29, scheduling only; its GCE rows in LEDGER.md count both). Later runs keep
+  to one lab unless MISSION is amended.
 - `devbox-lab up|ssh|stop|delete|list <name>` → `conflux-dev-lab-<name>`, n2d-standard-8 (8 vCPU, 32 GB) from snapshot
   `conflux-optee-baseline-clean-20261021` (100 GB pd-balanced), no external IP, no service account, self-stops after 24 h.
   Cost: ≈ $0.338/h running (GCE list price, us-central1) + ≈ $0.014/h for the disk while it exists (stopped or not).
@@ -117,6 +120,15 @@ gcloud compute instances stop  conflux-dev-worker-1 --zone us-central1-a
   Admission bounds are per executor in `core.CEILINGS` (v4.1-flash 4e-7 $/byte, 2.4e-6 $/out-token; pro 2e-6, 7.6e-6);
   a model without an entry is refused before any call. Pro's per-call bound is ≥ $0.062, so pro tasks need `max_usd` ≫ 0.15.
   A reply without `buyer_cost_micro` (pro: 7/27 in C slice 20) is settled at its usage × ceilings (`usage_bound`).
+- **Discount floor (MISSION 5ee7a8b):** every Surplus chat request sends `X-Min-Discount: 90` (`core.surplus_post`).
+  `404 minimum_discount_not_met` = no seller at the floor now. Served at the floor 2026-10-29: `deepseek-v4-pro`,
+  `glm-5.3`, `glm-5.3-flash`, `kimi-k3`; refused: `kimi-k3.1-pro`, `kimi-k3-fast-api`, `glm-5.3-flashx`, `minimax-m2.7`.
+  HTTP 200 with `{"error": no_healthy_sellers}` and no choices also happens (C slice 39): core waits these out (≤ 4 h).
+- **Holds:** Surplus holds each in-flight request's worst case (max output × price) in `credit_balance_usdc`; see
+  `GET /v1/payments/balance` (`fiat_available_usdc`, `fiat_held_usdc`). A ~$0.45 `fiat_held_usdc` persisted with nothing
+  in flight on 2026-10-29: reconcile spend from the usage export, not from available + held.
+- Output limits: `top_provider.max_completion_tokens` in `/models` (core `MAX_OUTPUT`). `reasoning_effort`
+  (`low`/`medium`/`high`) is accepted by glm-5.3, glm-5.3-flash and kimi-k3; `low` cut GLM reviews from 17–20 min to ~2 min.
 - Executed capability matrix: `docs/rebuild/PROVIDERS.md`.
 - Measured model strengths/weaknesses with examples: `docs/rebuild/MODELS.md` (append new findings there).
 

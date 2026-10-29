@@ -8,6 +8,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import httpx
 import pytest
 
 from conflux import core
@@ -104,9 +105,9 @@ def test_checks_passing_at_step_cap_are_accepted(tmp_path):
 def test_provider_error_is_unverified_not_failed(tmp_path):
     chat = Scripted((503, {"error": {"message": "no_healthy_sellers"}}, 0.2))
     res, trace = run(TOUCH, chat, tmp_path)
-    assert res["status"] == "unverified" and res["reason"] == "provider_503"
+    assert res["status"] == "unverified" and res["reason"] == "provider_unavailable"
     mc = [e for e in trace.events if e["event"] == "model_call"][0]
-    assert mc["cost_kind"] == "bound" and mc["error"] == {"message": "no_healthy_sellers"}
+    assert mc["cost_kind"] == "no_usage" and mc["cost_usd"] == 0 and mc["error"] == {"message": "no_healthy_sellers"}
 
 
 def test_check_timeout_is_unverified(tmp_path):
@@ -165,22 +166,35 @@ def test_pro_calls_without_cost_do_not_exhaust_the_task_budget(tmp_path):
 
 def test_run_budget_refusal_is_unverified_and_makes_no_call(tmp_path):
     chat = Scripted()
-    res, _ = run(TOUCH, chat, tmp_path, allowance=1e-6)
+    res, _ = run(TOUCH, chat, tmp_path, allowance=0.0)
     assert res["status"] == "unverified" and res["reason"] == "run_budget" and chat.seen == []
 
 
 def test_task_budget_refusal(tmp_path):
-    task = Task(id="t", goal="g", checks=[Check("true")], max_usd=1e-6)
+    task = Task(id="t", goal="g", checks=[Check("true")], max_usd=0.0)
     res, _ = run(task, Scripted(), tmp_path)
     assert res["reason"] == "task_budget"
 
 
-def test_budget_releases_reservation_on_settle():
+def test_budget_caps_settled_spend_and_reserves_no_bound():
+    # Slice 39b lead-b1: input bounds of ~$0.3 per 250 KB pro request ended a $0.50-cap run at step 63 with $0.002
+    # billed. Admission now looks only at settled spend (MISSION 90b27cd).
     b = Budget(0.01)
-    assert b.admit(0.008)
-    b.settle(0.008, 0.000014)
-    assert b.admit(0.008)
-    assert not b.admit(0.008)
+    assert b.admit(5.0) and b.admit(5.0)  # a large bound alone never refuses
+    b.settle(5.0, 0.009)
+    assert b.admit(5.0)
+    b.settle(5.0, 0.002)  # one call may overshoot the cap by its own cost
+    assert b.committed == pytest.approx(0.011) and not b.admit(0.0)
+
+
+def test_a_long_context_is_admitted_under_a_small_cap(tmp_path):
+    # The same run shape: a ~300 KB request (pro input bound ~$0.6) under a $0.05 task cap bills $0.000014.
+    big = "x" * 300_000
+    chat = Scripted(resp(call("run_shell", {"command": "echo yes > ok.txt"})), resp(call("finish", {})))
+    task = dataclasses.replace(TOUCH, goal=TOUCH.goal + big, max_usd=0.05)
+    res = run_task(task, chat, core.local_shell(tmp_path / "work"), Trace(tmp_path / "t.jsonl"), Budget(0.05),
+                   model="deepseek-v4-pro")
+    assert res["status"] == "accepted", res
 
 
 def test_policy_denials_go_back_to_the_model(tmp_path):
@@ -687,20 +701,17 @@ def test_optee_goal_b_boots_only_the_package_verified_qemu(tmp_path, monkeypatch
         assert not (tmp_path / "netbsd-optee/serial0.log").exists()  # rejected before it ran
 
 
-def test_admission_bound_covers_the_top_output_list_price(tmp_path):
-    chat = Scripted(resp(call("run_shell", {"command": "echo yes > ok.txt"}), micro=None), resp(call("finish", {})))
-    _, trace = run(TOUCH, chat, tmp_path)
-    mc = [e for e in trace.events if e["event"] == "model_call"][0]
-    assert mc["bound_usd"] >= core.MAX_TOKENS * 1.2e-6  # deepseek-v4.1-flash, priciest seller, 2026-10-27
-
-
-def test_admission_bound_uses_the_executors_own_ceilings(tmp_path):
+def test_admission_bound_is_the_request_input_at_the_executors_ceiling(tmp_path):
+    # MISSION 90b27cd: admission never reserves max_tokens x output price (pro at 128000 tokens: ~$0.97 per call).
     chat = Scripted(resp(call("run_shell", {"command": "echo yes > ok.txt"})), resp(call("finish", {})))
     trace = Trace(tmp_path / "trace.jsonl")
-    task = dataclasses.replace(TOUCH, max_usd=1.0)  # pro's smallest bound (output alone, $0.062) exceeds 0.05
-    run_task(task, chat, core.local_shell(tmp_path / "work"), trace, Budget(1.0), model="deepseek-v4-pro")
+    task = dataclasses.replace(TOUCH, max_usd=0.05)
+    res = run_task(task, chat, core.local_shell(tmp_path / "work"), trace, Budget(0.05), model="deepseek-v4-pro")
+    assert res["status"] == "accepted", res  # the old output-reserving bound ($0.062+) refused pro under $0.05
     mc = [e for e in trace.events if e["event"] == "model_call"][0]
-    assert mc["bound_usd"] >= core.MAX_TOKENS * 3.796e-6  # deepseek-v4-pro, priciest seller, 2026-10-27
+    req = {"model": "deepseek-v4-pro", "messages": chat.seen[0], "tools": core.TOOLS, "max_tokens": 128000}
+    assert mc["bound_usd"] == pytest.approx(len(json.dumps(req).encode()) * core.CEILINGS["deepseek-v4-pro"][0])
+    assert mc["bound_usd"] < 0.01
 
 
 def test_an_executor_without_ceilings_is_refused_before_any_call(tmp_path, monkeypatch):
@@ -1060,9 +1071,9 @@ def test_audit_subcommand_needs_no_key(tmp_path, monkeypatch, capsys):
 def test_truncated_reply_is_named_to_the_model_and_is_not_a_finish(tmp_path):
     # c10/b1 steps 19-37: flash's reasoning filled max_tokens and cut the tool call off (arguments "{").
     cut = {"id": "c1", "type": "function", "function": {"name": "run_shell", "arguments": "{"}}
-    cut_call = resp(cut, completion=core.MAX_TOKENS)
+    cut_call = resp(cut, completion=1000)
     cut_call[1]["choices"][0]["finish_reason"] = "length"
-    cut_plain = resp(completion=core.MAX_TOKENS)  # no tool call at all: not a finish
+    cut_plain = resp(completion=core.MAX_OUTPUT[core.MODEL])  # at the requested limit, no finish_reason: not a finish
     chat = Scripted(cut_call, cut_plain,
                     resp(call("run_shell", {"command": "echo yes > ok.txt"})), resp(call("finish", {})))
     res, trace = run(TOUCH, chat, tmp_path)
@@ -1074,9 +1085,150 @@ def test_truncated_reply_is_named_to_the_model_and_is_not_a_finish(tmp_path):
     assert [e["finish_reason"] for e in trace.events if e["event"] == "model_call"][0] == "length"
 
 
-def test_output_limit_leaves_room_for_reasoning_and_a_file_write():
-    # c10/b1: up to 2017 reasoning tokens per call; a write may be MAX_COMMAND chars (>= 1 token per 4 chars).
-    assert core.MAX_TOKENS >= 2048 + core.MAX_COMMAND // 4 + 2048
+class FakeClock:
+    """core.time stand-in: sleep() advances monotonic() instantly; time() is real (trace timestamps)."""
+
+    def __init__(self):
+        self.now, self.slept = 1000.0, []
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, s):
+        self.slept.append(s)
+        self.now += s
+
+    def time(self):
+        return time.time()
+
+
+def test_every_surplus_request_sets_the_discount_floor_and_waits_out_a_refusal(monkeypatch):
+    # MISSION 5ee7a8b: without a floor kimi-k3.1-pro was billed at ~60% off while 96-99% offers existed.
+    # 404 minimum_discount_not_met = no seller at the floor now: back off and retry, never a lower floor.
+    seen, script = [], [404] * 7 + [200]
+
+    def handler(request):
+        seen.append(dict(request.headers))
+        st = script.pop(0)
+        if st == 404:
+            return httpx.Response(404, json={"error": {"code": "minimum_discount_not_met", "message": "no seller"}})
+        return httpx.Response(200, json={"id": "g", "choices": [{"message": {"role": "assistant", "content": ""}}],
+                                         "usage": {"prompt_tokens": 1, "completion_tokens": 1}})
+    clock = FakeClock()
+    monkeypatch.setattr(core, "time", clock)
+    chat = core.surplus_chat("k", "deepseek-v4-pro", httpx.Client(transport=httpx.MockTransport(handler)))
+    status, body, _ = chat([{"role": "user", "content": "hi"}], core.TOOLS)
+    assert status == 200 and len(seen) == 8 and clock.slept == [30, 60, 120, 300, 600, 600, 600]
+    assert all(h["x-min-discount"] == "90" for h in seen)
+    # the whole availability window without a seller: the refusal comes back (the caller decides), no lower floor
+    script[:] = [404] * 100
+    t0 = clock.now
+    status, body, _ = chat([{"role": "user", "content": "hi"}], core.TOOLS)
+    assert status == 404 and body["error"]["code"] == "minimum_discount_not_met"
+    assert core.AVAILABILITY_WINDOW_S - 600 < clock.now - t0 <= core.AVAILABILITY_WINDOW_S
+    script[:] = [404, 200]  # too little time left before the caller's deadline: returned, not slept through
+    status, _, _ = chat([{"role": "user", "content": "hi"}], core.TOOLS, timeout=20)
+    assert status == 404 and script == [200]
+    # A slow refusal uses up the deadline too (PR #47 review): a 404 that takes 50 s of a 60 s budget is returned
+    # instead of waiting 30 s past the deadline.
+    slow = {"s": 50}
+    orig = handler
+
+    def slow_handler(request):
+        clock.now += slow["s"]
+        return orig(request)
+    chat = core.surplus_chat("k", "deepseek-v4-pro", httpx.Client(transport=httpx.MockTransport(slow_handler)))
+    script[:] = [404, 200]
+    clock.slept.clear()
+    status, _, _ = chat([{"role": "user", "content": "hi"}], core.TOOLS, timeout=60)
+    assert status == 404 and script == [200] and clock.slept == []
+
+
+def test_a_retry_never_outlasts_the_availability_window(monkeypatch):
+    # PR #47 review: near the end of the window a retry could still be sent with the full CHAT_TIMEOUT (900 s). Each
+    # retry's request timeout is now bounded by the window's remainder as well as the caller's deadline.
+    clock = FakeClock()
+    monkeypatch.setattr(core, "time", clock)
+    monkeypatch.setattr(core, "AVAILABILITY_WINDOW_S", 100)
+    monkeypatch.setattr(core, "AVAILABILITY_BACKOFF_S", (30,))
+    timeouts = []
+
+    def handler(request):
+        timeouts.append(request.extensions["timeout"]["read"])
+        clock.now += 25  # each refusal takes 25 s
+        return httpx.Response(404, json={"error": {"code": "minimum_discount_not_met"}})
+    chat = core.surplus_chat("k", "deepseek-v4-pro", httpx.Client(transport=httpx.MockTransport(handler)))
+    status, body, _ = chat([{"role": "user", "content": "hi"}], core.TOOLS)
+    # sent at 0 (900 s), refused at 25, slept 30, retry sent at 55 with <= 45 s left, refused at 80: 80 + 30 > 100
+    assert status == 404 and timeouts[0] == core.CHAT_TIMEOUT and len(timeouts) == 2 and timeouts[1] <= 45
+
+
+def test_a_provider_outage_never_ends_the_task_as_the_executors_doing(tmp_path, monkeypatch):
+    # Slice 39 pair 1: HTTP 200 {"error": no_healthy_sellers} with no choices/usage ended both runs `unverified
+    # provider_200` (lead at step 40, control at 107) and was settled at its input bound ($0.24, $0.66). Outages
+    # (200 error body, 404 below the floor, 429/5xx) are retried with backoff over a long window; one that outlasts it
+    # ends the task `unverified provider_unavailable`, never failed/finished; an error reply without usage costs 0.
+    outage = {"error": {"type": "service_unavailable", "code": "no_healthy_sellers", "message": "none"}}
+    script = [(200, outage)] * 6 + [(503, {"error": {"code": "no_healthy_sellers"}}),
+                                     (404, {"error": {"code": "minimum_discount_not_met"}}), (200, None)]
+
+    def handler(request):
+        st, body = script.pop(0)
+        if body is None:
+            msg = {"role": "assistant", "content": "", "tool_calls": [call("finish", {})]}
+            body = {"id": "g", "choices": [{"message": msg}], "usage": {"prompt_tokens": 1, "completion_tokens": 1,
+                                                                        "buyer_cost_micro": 3}}
+        return httpx.Response(st, json=body)
+    clock = FakeClock()
+    monkeypatch.setattr(core, "time", clock)
+    http_ = httpx.Client(transport=httpx.MockTransport(handler))
+    task = dataclasses.replace(TOUCH, setup="echo yes > ok.txt")
+    res, trace = run(task, core.surplus_chat("k", core.MODEL, http_), tmp_path)
+    assert res["status"] == "accepted" and not script and sum(clock.slept) == 2910, res  # ~49 min of outage
+    script[:] = [(200, outage)] * 1000
+    (tmp_path / "2").mkdir()
+    res, trace = run(task, core.surplus_chat("k", core.MODEL, http_), tmp_path / "2")
+    mc = [e for e in trace.events if e["event"] == "model_call"]
+    assert (res["status"], res["reason"]) == ("unverified", "provider_unavailable"), res
+    assert [(e["cost_kind"], e["cost_usd"]) for e in mc] == [("no_usage", 0.0)] and res["cost_usd"] == 0
+
+
+def test_every_call_requests_the_models_own_maximum_output(tmp_path, monkeypatch):
+    # Fault (MISSION 90b27cd): max_tokens 8192 cut off 26/29 slice-34 calls; requests now carry the provider's
+    # max_completion_tokens, less only what the context window cannot hold; unknown models omit max_tokens.
+    sent = []
+
+    def handler(request):
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, json={"id": "g", "choices": [{"message": {"role": "assistant", "content": ""}}],
+                                         "usage": {"prompt_tokens": 1, "completion_tokens": 1}})
+    http_ = httpx.Client(transport=httpx.MockTransport(handler))
+    small = [{"role": "user", "content": "hi"}]
+    for model in ("deepseek-v4-pro", "deepseek-v4.1-flash", "glm-5.3", "kimi-k3.1-pro", "unknown-model"):
+        core.surplus_chat("k", model, http_)(small, core.TOOLS)
+    assert [r.get("max_tokens") for r in sent] == [128000, 384000, 131072, 943718, None]
+    assert "max_tokens" not in sent[-1]
+    # Byte-heavy input that still leaves token headroom keeps the full limit (PR #47 review: counting bytes as tokens
+    # cut a 900 KB pro request to 99 k): ~300 k tokens + 128 k output fit pro's 1 M context.
+    core.surplus_chat("k", "deepseek-v4-pro", http_)([{"role": "user", "content": "x" * 900_000}], core.TOOLS)
+    assert sent[-1]["max_tokens"] == 128000
+    # Once the provider has counted the conversation, its count replaces the estimate: a 2.9 MB prompt is estimated at
+    # ~967 k tokens (cold call clamped), but the provider reports 300 k, so the next turn gets the full 128 k.
+    counted = []
+
+    def counting(request):
+        counted.append(json.loads(request.content))
+        return httpx.Response(200, json={"id": "g", "choices": [{"message": {"role": "assistant", "content": "ok"}}],
+                                         "usage": {"prompt_tokens": 300_000, "completion_tokens": 1_000}})
+    chat = core.surplus_chat("k", "deepseek-v4-pro", httpx.Client(transport=httpx.MockTransport(counting)))
+    convo = [{"role": "user", "content": "x" * 2_900_000}]
+    chat(convo, core.TOOLS)
+    convo += [{"role": "assistant", "content": "ok"}, {"role": "user", "content": "next"}]
+    chat(convo, core.TOOLS)
+    assert counted[0]["max_tokens"] < 128000 and counted[1]["max_tokens"] == 128000
+    # Only what the context cannot hold is taken off: 2.4 MB (~800 k tokens) leaves kimi-k3.1-pro ~247 k of 943,718.
+    core.surplus_chat("k", "kimi-k3.1-pro", http_)([{"role": "user", "content": "x" * 2_400_000}], core.TOOLS)
+    assert 1048576 - 2_400_000 // 3 - 2000 < sent[-1]["max_tokens"] < 1048576 - 2_400_000 // 3 - core.CONTEXT_MARGIN
 
 
 # ---------------------------------------------------------------- slice 17: slow provider replies
@@ -1139,9 +1291,13 @@ def test_second_transport_failure_is_unverified(tmp_path):
 
 
 def test_http_error_is_not_retried(tmp_path):
+    # run_task does not retry an HTTP reply itself: surplus_post already waited out the availability window.
     chat = Scripted((503, {"error": {"message": "no_healthy_sellers"}}, 0.2))
     res, _ = run(TOUCH, chat, tmp_path)
-    assert res["reason"] == "provider_503" and len(chat.seen) == 1
+    assert res["reason"] == "provider_unavailable" and len(chat.seen) == 1
+    chat = Scripted((400, {"error": {"message": "bad request"}}, 0.2))
+    res, _ = run(TOUCH, chat, tmp_path / "x")
+    assert res["reason"] == "provider_400" and len(chat.seen) == 1
 
 
 def test_transport_failure_past_the_deadline_is_not_retried(tmp_path):

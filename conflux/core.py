@@ -5,8 +5,11 @@ admits each call against the budget, checks each proposal against a permissive p
 executes it, and owns acceptance: the task's checks are shell commands the harness runs
 itself. Every model call's cost is the provider's `buyer_cost_micro`; when absent, the
 call is settled at its reported token usage times the executor's ceilings (`cost_kind:
-"usage_bound"`), or at its admission bound when usage is absent too (`"bound"`). After a run, `reconcile`
-matches the calls against the Surplus buyer usage export, the authoritative billed cost.
+"usage_bound"`), or, when usage is absent too, at its admission bound if no reply came back (`"bound"`) and at 0 if
+the provider answered with an error and no choices (`"no_usage"`). After a run, `reconcile`
+matches the calls against the Surplus buyer usage export, the authoritative billed cost. Every call requests the
+model's maximum output (`max_output`); admission bounds the request's input only, never max_tokens x price
+(founder decision MISSION 90b27cd: a capped answer is a harness fault).
 
 Commands run through a `Shell`: `local_shell` (a subprocess in a workdir) or `lab_shell`
 (a detached job on a `devbox-lab` VM, polled over ssh, all waits capped by one deadline that
@@ -36,6 +39,7 @@ import asyncio
 import base64
 import csv
 import io
+import itertools
 import json
 import os
 import re
@@ -58,14 +62,30 @@ SURPLUS = "https://www.surplusintelligence.ai/api/inference/v1"
 EXPORT = "https://api.surplusintelligence.ai/v1/buyer/usage/export"
 
 MODEL = "deepseek-v4.1-flash"
-MAX_TOKENS = 8192          # flash reasoning tokens count against this; 2048 cut off 5 tool calls in c10
+# Output limit and context per model: the provider's `top_provider.max_completion_tokens` / `context_length` (Surplus
+# /models, 2026-10-28). Every call requests the model's maximum (MISSION 90b27cd; 8192 cut off 26/29 slice-34 calls).
+MAX_OUTPUT = {"deepseek-v4.1-flash": 384000, "deepseek-v4-pro": 128000, "glm-5.3": 131072, "kimi-k3.1-pro": 943718,
+              "glm-5.3-flash": 131072, "kimi-k3": 131072}
+CONTEXT = {"deepseek-v4.1-flash": 1048576, "deepseek-v4-pro": 1000000, "glm-5.3": 1000000, "kimi-k3.1-pro": 1048576,
+           "glm-5.3-flash": 1048576, "kimi-k3": 1000000}
+CONTEXT_MARGIN = 1024
+# Input tokens come from the provider's own count (`usage.prompt_tokens + completion_tokens` of the last reply covers the
+# message prefix it saw); only messages added since are estimated, at BYTES_PER_TOKEN (JSON/code/English run ~3.5-4.5
+# bytes/token on these tokenizers, so 3 errs high). A cold first call is estimated whole (PR #47 review).
+BYTES_PER_TOKEN = 3
 # Admission bounds per executor: ($/byte of request, $/output token). Tokens <= bytes, so a $/byte above the top input
-# list rate bounds input; output is 2x the top output list rate. An executor without an entry is refused (KeyError).
+# list rate bounds input; output is 2x the top output list rate (used only to settle a reply that reports usage but no
+# cost). Admission charges the input bound alone. An executor without an entry is refused (KeyError).
 CEILINGS = {
     "deepseek-v4.1-flash": (4e-7, 2.4e-6),  # top list $0.3/M in, $1.2/M out
     "deepseek-v4-pro": (2e-6, 7.6e-6),      # top list $1.73/M in, $3.796/M out (2026-10-27 /v1/prices, C slice 18)
 }
 CAMPAIGN_BUDGET = 50.00
+MIN_DISCOUNT = 90          # X-Min-Discount on every Surplus request (MISSION 5ee7a8b); never lowered
+# No seller at the floor / outage (`_unavailable`): retry with backoff for up to AVAILABILITY_WINDOW_S of wall clock
+# (bounded by the run deadline); Surplus seller availability fluctuates over minutes to hours (slice 39 pair 1).
+AVAILABILITY_BACKOFF_S = (30, 60, 120, 300, 600)   # then the last value repeats
+AVAILABILITY_WINDOW_S = 4 * 3600
 RUN_CAP = 0.20
 EXEC_TIMEOUT = 60
 CHAT_TIMEOUT = 900         # flash replies took up to 713 s (headroom demo); the lab deadline still bounds each call
@@ -137,20 +157,19 @@ class Task:
 
 
 class Budget:
-    """Run-level admission: bounds are reserved before a call, replaced by cost after it."""
+    """Run-level money cap on settled cost (MISSION 90b27cd): a call is admitted while the spend so far is below the
+    allowance; no per-call bound is reserved. Slice 39b: a 250 KB deepseek-v4-pro request's input bound (~$0.3-0.5)
+    refused calls that bill ~$0.0001 and ended a run at step 63 with $0.002 spent. One call may overshoot by its cost."""
 
     def __init__(self, allowance: float):
         self.allowance = allowance
         self.committed = 0.0
 
     def admit(self, bound: float) -> bool:
-        if self.committed + bound > self.allowance:
-            return False
-        self.committed += bound
-        return True
+        return self.committed < self.allowance
 
     def settle(self, bound: float, cost: float) -> None:
-        self.committed += cost - bound
+        self.committed += cost
 
 
 @dataclass
@@ -469,17 +488,46 @@ def run_checks(checks: list[Check], shell: Shell) -> tuple[str | None, list[dict
     return "pass", results
 
 
-TRUNCATED = (f"your reply was cut off at the {MAX_TOKENS}-token output limit (reasoning counts against it); "
+TRUNCATED = ("your reply was cut off at the model's output limit (reasoning counts against it); "
              "write large files in several smaller commands")
 
 
-def _truncated(body: object) -> bool:
-    """The reply hit the output limit: finish_reason "length", or completion tokens at the cap."""
+def reported_tokens(messages: list, body: object) -> tuple[int, int] | None:
+    """(messages the reply's usage covers, tokens): the request's messages plus the reply's own assistant turn."""
+    usage = body.get("usage") if isinstance(body, dict) else None
+    p, c = (usage.get("prompt_tokens"), usage.get("completion_tokens")) if isinstance(usage, dict) else (None, None)
+    if isinstance(p, int) and isinstance(c, int) and not isinstance(p, bool) and not isinstance(c, bool):
+        return len(messages) + 1, p + c
+    return None
+
+
+def input_tokens(messages: list, tools: list | None, known: tuple[int, int] | None = None) -> int:
+    """The provider's count for the known prefix plus an estimate (bytes / BYTES_PER_TOKEN) for the rest."""
+    n, base = known if known and known[0] <= len(messages) else (0, 0)
+    rest = len(json.dumps({"messages": messages[n:], "tools": tools}).encode())
+    return base + -(-rest // BYTES_PER_TOKEN)
+
+
+def max_output(model: str, messages: list, tools: list | None = None,
+               known: tuple[int, int] | None = None) -> int | None:
+    """max_tokens for a request: the model's own maximum, less only what the context window cannot hold
+    (`input_tokens`). None (omit max_tokens: the provider applies the model maximum) for a model without a
+    known limit."""
+    cap = MAX_OUTPUT.get(model)
+    if cap is None:
+        return None
+    if model in CONTEXT:
+        cap = min(cap, max(1, CONTEXT[model] - input_tokens(messages, tools, known) - CONTEXT_MARGIN))
+    return cap
+
+
+def _truncated(body: object, limit: int | None) -> bool:
+    """The reply hit the output limit: finish_reason "length", or completion tokens at the requested limit."""
     choices = body.get("choices") if isinstance(body, dict) else None
     if choices and choices[0].get("finish_reason") == "length":
         return True
     usage = body.get("usage") if isinstance(body, dict) else None
-    return isinstance(usage, dict) and (usage.get("completion_tokens") or 0) >= MAX_TOKENS
+    return limit is not None and isinstance(usage, dict) and (usage.get("completion_tokens") or 0) >= limit
 
 
 def policy(call: dict) -> tuple[str, dict, str | None]:
@@ -631,6 +679,7 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
             return end("unverified", "setup_failed")
 
     messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": _goal_text(task)}]
+    known = None  # provider-reported tokens of the conversation so far (`reported_tokens`)
     while steps < task.max_steps:
         if past_deadline():
             return end("unverified", "lab_deadline")
@@ -638,11 +687,14 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
         if task.inject and steps == task.inject_step:
             messages.append({"role": "user", "content": task.inject})
             trace.write("inject", task=task.id, step=steps, content=task.inject)
-        request = {"model": model, "messages": messages, "tools": TOOLS, "max_tokens": MAX_TOKENS}
-        bound = len(json.dumps(request).encode()) * price_ceiling + MAX_TOKENS * output_ceiling
+        limit = max_output(model, messages, TOOLS, known)
+        request = {"model": model, "messages": messages, "tools": TOOLS,
+                   **({"max_tokens": limit} if limit is not None else {})}
+        # Input only: the output's cost is settled from the reply, never reserved at max_tokens x price (90b27cd).
+        bound = len(json.dumps(request).encode()) * price_ceiling
         # One retry when no HTTP response came back (transport error or timeout); each attempt is admitted and settled.
         for attempt in (1, 2):
-            if cost + bound > task.max_usd:
+            if cost >= task.max_usd:
                 return end("unverified", "task_budget")
             if not budget.admit(bound):
                 return end("unverified", "run_budget")
@@ -652,7 +704,10 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
             if c is None:
                 c, kind = usage_bound(body, price_ceiling, output_ceiling), "usage_bound"
             if c is None:
-                c, kind = bound, "bound"
+                # An HTTP reply without usage is an error the provider did not bill (slice 39: a 200
+                # `no_healthy_sellers` settled at its $0.66 input bound); a lost reply (status 0) may still be billed.
+                answered = isinstance(body, dict) and bool(body.get("choices"))
+                c, kind = (0.0, "no_usage") if status != 0 and not answered else (bound, "bound")
             budget.settle(bound, c)
             cost += c
             choices = body.get("choices") if isinstance(body, dict) else None
@@ -667,15 +722,17 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
                 return end("unverified", "lab_deadline")
             if status != 0:
                 break
+        known = reported_tokens(messages, body) or known
         if not isinstance(msg, dict):
-            return end("unverified", f"provider_{status}")
+            # No seller for the whole availability window: the provider's state, never the executor failing.
+            return end("unverified", "provider_unavailable" if _unavailable(status, body) else f"provider_{status}")
         calls = msg.get("tool_calls") or []
         reasoning = msg.get("reasoning_content")
         # DeepSeek needs its reasoning passed back on every later turn of a tool-call loop (MISSION c36f507).
         messages.append({"role": "assistant", "content": msg.get("content") or "",
                          **({"reasoning_content": reasoning} if isinstance(reasoning, str) and reasoning else {}),
                          **({"tool_calls": calls} if calls else {})})
-        truncated = _truncated(body)
+        truncated = _truncated(body, limit)
         finished = not calls and not truncated
         if truncated and not calls:
             messages.append({"role": "user", "content": TRUNCATED})
@@ -728,25 +785,62 @@ def load_key(name: str) -> str:
     return (SECRETS / name).read_text().strip()
 
 
-def surplus_chat(key: str, model: str = MODEL, http: httpx.Client | None = None) -> Chat:
-    http = http or httpx.Client(timeout=CHAT_TIMEOUT)
+def _unavailable(status: int, body: object) -> bool:
+    """No seller can serve the call right now: `404 minimum_discount_not_met` (MISSION 5ee7a8b), any 429/5xx, or
+    an error body without choices (slice 39: HTTP 200 `no_healthy_sellers` for pro ended a run at step 107)."""
+    if status in (429, 500, 502, 503, 504):
+        return True
+    err = body.get("error") if isinstance(body, dict) else None
+    if not isinstance(err, dict) or body.get("choices"):
+        return False
+    return (status == 404 and err.get("code") == "minimum_discount_not_met") or status == 200
 
-    def chat(messages: list, tools: list, timeout: float | None = None) -> tuple[int, object, float]:
-        t0 = time.monotonic()
+
+def surplus_post(http: httpx.Client, key: str, payload: dict, timeout: float | None = None,
+                 timeout_cap: float | None = None) -> tuple[int, object, float]:
+    """One Surplus chat completion bought only at >= MIN_DISCOUNT % off (MISSION 5ee7a8b). While no seller can serve
+    it (`_unavailable`: below the floor, or an outage), wait AVAILABILITY_BACKOFF_S and retry, for up to
+    AVAILABILITY_WINDOW_S and within `timeout`; then return the last reply (never a lower floor)."""
+    t0 = time.monotonic()
+    timeout_cap = CHAT_TIMEOUT if timeout_cap is None else timeout_cap
+    for attempt in itertools.count():
+        elapsed = time.monotonic() - t0
+        limit = timeout_cap if timeout is None else min(timeout_cap, timeout - elapsed)
+        if attempt:  # a retry also ends with the availability window (PR #47 review)
+            limit = min(limit, AVAILABILITY_WINDOW_S - elapsed)
+        if limit <= 0:
+            return (resp.status_code, body, elapsed) if attempt else (0, {"error": "TimeoutBeforeSend"}, elapsed)
         try:
-            resp = http.post(f"{SURPLUS}/chat/completions", timeout=CHAT_TIMEOUT if timeout is None
-                             else max(0.1, min(CHAT_TIMEOUT, timeout)),
+            resp = http.post(f"{SURPLUS}/chat/completions", timeout=max(0.1, limit),
                              # Surplus's compressed bodies break httpx decoding.
-                             headers={"Authorization": f"Bearer {key}", "Accept-Encoding": "identity"},
-                             json={"model": model, "messages": messages, "tools": tools,
-                                   "max_tokens": MAX_TOKENS})
+                             headers={"Authorization": f"Bearer {key}", "Accept-Encoding": "identity",
+                                      "X-Min-Discount": str(MIN_DISCOUNT)},
+                             json=payload)
         except httpx.HTTPError as e:
             return 0, {"error": type(e).__name__}, time.monotonic() - t0
         try:
             body = resp.json()
         except ValueError:
             body = {"error": resp.text[:500]}
-        return resp.status_code, body, time.monotonic() - t0
+        wait = AVAILABILITY_BACKOFF_S[min(attempt, len(AVAILABILITY_BACKOFF_S) - 1)]
+        elapsed = time.monotonic() - t0  # after the response: a slow refusal uses up time too (PR #47 review)
+        if not _unavailable(resp.status_code, body) or elapsed + wait > AVAILABILITY_WINDOW_S or (
+                timeout is not None and timeout - elapsed <= wait):
+            return resp.status_code, body, time.monotonic() - t0
+        time.sleep(wait)
+
+
+def surplus_chat(key: str, model: str = MODEL, http: httpx.Client | None = None) -> Chat:
+    http = http or httpx.Client(timeout=CHAT_TIMEOUT)
+
+    known = [None]  # provider-reported tokens of this conversation's prefix (`reported_tokens`)
+
+    def chat(messages: list, tools: list, timeout: float | None = None) -> tuple[int, object, float]:
+        n = max_output(model, messages, tools, known[0])
+        status, body, latency = surplus_post(http, key, {"model": model, "messages": messages, "tools": tools,
+                                                         **({"max_tokens": n} if n else {})}, timeout)
+        known[0] = reported_tokens(messages, body) or known[0]
+        return status, body, latency
 
     return chat
 
