@@ -105,7 +105,7 @@ def test_checks_passing_at_step_cap_are_accepted(tmp_path):
 def test_provider_error_is_unverified_not_failed(tmp_path):
     chat = Scripted((503, {"error": {"message": "no_healthy_sellers"}}, 0.2))
     res, trace = run(TOUCH, chat, tmp_path)
-    assert res["status"] == "unverified" and res["reason"] == "provider_503"
+    assert res["status"] == "unverified" and res["reason"] == "provider_unavailable"
     mc = [e for e in trace.events if e["event"] == "model_call"][0]
     assert mc["cost_kind"] == "no_usage" and mc["cost_usd"] == 0 and mc["error"] == {"message": "no_healthy_sellers"}
 
@@ -1072,10 +1072,27 @@ def test_truncated_reply_is_named_to_the_model_and_is_not_a_finish(tmp_path):
     assert [e["finish_reason"] for e in trace.events if e["event"] == "model_call"][0] == "length"
 
 
+class FakeClock:
+    """core.time stand-in: sleep() advances monotonic() instantly; time() is real (trace timestamps)."""
+
+    def __init__(self):
+        self.now, self.slept = 1000.0, []
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, s):
+        self.slept.append(s)
+        self.now += s
+
+    def time(self):
+        return time.time()
+
+
 def test_every_surplus_request_sets_the_discount_floor_and_waits_out_a_refusal(monkeypatch):
     # MISSION 5ee7a8b: without a floor kimi-k3.1-pro was billed at ~60% off while 96-99% offers existed.
-    # 404 minimum_discount_not_met = no seller at the floor now: wait and retry, never a lower floor.
-    seen, script = [], [404, 404, 200]
+    # 404 minimum_discount_not_met = no seller at the floor now: back off and retry, never a lower floor.
+    seen, script = [], [404] * 7 + [200]
 
     def handler(request):
         seen.append(dict(request.headers))
@@ -1084,26 +1101,31 @@ def test_every_surplus_request_sets_the_discount_floor_and_waits_out_a_refusal(m
             return httpx.Response(404, json={"error": {"code": "minimum_discount_not_met", "message": "no seller"}})
         return httpx.Response(200, json={"id": "g", "choices": [{"message": {"role": "assistant", "content": ""}}],
                                          "usage": {"prompt_tokens": 1, "completion_tokens": 1}})
-    slept = []
-    monkeypatch.setattr(core.time, "sleep", lambda s: slept.append(s))
+    clock = FakeClock()
+    monkeypatch.setattr(core, "time", clock)
     chat = core.surplus_chat("k", "deepseek-v4-pro", httpx.Client(transport=httpx.MockTransport(handler)))
     status, body, _ = chat([{"role": "user", "content": "hi"}], core.TOOLS)
-    assert status == 200 and len(seen) == 3 and slept == [core.FLOOR_WAIT_S] * 2
+    assert status == 200 and len(seen) == 8 and clock.slept == [30, 60, 120, 300, 600, 600, 600]
     assert all(h["x-min-discount"] == "90" for h in seen)
-    script[:] = [404] * (core.FLOOR_RETRIES + 1)
+    # the whole availability window without a seller: the refusal comes back (the caller decides), no lower floor
+    script[:] = [404] * 100
+    t0 = clock.now
     status, body, _ = chat([{"role": "user", "content": "hi"}], core.TOOLS)
-    assert status == 404 and body["error"]["code"] == "minimum_discount_not_met" and not script
-    script[:] = [404, 200]  # too little time left to wait: the refusal is returned, not slept through
-    status, _, _ = chat([{"role": "user", "content": "hi"}], core.TOOLS, timeout=core.FLOOR_WAIT_S / 2)
+    assert status == 404 and body["error"]["code"] == "minimum_discount_not_met"
+    assert core.AVAILABILITY_WINDOW_S - 600 < clock.now - t0 <= core.AVAILABILITY_WINDOW_S
+    script[:] = [404, 200]  # too little time left before the caller's deadline: returned, not slept through
+    status, _, _ = chat([{"role": "user", "content": "hi"}], core.TOOLS, timeout=20)
     assert status == 404 and script == [200]
 
 
-def test_a_provider_outage_is_waited_out_and_an_unbilled_error_settles_at_zero(tmp_path, monkeypatch):
-    # Slice 39 control run: HTTP 200 {"error": no_healthy_sellers} for pro ended the task `unverified provider_200`
-    # at step 107 and was settled at its $0.66 input bound. Outages are now waited out at the same floor, and an
-    # error reply without usage costs 0 (the usage export stays the authority).
+def test_a_provider_outage_never_ends_the_task_as_the_executors_doing(tmp_path, monkeypatch):
+    # Slice 39 pair 1: HTTP 200 {"error": no_healthy_sellers} with no choices/usage ended both runs `unverified
+    # provider_200` (lead at step 40, control at 107) and was settled at its input bound ($0.24, $0.66). Outages
+    # (200 error body, 404 below the floor, 429/5xx) are retried with backoff over a long window; one that outlasts it
+    # ends the task `unverified provider_unavailable`, never failed/finished; an error reply without usage costs 0.
     outage = {"error": {"type": "service_unavailable", "code": "no_healthy_sellers", "message": "none"}}
-    script = [(200, outage), (503, {"error": {"code": "upstream"}}), (200, None)]
+    script = [(200, outage)] * 6 + [(503, {"error": {"code": "no_healthy_sellers"}}),
+                                     (404, {"error": {"code": "minimum_discount_not_met"}}), (200, None)]
 
     def handler(request):
         st, body = script.pop(0)
@@ -1112,16 +1134,17 @@ def test_a_provider_outage_is_waited_out_and_an_unbilled_error_settles_at_zero(t
             body = {"id": "g", "choices": [{"message": msg}], "usage": {"prompt_tokens": 1, "completion_tokens": 1,
                                                                         "buyer_cost_micro": 3}}
         return httpx.Response(st, json=body)
-    monkeypatch.setattr(core.time, "sleep", lambda s: None)
+    clock = FakeClock()
+    monkeypatch.setattr(core, "time", clock)
     http_ = httpx.Client(transport=httpx.MockTransport(handler))
     task = dataclasses.replace(TOUCH, setup="echo yes > ok.txt")
     res, trace = run(task, core.surplus_chat("k", core.MODEL, http_), tmp_path)
-    assert res["status"] == "accepted" and not script, res
-    script[:] = [(200, outage)] * (core.FLOOR_RETRIES + 1)
+    assert res["status"] == "accepted" and not script and sum(clock.slept) == 2910, res  # ~49 min of outage
+    script[:] = [(200, outage)] * 1000
     (tmp_path / "2").mkdir()
     res, trace = run(task, core.surplus_chat("k", core.MODEL, http_), tmp_path / "2")
     mc = [e for e in trace.events if e["event"] == "model_call"]
-    assert res["reason"] == "provider_200" and not script
+    assert (res["status"], res["reason"]) == ("unverified", "provider_unavailable"), res
     assert [(e["cost_kind"], e["cost_usd"]) for e in mc] == [("no_usage", 0.0)] and res["cost_usd"] == 0
 
 
@@ -1205,9 +1228,13 @@ def test_second_transport_failure_is_unverified(tmp_path):
 
 
 def test_http_error_is_not_retried(tmp_path):
+    # run_task does not retry an HTTP reply itself: surplus_post already waited out the availability window.
     chat = Scripted((503, {"error": {"message": "no_healthy_sellers"}}, 0.2))
     res, _ = run(TOUCH, chat, tmp_path)
-    assert res["reason"] == "provider_503" and len(chat.seen) == 1
+    assert res["reason"] == "provider_unavailable" and len(chat.seen) == 1
+    chat = Scripted((400, {"error": {"message": "bad request"}}, 0.2))
+    res, _ = run(TOUCH, chat, tmp_path / "x")
+    assert res["reason"] == "provider_400" and len(chat.seen) == 1
 
 
 def test_transport_failure_past_the_deadline_is_not_retried(tmp_path):

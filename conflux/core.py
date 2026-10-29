@@ -39,6 +39,7 @@ import asyncio
 import base64
 import csv
 import io
+import itertools
 import json
 import os
 import re
@@ -75,8 +76,10 @@ CEILINGS = {
 }
 CAMPAIGN_BUDGET = 50.00
 MIN_DISCOUNT = 90          # X-Min-Discount on every Surplus request (MISSION 5ee7a8b); never lowered
-FLOOR_WAIT_S = 60          # wait before retrying a refusal or outage (`_unavailable`)
-FLOOR_RETRIES = 5
+# No seller at the floor / outage (`_unavailable`): retry with backoff for up to AVAILABILITY_WINDOW_S of wall clock
+# (bounded by the run deadline); Surplus seller availability fluctuates over minutes to hours (slice 39 pair 1).
+AVAILABILITY_BACKOFF_S = (30, 60, 120, 300, 600)   # then the last value repeats
+AVAILABILITY_WINDOW_S = 4 * 3600
 RUN_CAP = 0.20
 EXEC_TIMEOUT = 60
 CHAT_TIMEOUT = 900         # flash replies took up to 713 s (headroom demo); the lab deadline still bounds each call
@@ -698,7 +701,8 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
             if status != 0:
                 break
         if not isinstance(msg, dict):
-            return end("unverified", f"provider_{status}")
+            # No seller for the whole availability window: the provider's state, never the executor failing.
+            return end("unverified", "provider_unavailable" if _unavailable(status, body) else f"provider_{status}")
         calls = msg.get("tool_calls") or []
         reasoning = msg.get("reasoning_content")
         # DeepSeek needs its reasoning passed back on every later turn of a tool-call loop (MISSION c36f507).
@@ -771,12 +775,12 @@ def _unavailable(status: int, body: object) -> bool:
 
 def surplus_post(http: httpx.Client, key: str, payload: dict, timeout: float | None = None,
                  timeout_cap: float | None = None) -> tuple[int, object, float]:
-    """One Surplus chat completion bought only at >= MIN_DISCOUNT % off (MISSION 5ee7a8b). When no seller can serve
-    it now (`_unavailable`: below the floor, or an outage): wait FLOOR_WAIT_S and retry, at most FLOOR_RETRIES times
-    within `timeout`, then return the last reply (never a lower floor)."""
+    """One Surplus chat completion bought only at >= MIN_DISCOUNT % off (MISSION 5ee7a8b). While no seller can serve
+    it (`_unavailable`: below the floor, or an outage), wait AVAILABILITY_BACKOFF_S and retry, for up to
+    AVAILABILITY_WINDOW_S and within `timeout`; then return the last reply (never a lower floor)."""
     t0 = time.monotonic()
     timeout_cap = CHAT_TIMEOUT if timeout_cap is None else timeout_cap
-    for attempt in range(FLOOR_RETRIES + 1):
+    for attempt in itertools.count():
         left = None if timeout is None else timeout - (time.monotonic() - t0)
         if left is not None and left <= 0:
             return 0, {"error": "TimeoutBeforeSend"}, time.monotonic() - t0
@@ -793,10 +797,12 @@ def surplus_post(http: httpx.Client, key: str, payload: dict, timeout: float | N
             body = resp.json()
         except ValueError:
             body = {"error": resp.text[:500]}
-        if not _unavailable(resp.status_code, body) or attempt == FLOOR_RETRIES or (
-                left is not None and left <= FLOOR_WAIT_S):
+        wait = AVAILABILITY_BACKOFF_S[min(attempt, len(AVAILABILITY_BACKOFF_S) - 1)]
+        elapsed = time.monotonic() - t0
+        if not _unavailable(resp.status_code, body) or elapsed + wait > AVAILABILITY_WINDOW_S or (
+                left is not None and left <= wait):
             return resp.status_code, body, time.monotonic() - t0
-        time.sleep(FLOOR_WAIT_S)
+        time.sleep(wait)
     raise AssertionError("unreachable")
 
 
