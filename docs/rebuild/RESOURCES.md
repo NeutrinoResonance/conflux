@@ -103,7 +103,8 @@ gcloud compute instances stop  conflux-dev-worker-1 --zone us-central1-a
     **without** the Authorization header. The CSV columns are `request_id, created_at, model, input_tokens,
     output_tokens, buyer_cost_usd, direct_cost_usd, settlement_status, …`.
   - `GET /v1/buyer/me` gives `credit_balance_usdc` (micro-USD) and `model_breakdown`.
-  - Jev-1.14 bills about $0.000006 per decision.
+  - Jev-1.14 bills about $0.000006 per decision: input-only metering (≈ $0.042/M input tokens, output free), ≈ 300
+    input tokens minimum per request (`~/evidence/provider-probes-2026-10-27.md`). `gpt-6-luna` decisions returned 429.
   - The inference host has no balance endpoint.
 - Surplus `/models` **and chat completions** need `Accept-Encoding: identity`: the compressed body breaks httpx
   (`DecodingError`), and those requests are still billed.
@@ -127,8 +128,11 @@ gcloud compute instances stop  conflux-dev-worker-1 --zone us-central1-a
 - **Holds:** Surplus holds each in-flight request's worst case (max output × price) in `credit_balance_usdc`; see
   `GET /v1/payments/balance` (`fiat_available_usdc`, `fiat_held_usdc`). A ~$0.45 `fiat_held_usdc` persisted with nothing
   in flight on 2026-10-29: reconcile spend from the usage export, not from available + held.
-- Output limits: `top_provider.max_completion_tokens` in `/models` (core `MAX_OUTPUT`). `reasoning_effort`
-  (`low`/`medium`/`high`) is accepted by glm-5.3, glm-5.3-flash and kimi-k3; `low` cut GLM reviews from 17–20 min to ~2 min.
+- Output limits: `top_provider.max_completion_tokens` in `/models` (core `MAX_OUTPUT`). `reasoning_effort=low` is accepted
+  by glm-5.3, glm-5.3-flash and kimi-k3; `low` cut GLM reviews from 17–20 min to ~2 min. Since 2026-10-29 08:49Z glm-5.3
+  rejects `medium` with HTTP 400 `request_rejected` ("must be one of: 'low', 'high', 'max'"; C slice 40).
+- kimi-k3 (low) as a lead: 2/218 replies without `buyer_cost_micro` (C slice 40); settled at bounds they read as $0.32
+  against $0.056 for the 216 billed replies, so per-run settled caps must allow for them; reconcile from the export.
 - Executed capability matrix: `docs/rebuild/PROVIDERS.md`.
 - Measured model strengths/weaknesses with examples: `docs/rebuild/MODELS.md` (append new findings there).
 

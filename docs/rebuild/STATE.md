@@ -11,6 +11,19 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **C slice 40 (2026-10-29, lead-factor demo on full `task.txt`, $0.198894 metered (export) + ≤ $2.71 GCE): a
+  non-blocking kimi-k3 (`reasoning_effort=low`) lead, in place of glm-5.3 low, still does not pass the registered rule
+  (lead 4, 3, 3 vs slice 39's controls 3, 2, 3; median 3 ≤ 3: falsified). But it alone reached G5 (kernel rebuilt with
+  the driver, 2/3 vs 0/5 slice-39 runs) and G6 (NetBSD on OP-TEE firmware, 1/3 vs 0/5); G7 (driver attaches) 0/3.**
+  - Factor choice by the registered rule: glm-5.3 now refuses `medium` (HTTP 400, accepts only low/high/max), so the
+    lead model changed. Offline finish replay of slice 39's 3 false control finishes: **0/6 false DONE** for glm-5.3 low
+    and 0/6 for kimi-k3 low. Whether a lead accepts a genuine DONE is unmeasured (no complete run exists).
+  - Lead runs lose goal (a): G1 1/3, no Linux boot (G3 0/3). Executors follow the lead's numbered steps and work in the
+    machine's NetBSD tree (2/3). No executor proposed finish (all ran to the 120-step cap). Review latency grows with the
+    trace: median 275/290/424 s, max 406/655/779 s, so 2/3 runs had reviews past the 10-min cadence bound.
+  - Unclassified: D1 hits 15/10/0. In lead-c1 most are masking in the model's own commands (`&`, `|| …`, `curl -s`
+    printing a 404 with exit 0), plus a source-text false positive.
+  - Evidence: `~/evidence/lead-factor-demo-2026-10-29/RESULTS.md` (`started.txt`, `grade-lead-c*.json`).
 - **C slice 39 (2026-10-28/29, other-model-leads demo on full `task.txt`, $0.377811 metered (export) + ≤ $5.23 GCE): a
   non-blocking GLM-5.3 lead does not move milestones vs pro alone; registered rule falsified (lead 2, 2 vs control 3, 2,
   3 of G1–G7; lead-b3 futility-stopped). False DONE: 0/2 lead runs vs 3/3 controls that called finish with false
@@ -287,9 +300,12 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. **Change one factor of the lead (founder 68ad22c), same registered measure.** Milestones did not move with a
-     low-effort glm-5.3 lead. Next: raise its effort (glm-5.3 `reasoning_effort=medium`; preflight that a review still
-     fits the 5–10 min cadence) or change the lead model (kimi-k3 low is served at the floor, same rubric score); keep
-     layout, cadence, non-blocking delivery and the finish review (its rejection of a premature finish is untested). Demo harness:
-     `~/evidence/other-model-leads-demo-2026-10-28/demo.py` (`run`, `preflight`, `seam`). Surplus credit: $7.30 available.
-  2. Completion-gate run: `run12/task.txt` only, unattended from the clean snapshot on a fresh lab; then delete the c3 disk.
+  1. **D1 hits from slice 40 first ($0, harness):** classify lead-c1/c2's 25 hits (`python -m conflux.core audit` on
+     their traces). Fix false-positive classes structurally with fixture cases. Masked failures in the model's own
+     commands (`cmd &`, `|| fallback`, `curl -s` without `-f`) are model behaviour for the lead/critic to catch; record them.
+  2. **Then change one more lead factor (68ad22c), keeping kimi-k3 low and the registered measure.** The lead moves goal (b)
+     (G5/G6 reached) but its runs drop goal (a) (no `qemu_v8` sync with TF-A, no Linux boot) and hit the 120-step cap while
+     progressing. Candidates: a longer step cap for both arms, or a second different-family reviewer of the lead's goal
+     list. No developer goal text either way. Harness: `~/evidence/lead-factor-demo-2026-10-29/demo.py`. Surplus
+     credit: $7.41 available.
+  3. Completion-gate run: `run12/task.txt` only, unattended from the clean snapshot on a fresh lab; then delete the c3 disk.
