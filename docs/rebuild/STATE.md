@@ -17,7 +17,7 @@ MISSION-STATUS: ACTIVE
     request "does it cover everything the task asks for, read the way the user most likely means it? corrected list".
   - Linux/xtest boot goal with goal (b) kept: glm-5.3 low **2/15** (rule ≥ 8), kimi-k3 low self-review 5/15, no
     review 0/9; reference build env (qemu_v8/repo): 0, 3, 0. Every hit came from c3's reply, whose free-text next
-    steps already named the stock qemu_v8 boot; from c1/c2 0/20 per model. Review promotes, never derives. Build nothing.
+    steps already named the stock qemu_v8 boot; from c1/c2 0/10 per model. Review promotes, never derives. Build nothing.
   - Evidence: `~/evidence/goal-review-demo-2026-10-29/RESULTS.md` (36/36 export-matched).
 - **C slice 41 (2026-10-29, D1 classification of slice 40's 25 hits, $0): 12 are real masking in the executor's own
   commands, 6 were audit false positives (now fixed), 7 are residual false positives, and one harness fault was fixed.**
