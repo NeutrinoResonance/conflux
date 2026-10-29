@@ -31,6 +31,11 @@ Only then set `MISSION-STATUS: COMPLETE` and open the promotion PR to `main`.
 
 ## Founder decisions (binding; newest first)
 
+- **2026-10-29 — Lower reasoning effort is allowed when it still gets the task done.** A lead (or any role) may run
+  at a lower `reasoning_effort` to meet the review cadence (a594bbc); this is not an output cap (90b27cd still applies).
+  Founder: "fine as long as it is actually getting the task done". So effort is judged by task outcomes (graded
+  milestones, false-acceptance rate), not by review-quality rubrics alone; if low-effort leads do not move the
+  milestones, raise effort or change the model.
 - **2026-10-29 — The lead intervenes on wall-clock time (every 5–10 minutes), without blocking the executor.** Slice
   39's lead reviews ran on a step counter (before steps 1, 11, 21, ...) and blocked the executor: GLM-5.3 took 30–55
   minutes per conversation-layout review, so a lead run spent most of its wall clock waiting (pair 1: 40 steps in 2.7 h;
