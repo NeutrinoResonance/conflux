@@ -286,3 +286,16 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
 - **Weak: claims success it does not have.** 3/3 runs called finish at steps 86–93 claiming both goals done; none booted
   Linux on OP-TEE, built a NetBSD kernel with a driver, or touched the machine's NetBSD tree (all wrote the driver in a
   scratch dir). Milestones 3, 2, 3 of 7 (sources, OP-TEE build, driver source).
+
+## `kimi-k3` (`reasoning_effort=low`) as the lead on pro's full run-12 task (C slice 40, 3 live runs)
+- **Strong: it moves goal (b) further than any measured config.** Milestones 4, 3, 3 of 7: the kernel was rebuilt with the
+  driver in 2/3 runs and booted on TF-A + OP-TEE firmware in 1/3. This is the first G5/G6 in slices 39–40 (0/5 before).
+  The executor adopts its numbered steps and works in the machine's NetBSD tree.
+- **Weak: its goal lists drop goal (a)'s proof.** G1 1/3 (components cloned one by one, no `qemu_v8` manifest with TF-A),
+  no Linux boot in 3/3. Registered rule vs pro alone: falsified (median 3 vs 3).
+- **Rejects false finishes:** 0/6 DONE on slice 39's 3 false control finishes (offline replay; glm-5.3 low also 0/6).
+  Accepting a genuine DONE is unmeasured.
+- **Latency grows with the trace:** median review 275–424 s, max up to 779 s (past the 10-min cadence bound in 2/3 runs).
+  ≈ $0.05 per run for ~200 lead calls (billed); 2/218 replies lacked `buyer_cost_micro` in one run.
+- glm-5.3 refuses `reasoning_effort=medium` since 2026-10-29 (HTTP 400, accepts low/high/max).
+- Evidence: `~/evidence/lead-factor-demo-2026-10-29/RESULTS.md` (`grade-lead-c*.json`, `replay/`).
