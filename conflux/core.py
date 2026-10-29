@@ -64,8 +64,10 @@ EXPORT = "https://api.surplusintelligence.ai/v1/buyer/usage/export"
 MODEL = "deepseek-v4.1-flash"
 # Output limit and context per model: the provider's `top_provider.max_completion_tokens` / `context_length` (Surplus
 # /models, 2026-10-28). Every call requests the model's maximum (MISSION 90b27cd; 8192 cut off 26/29 slice-34 calls).
-MAX_OUTPUT = {"deepseek-v4.1-flash": 384000, "deepseek-v4-pro": 128000, "glm-5.3": 131072, "kimi-k3.1-pro": 943718}
-CONTEXT = {"deepseek-v4.1-flash": 1048576, "deepseek-v4-pro": 1000000, "glm-5.3": 1000000, "kimi-k3.1-pro": 1048576}
+MAX_OUTPUT = {"deepseek-v4.1-flash": 384000, "deepseek-v4-pro": 128000, "glm-5.3": 131072, "kimi-k3.1-pro": 943718,
+              "glm-5.3-flash": 131072, "kimi-k3": 131072}
+CONTEXT = {"deepseek-v4.1-flash": 1048576, "deepseek-v4-pro": 1000000, "glm-5.3": 1000000, "kimi-k3.1-pro": 1048576,
+           "glm-5.3-flash": 1048576, "kimi-k3": 1000000}
 CONTEXT_MARGIN = 1024
 # Admission bounds per executor: ($/byte of request, $/output token). Tokens <= bytes, so a $/byte above the top input
 # list rate bounds input; output is 2x the top output list rate (used only to settle a reply that reports usage but no
