@@ -13,8 +13,9 @@ MISSION-STATUS: ACTIVE
   and produces its own corrections.
 - **C slice 39 (2026-10-28/29, other-model-leads demo on full `task.txt`, $0.377811 metered (export) + ≤ $5.23 GCE): a
   non-blocking GLM-5.3 lead does not move milestones vs pro alone; registered rule falsified (lead 2, 2 vs control 3, 2,
-  3 of G1–G7; lead-b3 futility-stopped). The lead prevents false acceptance (0/2 false DONE vs 3/3 controls finishing
-  with false success claims).**
+  3 of G1–G7; lead-b3 futility-stopped). False DONE: 0/2 lead runs vs 3/3 controls that called finish with false
+  success claims, but neither lead run ever proposed finish (both ran to the 120-step cap, 0 retries), so whether the
+  lead rejects a premature finish is untested.**
   - Design as measured (founder decisions cda6dac, a594bbc, 68ad22c): conversation layout (data first, one goal per
     turn), review every ≥ 300 s of wall clock, never blocking pro; glm-5.3 at `reasoning_effort=low` (reviews 100–285 s;
     default effort took 17–20 min per review, pf rubric equal). Lead runs went further in kind (driver wired into the
@@ -289,6 +290,6 @@ MISSION-STATUS: ACTIVE
   1. **Change one factor of the lead (founder 68ad22c), same registered measure.** Milestones did not move with a
      low-effort glm-5.3 lead. Next: raise its effort (glm-5.3 `reasoning_effort=medium`; preflight that a review still
      fits the 5–10 min cadence) or change the lead model (kimi-k3 low is served at the floor, same rubric score); keep
-     layout, cadence, non-blocking delivery and the finish review (which stopped false acceptance). Demo harness:
+     layout, cadence, non-blocking delivery and the finish review (its rejection of a premature finish is untested). Demo harness:
      `~/evidence/other-model-leads-demo-2026-10-28/demo.py` (`run`, `preflight`, `seam`). Surplus credit: $7.30 available.
   2. Completion-gate run: `run12/task.txt` only, unattended from the clean snapshot on a fresh lab; then delete the c3 disk.

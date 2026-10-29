@@ -275,9 +275,10 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   the trace grew; still under the 300 s cadence.
 - **Weak: it does not move milestones.** Live, non-blocking, 17–18 reviews per run: lead runs 2/7 and 2/7 vs control
   3, 2, 3. Its goal lists add scope (userland TA, report bundles, "status gates").
-- **Strong: its finish review is honest.** 0/2 lead runs ended with a false DONE; 3/3 pro-alone runs called finish with
-  a false success claim. Lead runs reached further in kind (driver wired into the machine's NetBSD tree; OP-TEE booted
-  to U-Boot) without reaching the next milestone.
+- **Its step-cap review is honest; finish rejection is untested.** Both lead runs' step-cap reviews said "not done"
+  (0/2 false DONE), but neither executor ever proposed finish (both ran to the 120-step cap), while 3/3 pro-alone runs
+  called finish with a false success claim. Lead runs reached further in kind (driver wired into the machine's NetBSD
+  tree; OP-TEE booted to U-Boot) without reaching the next milestone.
 - Surplus at the 90% floor (2026-10-29): served glm-5.3, glm-5.3-flash, kimi-k3, deepseek-v4-pro; refused kimi-k3.1-pro,
   kimi-k3-fast-api, glm-5.3-flashx, minimax-m2.7(-highspeed).
 

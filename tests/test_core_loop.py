@@ -1129,6 +1129,19 @@ def test_every_surplus_request_sets_the_discount_floor_and_waits_out_a_refusal(m
     script[:] = [404, 200]  # too little time left before the caller's deadline: returned, not slept through
     status, _, _ = chat([{"role": "user", "content": "hi"}], core.TOOLS, timeout=20)
     assert status == 404 and script == [200]
+    # A slow refusal uses up the deadline too (PR #47 review): a 404 that takes 50 s of a 60 s budget is returned
+    # instead of waiting 30 s past the deadline.
+    slow = {"s": 50}
+    orig = handler
+
+    def slow_handler(request):
+        clock.now += slow["s"]
+        return orig(request)
+    chat = core.surplus_chat("k", "deepseek-v4-pro", httpx.Client(transport=httpx.MockTransport(slow_handler)))
+    script[:] = [404, 200]
+    clock.slept.clear()
+    status, _, _ = chat([{"role": "user", "content": "hi"}], core.TOOLS, timeout=60)
+    assert status == 404 and script == [200] and clock.slept == []
 
 
 def test_a_provider_outage_never_ends_the_task_as_the_executors_doing(tmp_path, monkeypatch):
@@ -1176,9 +1189,13 @@ def test_every_call_requests_the_models_own_maximum_output(tmp_path, monkeypatch
         core.surplus_chat("k", model, http_)(small, core.TOOLS)
     assert [r.get("max_tokens") for r in sent] == [128000, 384000, 131072, 943718, None]
     assert "max_tokens" not in sent[-1]
-    big = [{"role": "user", "content": "x" * 200_000}]
-    core.surplus_chat("k", "kimi-k3.1-pro", http_)(big, core.TOOLS)
-    assert 943718 - 210_000 < sent[-1]["max_tokens"] <= 1048576 - 200_000 - core.CONTEXT_MARGIN
+    # Byte-heavy input that still leaves token headroom keeps the full limit (PR #47 review: counting bytes as tokens
+    # cut a 900 KB pro request to 99 k): ~300 k tokens + 128 k output fit pro's 1 M context.
+    core.surplus_chat("k", "deepseek-v4-pro", http_)([{"role": "user", "content": "x" * 900_000}], core.TOOLS)
+    assert sent[-1]["max_tokens"] == 128000
+    # Only what the context cannot hold is taken off: 2.4 MB (~800 k tokens) leaves kimi-k3.1-pro ~247 k of 943,718.
+    core.surplus_chat("k", "kimi-k3.1-pro", http_)([{"role": "user", "content": "x" * 2_400_000}], core.TOOLS)
+    assert 1048576 - 2_400_000 // 3 - 2000 < sent[-1]["max_tokens"] < 1048576 - 2_400_000 // 3 - core.CONTEXT_MARGIN
 
 
 # ---------------------------------------------------------------- slice 17: slow provider replies

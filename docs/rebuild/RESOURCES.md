@@ -23,7 +23,9 @@
 
 ## Lab VMs (`devbox-lab`)
 
-- `LAB_MAX=2` (`~/.config/devbox/lab.env`): two labs may run at once.
+- One lab at a time (MISSION budgets table). `~/.config/devbox/lab.env` has `LAB_MAX=2`; C slice 39 ran two labs at
+  once on an explicit operator note (2026-10-29, scheduling only; its GCE rows in LEDGER.md count both). Later runs keep
+  to one lab unless MISSION is amended.
 - `devbox-lab up|ssh|stop|delete|list <name>` → `conflux-dev-lab-<name>`, n2d-standard-8 (8 vCPU, 32 GB) from snapshot
   `conflux-optee-baseline-clean-20261021` (100 GB pd-balanced), no external IP, no service account, self-stops after 24 h.
   Cost: ≈ $0.338/h running (GCE list price, us-central1) + ≈ $0.014/h for the disk while it exists (stopped or not).

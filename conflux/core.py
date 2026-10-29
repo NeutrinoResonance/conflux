@@ -69,6 +69,9 @@ MAX_OUTPUT = {"deepseek-v4.1-flash": 384000, "deepseek-v4-pro": 128000, "glm-5.3
 CONTEXT = {"deepseek-v4.1-flash": 1048576, "deepseek-v4-pro": 1000000, "glm-5.3": 1000000, "kimi-k3.1-pro": 1048576,
            "glm-5.3-flash": 1048576, "kimi-k3": 1000000}
 CONTEXT_MARGIN = 1024
+# Request bytes per token for the context estimate: JSON, code and English run ~3.5-4.5 bytes/token on these tokenizers;
+# 3 keeps the estimate on the high side without counting every byte as a token (PR #47 review).
+BYTES_PER_TOKEN = 3
 # Admission bounds per executor: ($/byte of request, $/output token). Tokens <= bytes, so a $/byte above the top input
 # list rate bounds input; output is 2x the top output list rate (used only to settle a reply that reports usage but no
 # cost). Admission charges the input bound alone. An executor without an entry is refused (KeyError).
@@ -490,13 +493,13 @@ TRUNCATED = ("your reply was cut off at the model's output limit (reasoning coun
 
 def max_output(model: str, messages: list, tools: list | None = None) -> int | None:
     """max_tokens for a request: the model's own maximum, less only what the context window cannot hold
-    (request bytes bound its tokens). None (omit max_tokens: the provider applies the model maximum) for a
-    model without a known limit."""
+    (input tokens estimated as request bytes / BYTES_PER_TOKEN). None (omit max_tokens: the provider applies the
+    model maximum) for a model without a known limit."""
     cap = MAX_OUTPUT.get(model)
     if cap is None:
         return None
     if model in CONTEXT:
-        used = len(json.dumps({"messages": messages, "tools": tools}).encode())
+        used = -(-len(json.dumps({"messages": messages, "tools": tools}).encode()) // BYTES_PER_TOKEN)
         cap = min(cap, max(1, CONTEXT[model] - used - CONTEXT_MARGIN))
     return cap
 
@@ -799,9 +802,9 @@ def surplus_post(http: httpx.Client, key: str, payload: dict, timeout: float | N
         except ValueError:
             body = {"error": resp.text[:500]}
         wait = AVAILABILITY_BACKOFF_S[min(attempt, len(AVAILABILITY_BACKOFF_S) - 1)]
-        elapsed = time.monotonic() - t0
+        elapsed = time.monotonic() - t0  # after the response: a slow refusal uses up time too (PR #47 review)
         if not _unavailable(resp.status_code, body) or elapsed + wait > AVAILABILITY_WINDOW_S or (
-                left is not None and left <= wait):
+                timeout is not None and timeout - elapsed <= wait):
             return resp.status_code, body, time.monotonic() - t0
         time.sleep(wait)
 
