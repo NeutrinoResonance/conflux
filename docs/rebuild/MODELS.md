@@ -298,3 +298,4 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
 - **Latency grows with the trace:** median review 275–424 s, max up to 779 s (past the 10-min cadence bound in 2/3 runs).
   ≈ $0.05 per run for ~200 lead calls (billed); 2/218 replies lacked `buyer_cost_micro` in one run.
 - glm-5.3 refuses `reasoning_effort=medium` since 2026-10-29 (HTTP 400, accepts low/high/max).
+- Evidence: `~/evidence/lead-factor-demo-2026-10-29/RESULTS.md` (`grade-lead-c*.json`, `replay/`).
