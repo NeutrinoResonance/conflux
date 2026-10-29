@@ -227,11 +227,14 @@ def _wrap(command: str) -> str:
 
 def _split_pipestatus(stderr: str) -> tuple[str, list[int] | None, int | None]:
     """(stderr without the trailing marker, per-stage exits, failed simple commands); None, None
-    when the marker is missing (killed, timed out, or the command replaced the trap or closed stderr)."""
-    m = re.search(rf"\n?{_PS_MARK}([\d ]+)failed=(\d+)\n?$", stderr)
+    when the marker is missing (killed, timed out, or the command replaced the trap or closed stderr).
+    The last marker line counts wherever it is: a backgrounded child (`cmd &`) may write after it."""
+    m = None
+    for m in re.finditer(rf"(?:^|\n){_PS_MARK}([\d ]+)failed=(\d+)(?:\n|$)", stderr):
+        pass
     if not m:
         return stderr, None, None
-    return stderr[:m.start()], [int(x) for x in m[1].split()], int(m[2])
+    return stderr[:m.start()] + stderr[m.end():], [int(x) for x in m[1].split()], int(m[2])
 
 
 def _clip(text: str) -> str:
@@ -594,8 +597,10 @@ FAIL_TEXT = re.compile(r"(?im)^.*\b(error|failed|fatal|cannot|can't|no such file
 BENIGN_TEXT = re.compile(r"(?i)^\s*MAKECONF file:.*\(File not found\)\s*$")  # NetBSD build.sh banner, every run
 READ_ONLY = re.compile(r"^(cat|head|tail|sed -n|less|grep|rg|ls|find|wc|stat|file|readlink|du|df|echo|pwd|which|"
                        r"type|command -v|git( -[cC] \S+)* (log|show|diff|status|branch|remote|rev-parse|ls-files)|"
-                       r"apt(-cache)? (search|show|list|policy)|dpkg (-l|-s|-L)|strings|od|xxd|hexdump|"
-                       r"(\S*/)?([\w.]+-)*(objdump|readelf|nm)|(\S*/)?[\w.-]*make( \S+)* -n)\b")
+                       r"apt(-cache)? (search|show|list|policy)|dpkg (-l|-s|-L)|od|xxd|hexdump|"
+                       r"(\S*/)?([\w.]+-)*(objdump|readelf|nm|strings)|(\S*/)?[\w.-]*make( \S+)* -n|sleep)\b")
+# A quoted literal the command itself prints (`|| echo "Cannot write to X"`): the model's own message, not a tool's.
+OWN_TEXT = re.compile(r"""^(?:echo|printf)(?:\s+-\w+)*\s+(["'])(.*)\1\s*$""", re.S)
 
 
 def _scan(cmd: str) -> tuple[list[str], bool]:
@@ -633,8 +638,8 @@ def _scan(cmd: str) -> tuple[list[str], bool]:
 def audit(rows: list[dict]) -> list[dict]:
     """D1: a model step that exited 0 although its own output reports a failure, i.e. a failure that looked like
     success. Exempt: the model capturing `$?` itself, and `failed_cmds` > 0 (the result header named the failure).
-    For pure reads only stderr counts (stdout is file content); known informational lines (`BENIGN_TEXT`) never
-    count."""
+    For pure reads only stderr counts (stdout is file content); known informational lines (`BENIGN_TEXT`) and lines
+    that equal a literal the command echoes itself (`OWN_TEXT`) never count."""
     findings = []
     for r in rows:
         if r.get("event") != "exec" or r.get("source") != "model" or r.get("exit") != 0 or r.get("failed_cmds"):
@@ -645,7 +650,9 @@ def audit(rows: list[dict]) -> list[dict]:
             continue
         reads = bool(segs) and all(READ_ONLY.match(s) for s in segs)
         text = ("" if reads else (r.get("stdout") or "")) + "\n" + (r.get("stderr") or "")
-        hits = [h for h in FAIL_TEXT.finditer(text) if not BENIGN_TEXT.match(h.group(0))]
+        own = {m[2].replace("\\n", "").strip() for m in map(OWN_TEXT.match, segs) if m}
+        hits = [h for h in FAIL_TEXT.finditer(text)
+                if not BENIGN_TEXT.match(h.group(0)) and h.group(0).strip() not in own]
         if hits:
             findings.append({"check": "D1", "step": r.get("step"), "command": cmd[:200],
                              "evidence": hits[-1].group(0).strip()[:200]})

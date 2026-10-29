@@ -299,3 +299,7 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   ≈ $0.05 per run for ~200 lead calls (billed); 2/218 replies lacked `buyer_cost_micro` in one run.
 - glm-5.3 refuses `reasoning_effort=medium` since 2026-10-29 (HTTP 400, accepts low/high/max).
 - Evidence: `~/evidence/lead-factor-demo-2026-10-29/RESULTS.md` (`grade-lead-c*.json`, `replay/`).
+- **Weak: the executor it steers masks its own failures** (C slice 41 D1 classification, 12 true hits in c1): `curl -s`
+  without `-f` (a 404 page with exit 0), `… &` on commands whose failure matters, `nohup sh -c "build | tee log; echo
+  EXIT $?" &` (EXIT 0 on an aborted build), `|| true` after experiments. Whether a lead review names them is unmeasured. These are targets for
+  the other-model layer. Evidence: `~/evidence/d1-slice40-classify-2026-10-29/RESULTS.md`.

@@ -961,6 +961,37 @@ def test_pipestatus_does_not_depend_on_the_commands_ifs(any_shell, ifs):
     assert r["exit"] == 3 and r["pipestatus"] == [1, 0, 3] and "PIPESTATUS" not in r["stderr"]
 
 
+def test_pipestatus_survives_stderr_written_after_the_exit_trap():
+    """C slice 40 lead-c1 step 19: a `cmd &` child wrote stderr after the EXIT trap's marker."""
+    late = ("/home/dev/.conflux-jobs/18e2f4f457e53c18/cmd.sh: line 4: cd: /home/darrenhidalgo/optee-demo: "
+            "No such file or directory\n")
+    assert core._split_pipestatus(f"\n{core._PS_MARK}0 failed=0\n{late}") == (late, [0], 0)
+
+
+# The child writes only once the job's main shell is gone or a zombie, i.e. after its EXIT trap ran.
+LATE_CHILD = ("true; (while [ -e /proc/$$ ] && ! grep -q ') Z' /proc/$$/stat; do sleep 0.01; done; "
+              "echo late >&2; touch late.done) &")
+
+
+@pytest.mark.parametrize("path", ["local", "lab"])
+def test_a_background_childs_late_stderr_keeps_the_statuses(path, lab, tmp_path):
+    if path == "local":
+        r = core.local_shell(tmp_path / "work")(LATE_CHILD, 10)
+    else:
+        (tmp_path / "work").mkdir()
+
+        def remote(script):
+            if 'f="$d/err"' in script:  # collection waits for the late write
+                end = time.monotonic() + 10
+                while not (tmp_path / "work" / "late.done").exists():
+                    assert time.monotonic() < end, "late child never wrote"
+                    time.sleep(0.01)
+            return core.local_remote(script)
+        r = lab(remote=remote)(LATE_CHILD, 10)
+    assert r["exit"] == 0 and r["pipestatus"] == [0] and r["failed_cmds"] == 0
+    assert "late" in r["stderr"] and "PIPESTATUS" not in r["stderr"]
+
+
 # ---------------------------------------------------------------- failed simple commands (C slice 7)
 
 
@@ -1030,6 +1061,15 @@ def test_d1_keeps_stderr_diagnostics_of_reads():
            "exit": 0, "stdout": "done\n", "stderr": "cat: /definitely-missing: No such file or directory\n"}
     assert [f["evidence"] for f in core.audit([row])] == ["cat: /definitely-missing: No such file or directory"]
     assert core.audit([{**row, "stdout": "error: in file content\n", "stderr": ""}]) == []
+
+
+def test_d1_skips_only_the_literal_text_the_command_echoes_itself():
+    row = {"event": "exec", "source": "model", "step": 1, "exit": 0,
+           "command": "touch /ro/x 2>&1 || echo \"Cannot write to /ro\"; printf 'build failed\\n'",
+           "stdout": "Cannot write to /ro\nbuild failed\n"}
+    assert core.audit([row]) == []
+    tool = {**row, "stdout": "touch: cannot touch '/ro/x': Permission denied\n" + row["stdout"]}
+    assert [f["evidence"] for f in core.audit([tool])] == ["touch: cannot touch '/ro/x': Permission denied"]
 
 
 @pytest.mark.parametrize("cmd, exempt", [

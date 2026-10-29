@@ -11,6 +11,19 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **C slice 41 (2026-10-29, D1 classification of slice 40's 25 hits, $0): 12 are real masking in the executor's own
+  commands, 6 were audit false positives (now fixed), 7 are residual false positives, and one harness fault was fixed.**
+  - Harness fault H1: with a trailing `cmd &`, a background child's late stderr pushed the `__CONFLUX_PIPESTATUS=` marker
+    off the end, so `pipestatus`/`failed_cmds` were lost and the marker was shown to the model (3/1,553 execs).
+    `_split_pipestatus` now takes the last marker line anywhere. Regression tests on recorded stderr, local, and a
+    fake-remote lab fail on the old parser.
+  - D1 false positives fixed: `sleep N && tail log` is a read (5), cross-prefixed `strings` (1), and lines equal to the
+    command's own echo literal (0 in slice 40, 1 in slice 39). Residual (recorded only): file text from mixed read+write
+    commands (4) and `touch … || echo` writability probes (3). After the fix slice 40 has 19 hits, slice 39 has 10 (was 11);
+    no hit was added.
+  - Real masking (model, for the lead/critic): `curl -s` without `-f`, `… &`, `| tee log; echo EXIT $?` inside
+    `sh -c`, `|| true`.
+  - Evidence: `~/evidence/d1-slice40-classify-2026-10-29/RESULTS.md`.
 - **C slice 40 (2026-10-29, lead-factor demo on full `task.txt`, $0.198894 metered (export) + ≤ $2.71 GCE): a
   non-blocking kimi-k3 (`reasoning_effort=low`) lead, in place of glm-5.3 low, still does not pass the registered rule
   (lead 4, 3, 3 vs slice 39's controls 3, 2, 3; median 3 ≤ 3: falsified). But it alone reached G5 (kernel rebuilt with
@@ -300,12 +313,10 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. **D1 hits from slice 40 first ($0, harness):** classify lead-c1/c2's 25 hits (`python -m conflux.core audit` on
-     their traces). Fix false-positive classes structurally with fixture cases. Masked failures in the model's own
-     commands (`cmd &`, `|| fallback`, `curl -s` without `-f`) are model behaviour for the lead/critic to catch; record them.
-  2. **Then change one more lead factor (68ad22c), keeping kimi-k3 low and the registered measure.** The lead moves goal (b)
+  1. **Change one more lead factor (68ad22c), keeping kimi-k3 low and the registered measure.** The lead moves goal (b)
      (G5/G6 reached) but its runs drop goal (a) (no `qemu_v8` sync with TF-A, no Linux boot) and hit the 120-step cap while
      progressing. Candidates: a longer step cap for both arms, or a second different-family reviewer of the lead's goal
-     list. No developer goal text either way. Harness: `~/evidence/lead-factor-demo-2026-10-29/demo.py`. Surplus
+     list. No developer goal text either way. Secondary measure from slice 41: does any lead review name the executor's
+     masked failures (D1 true hits) in its trace? Harness: `~/evidence/lead-factor-demo-2026-10-29/demo.py`. Surplus
      credit: $7.41 available.
-  3. Completion-gate run: `run12/task.txt` only, unattended from the clean snapshot on a fresh lab; then delete the c3 disk.
+  2. Completion-gate run: `run12/task.txt` only, unattended from the clean snapshot on a fresh lab; then delete the c3 disk.
