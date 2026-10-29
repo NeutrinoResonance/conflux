@@ -107,7 +107,7 @@ def test_provider_error_is_unverified_not_failed(tmp_path):
     res, trace = run(TOUCH, chat, tmp_path)
     assert res["status"] == "unverified" and res["reason"] == "provider_503"
     mc = [e for e in trace.events if e["event"] == "model_call"][0]
-    assert mc["cost_kind"] == "bound" and mc["error"] == {"message": "no_healthy_sellers"}
+    assert mc["cost_kind"] == "no_usage" and mc["cost_usd"] == 0 and mc["error"] == {"message": "no_healthy_sellers"}
 
 
 def test_check_timeout_is_unverified(tmp_path):
@@ -1096,6 +1096,33 @@ def test_every_surplus_request_sets_the_discount_floor_and_waits_out_a_refusal(m
     script[:] = [404, 200]  # too little time left to wait: the refusal is returned, not slept through
     status, _, _ = chat([{"role": "user", "content": "hi"}], core.TOOLS, timeout=core.FLOOR_WAIT_S / 2)
     assert status == 404 and script == [200]
+
+
+def test_a_provider_outage_is_waited_out_and_an_unbilled_error_settles_at_zero(tmp_path, monkeypatch):
+    # Slice 39 control run: HTTP 200 {"error": no_healthy_sellers} for pro ended the task `unverified provider_200`
+    # at step 107 and was settled at its $0.66 input bound. Outages are now waited out at the same floor, and an
+    # error reply without usage costs 0 (the usage export stays the authority).
+    outage = {"error": {"type": "service_unavailable", "code": "no_healthy_sellers", "message": "none"}}
+    script = [(200, outage), (503, {"error": {"code": "upstream"}}), (200, None)]
+
+    def handler(request):
+        st, body = script.pop(0)
+        if body is None:
+            msg = {"role": "assistant", "content": "", "tool_calls": [call("finish", {})]}
+            body = {"id": "g", "choices": [{"message": msg}], "usage": {"prompt_tokens": 1, "completion_tokens": 1,
+                                                                        "buyer_cost_micro": 3}}
+        return httpx.Response(st, json=body)
+    monkeypatch.setattr(core.time, "sleep", lambda s: None)
+    http_ = httpx.Client(transport=httpx.MockTransport(handler))
+    task = dataclasses.replace(TOUCH, setup="echo yes > ok.txt")
+    res, trace = run(task, core.surplus_chat("k", core.MODEL, http_), tmp_path)
+    assert res["status"] == "accepted" and not script, res
+    script[:] = [(200, outage)] * (core.FLOOR_RETRIES + 1)
+    (tmp_path / "2").mkdir()
+    res, trace = run(task, core.surplus_chat("k", core.MODEL, http_), tmp_path / "2")
+    mc = [e for e in trace.events if e["event"] == "model_call"]
+    assert res["reason"] == "provider_200" and not script
+    assert [(e["cost_kind"], e["cost_usd"]) for e in mc] == [("no_usage", 0.0)] and res["cost_usd"] == 0
 
 
 def test_every_call_requests_the_models_own_maximum_output(tmp_path, monkeypatch):

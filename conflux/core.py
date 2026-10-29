@@ -5,7 +5,8 @@ admits each call against the budget, checks each proposal against a permissive p
 executes it, and owns acceptance: the task's checks are shell commands the harness runs
 itself. Every model call's cost is the provider's `buyer_cost_micro`; when absent, the
 call is settled at its reported token usage times the executor's ceilings (`cost_kind:
-"usage_bound"`), or at its admission bound when usage is absent too (`"bound"`). After a run, `reconcile`
+"usage_bound"`), or, when usage is absent too, at its admission bound if no reply came back (`"bound"`) and at 0 if
+the provider answered with an error and no choices (`"no_usage"`). After a run, `reconcile`
 matches the calls against the Surplus buyer usage export, the authoritative billed cost. Every call requests the
 model's maximum output (`max_output`); admission bounds the request's input only, never max_tokens x price
 (founder decision MISSION 90b27cd: a capped answer is a harness fault).
@@ -74,7 +75,7 @@ CEILINGS = {
 }
 CAMPAIGN_BUDGET = 50.00
 MIN_DISCOUNT = 90          # X-Min-Discount on every Surplus request (MISSION 5ee7a8b); never lowered
-FLOOR_WAIT_S = 60          # wait before retrying `minimum_discount_not_met`
+FLOOR_WAIT_S = 60          # wait before retrying a refusal or outage (`_unavailable`)
 FLOOR_RETRIES = 5
 RUN_CAP = 0.20
 EXEC_TIMEOUT = 60
@@ -678,7 +679,10 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
             if c is None:
                 c, kind = usage_bound(body, price_ceiling, output_ceiling), "usage_bound"
             if c is None:
-                c, kind = bound, "bound"
+                # An HTTP reply without usage is an error the provider did not bill (slice 39: a 200
+                # `no_healthy_sellers` settled at its $0.66 input bound); a lost reply (status 0) may still be billed.
+                answered = isinstance(body, dict) and bool(body.get("choices"))
+                c, kind = (0.0, "no_usage") if status != 0 and not answered else (bound, "bound")
             budget.settle(bound, c)
             cost += c
             choices = body.get("choices") if isinstance(body, dict) else None
@@ -754,16 +758,22 @@ def load_key(name: str) -> str:
     return (SECRETS / name).read_text().strip()
 
 
-def _below_floor(status: int, body: object) -> bool:
+def _unavailable(status: int, body: object) -> bool:
+    """No seller can serve the call right now: `404 minimum_discount_not_met` (MISSION 5ee7a8b), any 429/5xx, or
+    an error body without choices (slice 39: HTTP 200 `no_healthy_sellers` for pro ended a run at step 107)."""
+    if status in (429, 500, 502, 503, 504):
+        return True
     err = body.get("error") if isinstance(body, dict) else None
-    return status == 404 and isinstance(err, dict) and err.get("code") == "minimum_discount_not_met"
+    if not isinstance(err, dict) or body.get("choices"):
+        return False
+    return (status == 404 and err.get("code") == "minimum_discount_not_met") or status == 200
 
 
 def surplus_post(http: httpx.Client, key: str, payload: dict, timeout: float | None = None,
                  timeout_cap: float | None = None) -> tuple[int, object, float]:
-    """One Surplus chat completion bought only at >= MIN_DISCOUNT % off (MISSION 5ee7a8b). `404
-    minimum_discount_not_met` means no seller meets the floor now: wait FLOOR_WAIT_S and retry, at most
-    FLOOR_RETRIES times within `timeout`, then return the 404 (never a lower floor)."""
+    """One Surplus chat completion bought only at >= MIN_DISCOUNT % off (MISSION 5ee7a8b). When no seller can serve
+    it now (`_unavailable`: below the floor, or an outage): wait FLOOR_WAIT_S and retry, at most FLOOR_RETRIES times
+    within `timeout`, then return the last reply (never a lower floor)."""
     t0 = time.monotonic()
     timeout_cap = CHAT_TIMEOUT if timeout_cap is None else timeout_cap
     for attempt in range(FLOOR_RETRIES + 1):
@@ -783,7 +793,7 @@ def surplus_post(http: httpx.Client, key: str, payload: dict, timeout: float | N
             body = resp.json()
         except ValueError:
             body = {"error": resp.text[:500]}
-        if not _below_floor(resp.status_code, body) or attempt == FLOOR_RETRIES or (
+        if not _unavailable(resp.status_code, body) or attempt == FLOOR_RETRIES or (
                 left is not None and left <= FLOOR_WAIT_S):
             return resp.status_code, body, time.monotonic() - t0
         time.sleep(FLOOR_WAIT_S)
