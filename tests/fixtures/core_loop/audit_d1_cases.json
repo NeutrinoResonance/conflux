@@ -217,6 +217,127 @@
     "stdout": "\t Build platform:      Linux 6.1.0-54-cloud-amd64 x86_64\n\t HOST_SH:             /usr/bin/sh\n\t MAKECONF file:       /etc/mk.conf (File not found)\n\t TOOLDIR path:        /home/darrenhidalgo/netbsd-obj/tooldir.Linux-6.1.0-50-cloud-amd64-x86_64\n\t DESTDIR path:        /home/darrenhidalgo/netbsd-obj/destdir.evbarm\n\t  /home/darrenhidalgo/netbsd-obj/sys/arch/evbarm/compile/GENERIC64/netbsd\n\t build.sh ended:      Wed Oct 28 04:29:49 UTC 2026\n===> .",
     "stderr": ""
    }
+  },
+  {
+   "trace": "~/evidence/lead-factor-demo-2026-10-29/lead-c2/run/run12/trace.jsonl",
+   "sha256": "881acb32497e48cd280bb9437ad1bb0612efad908d2639de6d3071df2b1c6234",
+   "step": 59,
+   "expect": "none",
+   "why": "`sleep 120 && tail log` is a read: the log reports a background kernel build that failed earlier (C slice 40) (outputs cut to the last 10 lines)",
+   "row": {
+    "event": "exec",
+    "source": "model",
+    "step": 59,
+    "command": "# Wait for kernel build to complete\nsleep 120 && tail -15 /home/dev/conflux-work/kernel-build.log 2>/dev/null",
+    "exit": 0,
+    "pipestatus": [
+     0
+    ],
+    "failed_cmds": 0,
+    "stdout": "*** [netbsd] Error code 1\n\nnbmake: stopped in /home/darrenhidalgo/netbsd-obj/sys/arch/evbarm/compile/GENERIC64\n1 error\n\nnbmake: stopped in /home/darrenhidalgo/netbsd-obj/sys/arch/evbarm/compile/GENERIC64\n\nERROR: Failed to make all in \"/home/darrenhidalgo/netbsd-obj/sys/arch/evbarm/compile/GENERIC64\"\n\n*** BUILD ABORTED ***\n",
+    "stderr": ""
+   }
+  },
+  {
+   "trace": "~/evidence/lead-factor-demo-2026-10-29/lead-c2/run/run12/trace.jsonl",
+   "sha256": "881acb32497e48cd280bb9437ad1bb0612efad908d2639de6d3071df2b1c6234",
+   "step": 92,
+   "expect": "none",
+   "why": "`aarch64-linux-gnu-strings | grep` is a cross-prefixed read: the error string is embedded in bl2.bin (C slice 40) (outputs cut to the last 10 lines)",
+   "row": {
+    "event": "exec",
+    "source": "model",
+    "step": 92,
+    "command": "# Check the BL2 symbols - does it know about BL32?\necho \"=== BL2 symbols ===\"\naarch64-linux-gnu-nm /home/dev/conflux-work/optee-build/arm-trusted-firmware/build/qemu/release/bl2/bl2.elf 2>/dev/null | grep -i \"bl32\\|optee\\|image\" | head -20\necho \"=== BL2 strings ===\"\naarch64-linux-gnu-strings /home/dev/conflux-work/optee-build/arm-trusted-firmware/build/qemu/release/bl2.bin 2>/dev/null | grep -i \"bl32\\|optee\\|tee\" | head -10",
+    "exit": 0,
+    "pipestatus": [
+     0,
+     0,
+     0
+    ],
+    "failed_cmds": 0,
+    "stdout": "000000000e06b204 T load_auth_image\n000000000e06c3f8 T parse_optee_header\n000000000e06c374 t parse_optee_image\n000000000e06d114 T plat_get_bl_image_load_info\n000000000e06d258 T plat_get_image_source\n=== BL2 strings ===\nParse optee image failed.\nbl32.bin\nbl32_extra1.bin\nbl32_extra2.bin\n",
+    "stderr": ""
+   }
+  },
+  {
+   "trace": "~/evidence/lead-factor-demo-2026-10-29/lead-c1/run/run12/trace.jsonl",
+   "sha256": "02b4d2fba5831bce5a54eada3afbcbe6100e1b8beeff4a5a076dda631c8d63a5",
+   "step": 14,
+   "expect": "hit",
+   "why": "`curl -sL` without `-f` prints a 404 page and exits 0 (C slice 40) (outputs cut to the last 10 lines)",
+   "row": {
+    "event": "exec",
+    "source": "model",
+    "step": 14,
+    "command": "# Try fetching the optee driver source from NetBSD GitHub mirror\ncurl -sL \"https://raw.githubusercontent.com/NetBSD/src/netbsd-10/sys/dev/optee/optee.c\" 2>/dev/null | head -100",
+    "exit": 0,
+    "pipestatus": [
+     0,
+     0
+    ],
+    "failed_cmds": 0,
+    "stdout": "404: Not Found",
+    "stderr": ""
+   }
+  },
+  {
+   "trace": "~/evidence/lead-factor-demo-2026-10-29/lead-c1/run/run12/trace.jsonl",
+   "sha256": "02b4d2fba5831bce5a54eada3afbcbe6100e1b8beeff4a5a076dda631c8d63a5",
+   "step": 74,
+   "expect": "hit",
+   "why": "background `nohup sh -c \"build.sh | tee log; echo BUILD_EXIT=$?\" &`: the build aborted, the log says BUILD_EXIT=0 (C slice 40) (outputs cut to the last 10 lines)",
+   "row": {
+    "event": "exec",
+    "source": "model",
+    "step": 74,
+    "command": "# ITEM 5: Launch the kernel build\ncd /home/dev/conflux-work/optee-demo/netbsd-src\n\nnohup sh -c '\n  ./build.sh -m evbarm -a aarch64 \\\n    -O /home/dev/conflux-work/optee-demo/netbsd-obj \\\n    -T /home/dev/conflux-work/tooldir \\\n    -U -u -j$(nproc) kernel=GENERIC64 \\\n    2>&1 | tee /home/dev/conflux-work/optee-demo/logs/kernel-build.log\n  echo \"BUILD_EXIT=$?\" >> /home/dev/conflux-work/optee-demo/logs/kernel-build.log\n' > /dev/null 2>&1 &\necho \"Build PID: $!\"\nsleep 15\necho \"=== Build log head ===\"\nhead -30 /home/dev/conflux-work/optee-demo/logs/kernel-build.log 2>/dev/null\necho \"=== Build log tail ===\"\ntail -20 /home/dev/conflux-work/optee-demo/logs/kernel-build.log 2>/dev/null",
+    "exit": 0,
+    "pipestatus": [
+     0
+    ],
+    "failed_cmds": 0,
+    "stdout": "--- pci.o ---\n/home/dev/conflux-work/tooldir/bin/nbctfconvert -g -L VERSION -g pci.o\n1 error\n\nnbmake: stopped in /home/dev/conflux-work/optee-demo/netbsd-obj/sys/arch/evbarm/compile/GENERIC64\n\nERROR: Failed to make all in \"/home/dev/conflux-work/optee-demo/netbsd-obj/sys/arch/evbarm/compile/GENERIC64\"\n\n*** BUILD ABORTED ***\nBUILD_EXIT=0\n",
+    "stderr": ""
+   }
+  },
+  {
+   "trace": "~/evidence/lead-factor-demo-2026-10-29/lead-c1/run/run12/trace.jsonl",
+   "sha256": "02b4d2fba5831bce5a54eada3afbcbe6100e1b8beeff4a5a076dda631c8d63a5",
+   "step": 19,
+   "expect": "hit",
+   "why": "`mkdir … && git clone … &`: the backgrounded mkdir failed (Permission denied) behind exit 0; recorded before the H1 fix, so the status marker is still in stderr (C slice 40) (outputs cut to the last 10 lines)",
+   "row": {
+    "event": "exec",
+    "source": "model",
+    "step": 19,
+    "command": "mkdir -p /home/darrenhidalgo/optee-demo && cd /home/darrenhidalgo/optee-demo && git clone --depth 1 -b v2.10 https://github.com/ARM-software/arm-trusted-firmware.git tf-a 2>&1 | tail -5 &",
+    "exit": 0,
+    "pipestatus": null,
+    "failed_cmds": null,
+    "stdout": "",
+    "stderr": "\n__CONFLUX_PIPESTATUS=0 failed=0\nmkdir: cannot create directory ‘/home/darrenhidalgo/optee-demo’: Permission denied\n"
+   }
+  },
+  {
+   "trace": "~/evidence/lead-factor-demo-2026-10-29/lead-c1/run/run12/trace.jsonl",
+   "sha256": "02b4d2fba5831bce5a54eada3afbcbe6100e1b8beeff4a5a076dda631c8d63a5",
+   "step": 65,
+   "expect": "hit",
+   "why": "`echo \"… $(wc -l < optee.c) …\"` after a heredoc: the command substitution failed (No such file) behind exit 0 (C slice 40) (outputs cut to the last 10 lines)",
+   "row": {
+    "event": "exec",
+    "source": "model",
+    "step": 65,
+    "command": "# The file is corrupted. Rewrite optee.c cleanly.\ncat > /home/dev/conflux-work/optee-demo/netbsd-src/sys/dev/optee/optee.c << 'CEOF'\n/* $NetBSD: optee.c,v 1.1 2026/10/29 dev Exp $ */\n\n#include <sys/cdefs.h>\n__KERNEL_RCSID(0, \"$NetBSD: optee.c,v 1.1 2026/10/29 dev Exp $\");\n\n#include <sys/param.h>\n#include <sys/conf.h>\n#include <sys/device.h>\n#include <sys/kmem.h>\n#include <sys/mutex.h>\n#include <sys/systm.h>\n#include <arm/arm/smccc.h>\n#include <dev/fdt/fdtvar.h>\n#include <dev/optee/optee.h>\n#include <dev/optee/optee_ioc.h>\n\n#define OPTEE_SMC_FAST_API(fn)\t(0xBF000000 | (fn))\n#define OPTEE_SMC_FAST_OS(fn)\t(0xB2000000 | (fn))\n\n#define OPTEE_SMC_CALLS_COUNT\t\tOPTEE_SMC_FAST_API(0xFF00)\n#define OPTEE_SMC_CALLS_UID\t\tOPTEE_SMC_FAST_API(0xFF01)\n#define OPTEE_SMC_CALLS_REVISION\tOPTEE_SMC_FAST_API(0xFF03)\n#define OPTEE_SMC_GET_OS_UUID\t\tOPTEE_SMC_FAST_OS(0x0000)\n#define OPTEE_SMC_GET_OS_REVISION\tOPTEE_SMC_FAST_OS(0x0001)\n#define OPTEE_SMC_EXCHANGE_CAPABILITIES\tOPTEE_SMC_FAST_OS(0x0009)\n\nstatic const struct device_compatible_entry compat_data[] = {\n\t{ .compat = \"linaro,optee-tz\" },\n\tDEVICE_COMPAT_EOL\n};\n\nstatic dev_type_open(optee_open);\nstatic dev_type_close(optee_close);\nstatic dev_type_ioctl(optee_ioctl);\n\nconst struct cdevsw optee_cdevsw = {\n\t.d_open = optee_open,\n\t.d_close = optee_close,\n\t.d_read = noread,\n\t.d_write = nowrite,\n\t.d_ioctl = optee_ioctl,\n\t.d_stop = nostop,\n\t.d_tty = notty,\n\t.d_poll = nopoll,\n\t.d_mmap = nommap,\n\t.d_kqfilter = nokqfilter,\n\t.d_discard = nodiscard,\n\t.d_flag = D_OTHER\n};\n\nstatic int opteematch(device_t, cfdata_t, void *);\nstatic void opteeattach(device_t, device_t, void *);\nstatic int opteedetach(device_t, int);\n\nCFATTACH_DECL_NEW(optee, sizeof(struct optee_softc),\n    opteematch, opteeattach, opteedetach, NULL);\n\nstatic int optee_major = -1;\nstatic struct optee_softc *optee_sc = NULL;\n\nstatic int\nopteematch(device_t parent, cfdata_t cf, void *aux)\n{\n\tconst struct fdt_attach_args *faa = aux;\n\n\tif (!of_compatible_match(faa->faa_phandle, compat_data))\n\t\treturn 0;\n\tif (!of_hasprop(faa->faa_phandle, \"method\"))\n\t\treturn 0;\n\treturn 1;\n}\n\nstatic void\noptee_print_uid(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)\n{\n\tprintf(\" %08x-%04x-%04x-%04x-%04x%08x\",\n\t    a0,\n\t    (a1 >> 16) & 0xffff,\n\t    a1 & 0xffff,\n\t    (a2 >> 16) & 0xffff,\n\t    a2 & 0xffff,\n\t    a3);\n\tprintf(\" (raw: %08x %08x %08x %08x)\",\n\t    a0, a1, a2, a3);\n}\n\nstatic void\nopteeattach(device_t parent, device_t self, void *aux)\n{\n\tstruct optee_softc *sc = device_private(self);\n\tuint32_t count;\n\tregister_t a0, a1, a2, a3;\n\tint error;\n\n\tsc->sc_dev = self;\n\tsc->sc_present = false;\n\tmutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);\n\n\taprint_naive(\": OP-TEE Trusted Execution Environment\\n\");\n\taprint_normal(\": probing OP-TEE via SMCCC...\\n\");\n\n\tif (!smccc_probe()) {\n\t\taprint_error_dev(self, \"SMCCC not available (no PSCI?)\\n\");\n\t\treturn;\n\t}\n\n\tDELAY(100000);\n\n\t/* Step 1: CALLS_COUNT */\n\ta0 = OPTEE_SMC_CALLS_COUNT;\n\terror = smccc_call(a0, 0, 0, 0, 0, &a0, &a1, &a2, &a3);\n\tif (error) {\n\t\taprint_error_dev(self, \"CALLS_COUNT failed: %d\\n\", error);\n\t\treturn;\n\t}\n\tcount = (uint32_t)a0;\n\taprint_normal_dev(self, \"call count = %u\\n\", count);\n\tif (count == 0) {\n\t\taprint_error_dev(self, \"OP-TEE not detected\\n\");\n\t\treturn;\n\t}\n\n\t/* Step 2: CALLS_UID */\n\ta0 = OPTEE_SMC_CALLS_UID;\n\terror = smccc_call(a0, 0, 0, 0, 0, &a0, &a1, &a2, &a3);\n\tif (error || a0 == 0) {\n\t\taprint_error_dev(self, \"OP-TEE not available\\n\");\n\t\treturn;\n\t}\n\taprint_normal_dev(self, \"API UID:\");\n\toptee_print_uid((uint32_t)a0, (uint32_t)a1,\n\t    (uint32_t)a2, (uint32_t)a3);\n\taprint_normal(\"\\n\");\n\n\t/* Step 3: CALLS_REVISION */\n\ta0 = OPTEE_SMC_CALLS_REVISION;\n\terror = smccc_call(a0, 0, 0, 0, 0, &a0, &a1, &a2, &a3);\n\tif (error) {\n\t\taprint_error_dev(self, \"CALLS_REVISION failed\\n\");\n\t\treturn;\n\t}\n\tsc->sc_version_major = (uint32_t)a0;\n\tsc->sc_version_minor = (uint32_t)a1;\n\taprint_normal_dev(self, \"API revision %u.%u\\n\",\n\t    sc->sc_version_major, sc->sc_version_minor);\n\n\t/* Step 4: GET_OS_UUID */\n\ta0 = OPTEE_SMC_GET_OS_UUID;\n\terror = smccc_call(a0, 0, 0, 0, 0, &a0, &a1, &a2, &a3);\n\tif (!error && a0 != 0) {\n\t\taprint_normal_dev(self, \"OS UUID:\");\n\t\toptee_print_uid((uint32_t)a0, (uint32_t)a1,\n\t\t    (uint32_t)a2, (uint32_t)a3);\n\t\taprint_normal(\"\\n\");\n\t}\n\n\t/* Step 5: GET_OS_REVISION */\n\ta0 = OPTEE_SMC_GET_OS_REVISION;\n\terror = smccc_call(a0, 0, 0, 0, 0, &a0, &a1, &a2, &a3);\n\tif (!error) {\n\t\tsc->sc_os_rev_major = (uint32_t)a0;\n\t\tsc->sc_os_rev_minor = (uint32_t)a1;\n\t\tsc->sc_os_rev_build = (uint32_t)a2;\n\t\taprint_normal_dev(self, \"OS revision %lu.%lu (build %lu)\\n\",\n\t\t    (u_long)sc->sc_os_rev_major,\n\t\t    (u_long)sc->sc_os_rev_minor,\n\t\t    (u_long)sc->sc_os_rev_build);\n\t}\n\n\t/* Self-test: re-read revision */\n\ta0 = OPTEE_SMC_CALLS_REVISION;\n\terror = smccc_call(a0, 0, 0, 0, 0, &a0, &a1, &a2, &a3);\n\tif (error == 0 && (uint32_t)a0 == sc->sc_version_major &&\n\t    (uint32_t)a1 == sc->sc_version_minor &&\n\t    sc->sc_version_major == 1)\n\t\taprint_normal_dev(self,\n\t\t    \"self-test: SMC round-trip PASS (ABI v%u.%u)\\n\",\n\t\t    (uint32_t)a0, (uint32_t)a1);\n\telse\n\t\taprint_error_dev(self,\n\t\t    \"self-test: SMC round-trip FAIL (err=%d, maj=%u)\\n\",\n\t\t    error, (uint32_t)a0);\n\n\tsc->sc_present = true;\n\toptee_sc = sc;\n\terror = devsw_attach(\"optee\", NULL, NULL,\n\t    &optee_cdevsw, &optee_major);\n\tif (error) {\n\t\taprint_error_dev(self, \"devsw_attach failed: %d\\n\", error);\n\t\tsc->sc_present = false;\n\t} else {\n\t\taprint_normal_dev(self, \"/dev/optee registered (major=%d)\\n\",\n\t\t    optee_major);\n\t}\n\taprint_normal_dev(self, \"OP-TEE is present and initialized\\n\");\n}\n\nstatic int\nopteedetach(device_t self, int flags)\n{\n\tstruct optee_softc *sc = device_private(self);\n\n\tif (sc->sc_present && optee_major != -1) {\n\t\tdevsw_detach(NULL, &optee_cdevsw);\n\t\toptee_major = -1;\n\t\toptee_sc = NULL;\n\t}\n\tmutex_destroy(&sc->sc_lock);\n\treturn 0;\n}\n\nstatic int\noptee_open(dev_t dev, int flag, int mode, struct lwp *l)\n{\n\tif (optee_sc == NULL || !optee_sc->sc_present)\n\t\treturn ENXIO;\n\treturn 0;\n}\n\nstatic int\noptee_close(dev_t dev, int flag, int mode, struct lwp *l)\n{\n\treturn 0;\n}\n\nstatic int\noptee_ioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)\n{\n\tstruct optee_version_arg *va;\n\n\tif (optee_sc == NULL || !optee_sc->sc_present)\n\t\treturn ENXIO;\n\n\tswitch (cmd) {\n\tcase OPTEE_IOC_GET_VERSION:\n\t\tva = (struct optee_version_arg *)data;\n\t\tva->major = optee_sc->sc_version_major;\n\t\tva->minor = optee_sc->sc_version_minor;\n\t\treturn 0;\n\tdefault:\n\t\treturn ENOTTY;\n\t}\n}\nCEOF\necho \"optee.c rewritten ($(wc -l < optee.c) lines)\"",
+    "exit": 0,
+    "pipestatus": [
+     0
+    ],
+    "failed_cmds": 0,
+    "stdout": "optee.c rewritten ( lines)\n",
+    "stderr": "/home/dev/.conflux-jobs/18e2f79256256095/cmd.sh: line 250: optee.c: No such file or directory\n"
+   }
   }
  ]
 }
