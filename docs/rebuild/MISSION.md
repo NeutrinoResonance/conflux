@@ -31,6 +31,14 @@ Only then set `MISSION-STATUS: COMPLETE` and open the promotion PR to `main`.
 
 ## Founder decisions (binding; newest first)
 
+- **2026-10-29 — The lead intervenes on wall-clock time (every 5–10 minutes), without blocking the executor.** Slice
+  39's lead reviews ran on a step counter (before steps 1, 11, 21, ...) and blocked the executor: GLM-5.3 took 30–55
+  minutes per conversation-layout review, so a lead run spent most of its wall clock waiting (pair 1: 40 steps in 2.7 h;
+  control: 107 steps in 62 min; pro itself is ~12–15 s per call). From now on the executor keeps working while the lead
+  reviews; the lead's reply is delivered at the executor's next turn after it arrives; a new review starts every 5–10
+  minutes of wall clock (and on finish), never more than one in flight. A lead whose review takes longer than the
+  cadence is too slow for the role: measure faster candidates at the 90% floor (e.g. glm-5.3-flash, kimi-k3) for review
+  latency and quality before choosing; layout (cda6dac), no output caps (90b27cd) and the floor (5ee7a8b) stand.
 - **2026-10-28 — Only buy Surplus inference at a 90% or deeper discount.** Every Surplus request (executor, lead,
   critic, planner, Jev, demos) sends `X-Min-Discount: 90` (or uses the `/min90/` URL mirror). Without a floor the
   marketplace routed some calls to near-list sellers: kimi-k3.1-pro was billed $1.22 of the first $1.37 total, about a
