@@ -166,22 +166,35 @@ def test_pro_calls_without_cost_do_not_exhaust_the_task_budget(tmp_path):
 
 def test_run_budget_refusal_is_unverified_and_makes_no_call(tmp_path):
     chat = Scripted()
-    res, _ = run(TOUCH, chat, tmp_path, allowance=1e-6)
+    res, _ = run(TOUCH, chat, tmp_path, allowance=0.0)
     assert res["status"] == "unverified" and res["reason"] == "run_budget" and chat.seen == []
 
 
 def test_task_budget_refusal(tmp_path):
-    task = Task(id="t", goal="g", checks=[Check("true")], max_usd=1e-6)
+    task = Task(id="t", goal="g", checks=[Check("true")], max_usd=0.0)
     res, _ = run(task, Scripted(), tmp_path)
     assert res["reason"] == "task_budget"
 
 
-def test_budget_releases_reservation_on_settle():
+def test_budget_caps_settled_spend_and_reserves_no_bound():
+    # Slice 39b lead-b1: input bounds of ~$0.3 per 250 KB pro request ended a $0.50-cap run at step 63 with $0.002
+    # billed. Admission now looks only at settled spend (MISSION 90b27cd).
     b = Budget(0.01)
-    assert b.admit(0.008)
-    b.settle(0.008, 0.000014)
-    assert b.admit(0.008)
-    assert not b.admit(0.008)
+    assert b.admit(5.0) and b.admit(5.0)  # a large bound alone never refuses
+    b.settle(5.0, 0.009)
+    assert b.admit(5.0)
+    b.settle(5.0, 0.002)  # one call may overshoot the cap by its own cost
+    assert b.committed == pytest.approx(0.011) and not b.admit(0.0)
+
+
+def test_a_long_context_is_admitted_under_a_small_cap(tmp_path):
+    # The same run shape: a ~300 KB request (pro input bound ~$0.6) under a $0.05 task cap bills $0.000014.
+    big = "x" * 300_000
+    chat = Scripted(resp(call("run_shell", {"command": "echo yes > ok.txt"})), resp(call("finish", {})))
+    task = dataclasses.replace(TOUCH, goal=TOUCH.goal + big, max_usd=0.05)
+    res = run_task(task, chat, core.local_shell(tmp_path / "work"), Trace(tmp_path / "t.jsonl"), Budget(0.05),
+                   model="deepseek-v4-pro")
+    assert res["status"] == "accepted", res
 
 
 def test_policy_denials_go_back_to_the_model(tmp_path):

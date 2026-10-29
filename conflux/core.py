@@ -153,20 +153,19 @@ class Task:
 
 
 class Budget:
-    """Run-level admission: bounds are reserved before a call, replaced by cost after it."""
+    """Run-level money cap on settled cost (MISSION 90b27cd): a call is admitted while the spend so far is below the
+    allowance; no per-call bound is reserved. Slice 39b: a 250 KB deepseek-v4-pro request's input bound (~$0.3-0.5)
+    refused calls that bill ~$0.0001 and ended a run at step 63 with $0.002 spent. One call may overshoot by its cost."""
 
     def __init__(self, allowance: float):
         self.allowance = allowance
         self.committed = 0.0
 
     def admit(self, bound: float) -> bool:
-        if self.committed + bound > self.allowance:
-            return False
-        self.committed += bound
-        return True
+        return self.committed < self.allowance
 
     def settle(self, bound: float, cost: float) -> None:
-        self.committed += cost - bound
+        self.committed += cost
 
 
 @dataclass
@@ -674,7 +673,7 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
         bound = len(json.dumps(request).encode()) * price_ceiling
         # One retry when no HTTP response came back (transport error or timeout); each attempt is admitted and settled.
         for attempt in (1, 2):
-            if cost + bound > task.max_usd:
+            if cost >= task.max_usd:
                 return end("unverified", "task_budget")
             if not budget.admit(bound):
                 return end("unverified", "run_budget")
