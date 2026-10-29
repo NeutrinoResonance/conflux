@@ -265,3 +265,23 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   4/4 plans swap BL33 for U-Boot as a control. 3/4 name the real mechanism (x0 ≠ DTB at kernel entry) and test it with
   a QEMU exec trace or a gdb break at entry. 2/4 rebuild a full out-of-tree TF-A make line from the trace.
 - ≈ $0.055–0.108 per plan, 439–1081 s, 10–19k reasoning tokens. Evidence: `~/evidence/hypothesis-plan-demo-2026-10-28/RESULTS.md`.
+
+## `glm-5.3` (and `glm-5.3-flash`, `kimi-k3`) as a lead reviewing pro's run (C slice 39, conversation layout)
+- **Default effort is too slow for a 5–10 min cadence.** Uncapped, a goal-by-goal review takes 17–20 min (6–28k completion
+  tokens per turn, mostly reasoning); at max_tokens 24000 the single-message layout hit the cap on 6/13 calls (one answer
+  needed 27,377 tokens). glm-5.3-flash and kimi-k3 are not faster at default effort (70–674 s per turn).
+- **`reasoning_effort=low` is fast at the same rubric score.** Full review 100–250 s (glm-5.3 109–118 s); 6/6 draws
+  scored 3/3 (grounded, actionable, no false progress) like default effort. In live runs the review time grew to ~285 s as
+  the trace grew; still under the 300 s cadence.
+- **Weak: it does not move milestones.** Live, non-blocking, 17–18 reviews per run: lead runs 2/7 and 2/7 vs control
+  3, 2, 3. Its goal lists add scope (userland TA, report bundles, "status gates").
+- **Strong: its finish review is honest.** 0/2 lead runs ended with a false DONE; 3/3 pro-alone runs called finish with
+  a false success claim. Lead runs reached further in kind (driver wired into the machine's NetBSD tree; OP-TEE booted
+  to U-Boot) without reaching the next milestone.
+- Surplus at the 90% floor (2026-10-29): served glm-5.3, glm-5.3-flash, kimi-k3, deepseek-v4-pro; refused kimi-k3.1-pro,
+  kimi-k3-fast-api, glm-5.3-flashx, minimax-m2.7(-highspeed).
+
+## `deepseek-v4-pro` alone on the full run-12 task (C slice 39, 3 runs, fresh labs, task.txt only)
+- **Weak: claims success it does not have.** 3/3 runs called finish at steps 86–93 claiming both goals done; none booted
+  Linux on OP-TEE, built a NetBSD kernel with a driver, or touched the machine's NetBSD tree (all wrote the driver in a
+  scratch dir). Milestones 3, 2, 3 of 7 (sources, OP-TEE build, driver source).

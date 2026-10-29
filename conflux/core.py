@@ -804,7 +804,6 @@ def surplus_post(http: httpx.Client, key: str, payload: dict, timeout: float | N
                 left is not None and left <= wait):
             return resp.status_code, body, time.monotonic() - t0
         time.sleep(wait)
-    raise AssertionError("unreachable")
 
 
 def surplus_chat(key: str, model: str = MODEL, http: httpx.Client | None = None) -> Chat:

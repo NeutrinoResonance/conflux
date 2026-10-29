@@ -56,6 +56,7 @@ USD comes from provider responses or documented prices — never estimated silen
 | 2026-10-28 | Surplus chat | `kimi-k3.1-pro` 22 calls, `glm-5.3` 22 calls | 1646387 | 4568 | 0.473384 | — | C slice 36 takeover demo (preflight + 4 lab runs, all failed step_cap): balance delta $8.699060 → $8.225676; export matched 37/44 calls = $0.131383, the 7 replies without `buyer_cost_micro` are absent from the export (upper bound recorded) |
 | 2026-10-28 | Surplus chat | `kimi-k3.1-pro` 6 calls | 191826 | 86888 | 0.467867 | — | C slice 37 hypothesis-plan demo (5 one-shot plans on slice 35's b2 prefix, 1 resubmit; P1 0/5, no lab): balance delta $8.225676 → $7.757809; export matched 5/6 requests = $0.359383, plan 2 (no `buyer_cost_micro`) absent from the export; tokens: export rows + plan 2's reply usage, the 2 refused admissions made no request |
 | 2026-10-28 | Surplus chat | `kimi-k3.1-pro` 2 calls | 57188 | 6700 | 0.071824 | — | C slice 38 probe-and-replan demo, stopped by founder decision (MISSION a7322df): 2 stage-2 re-plan requests billed, no reply recorded (1 killed externally, 1 stopped); balance delta $7.757809 → $7.685985; export matched 2/2 |
+| 2026-10-28/29 | Surplus chat | `deepseek-v4-pro` 864, `glm-5.3` 556, `kimi-k3.1-pro` 11, `glm-5.3-flash` 28, `kimi-k3` 15, 3 others 3 | — | — | 0.377811 | — | C slice 39 other-model-leads demo: preflights + 11 live lab runs (export since 2026-10-28T22:40Z, 1,477 rows; available-balance delta $0.3814; kimi-k3.1-pro $0.1912 was billed before the 90% floor); `~/evidence/other-model-leads-demo-2026-10-28/reconciled.json` |
 
 C slice 1 rows are reconciled with the export by `python -m conflux.core reconcile` (`~/evidence/core-runs/2026-10-27-c1*/reconciled.json`;
 export total for 2026-10-27: 83 rows, $0.001372).
@@ -68,7 +69,7 @@ charge-bound estimates) are only admission-time bounds. They are replaced by bil
 $0.0108 Jev and $0.0207 rejected-request estimates were billed $0.000006 and $0. Account credit after these runs
 is $9.369476 (`/v1/buyer/me`).
 
-**Metered total: $1.585997** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
+**Metered total: $1.963808** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
 
 ## GCE lab VMs (week 2026-W44 cap $60)
 
@@ -105,5 +106,6 @@ Rate: n2d-standard-8 ≈ $0.338/h running (GCE list price, us-central1) + 100 GB
 | 2026-10-28 | `conflux-dev-lab-c3` | 17:34:51–18:05:26 | 0.51 | 0.17 | C slice 35 harness-only pre-check (b1a/b1b pass, b2 fail) + pro b2 run with reasoning passback (failed step_cap, no writes); stopped, disk kept (tree unchanged by the model) |
 | 2026-10-28 | `conflux-dev-lab-c3` | ≈ 18:32–18:47, 18:46–19:04, 19:06–19:23, 19:22–19:38, 19:41–19:46 | 1.18 | 0.40 | C slice 36 takeover demo: 4 restore + pre-check + takeover runs (K3.1-pro ×2, GLM-5.3 ×2) + final restore; 3 starts failed on GCE stockouts ($0); stopped, disk kept (slice-27 state) |
 | 2026-10-28 | `conflux-dev-lab-c3` | 21:50:55–22:03:02 | 0.20 | 0.07 | C slice 38 stage-1 runtime probes (21 slice-37 test commands, 5 restores); stopped, disk kept (slice-27 state) |
+| 2026-10-28/29 | `conflux-dev-lab-ol1`, `-ol2` | 14 up→delete windows 23:50Z–08:05Z (two labs at a time) | ≤ 14.87 | ≤ 5.23 | C slice 39 live runs (fresh labs from the clean snapshot, graded, deleted); upper bound: windows include the post-run stop before grading |
 
-**GCE lab total: $5.58** (plus the c3 disk while it exists)
+**GCE lab total: ≤ $10.81** (plus the c3 disk while it exists)
