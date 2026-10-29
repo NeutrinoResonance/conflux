@@ -303,3 +303,4 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   without `-f` (a 404 page with exit 0), `… &` on commands whose failure matters, `nohup sh -c "build | tee log; echo
   EXIT $?" &` (EXIT 0 on an aborted build), `|| true` after experiments. Whether a lead review names them is unmeasured. These are targets for
   the other-model layer. Evidence: `~/evidence/d1-slice40-classify-2026-10-29/RESULTS.md`.
+- **A goal-list review does not add goal (a)'s Linux proof** (C slice 42, offline): reviewing the 3 recorded init goal lists against `task.txt`, glm-5.3 low wrote a Linux/xtest boot goal in 2/15 lists and kimi-k3 low (same model) in 5/15, all from c3, whose own init next steps already named the stock boot; 0/20 per model from c1/c2. glm-5.3 mostly answers "essentially complete". Neither drops goal (b) (30/30). Evidence: `~/evidence/goal-review-demo-2026-10-29/RESULTS.md`.
