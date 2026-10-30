@@ -11,6 +11,18 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **C slice 46 (2026-10-30, build-wait demo, offline, $0): a harness wait for the executor's own background jobs would
+  not free material steps or wall clock; both registered rules falsified, no core change.**
+  - Recorded slice-43/40 traces, pre-registered counterfactuals. W2b = a poll waits for the job's end, harness deadline.
+    It frees **11, 18, 0** steps (s1, s2b, s3; rule ≥ 12 in 2/3). The verdict is fragile: without the 3 hand-audit
+    overrides s1 = 13. W2a (bounded by the poll's own `timeout_s`) frees 0 everywhere.
+  - W1 (early-return sleep) frees ≥ 5.8, 1.4, 0.2% of wall (rule ≥ 10% in 2/3); upper bounds are 12.6, 19.1, 1.2%. Most
+    slept time was real build time.
+  - s3 ran builds in the foreground with large `timeout_s` and polled 3 times. s1's peeks fed 6 mid-build kills.
+  - **Harness-fault candidate:** a command that backgrounds a job and then hits its own `timeout_s` gets its process
+    group killed, and the job with it. On a normal exit the job survives. The model is told neither. Confirmed lost twice:
+    s1:186 (build `Signal 15`, relaunched) and s3:9 (download redone); 2 more cases are undeterminable.
+  - Evidence: `~/evidence/build-wait-demo-2026-10-30/RESULTS.md` (`started.txt`, `scan.py`, `audit.json`).
 - **Exploratory re-grade on a task-text reading (2026-10-30, $0, recorded grades only; not the gate).** Goal (a) in
   `task.txt` ("Get QEMU set up with OP-TEE") does not name Linux. Fixtures are grading references (MISSION 773b964), so
   this re-scores the counted runs without G3 (Linux/xtest boot). It also uses **G1′ = OP-TEE sources obtained, any
@@ -382,9 +394,9 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. **Build-wait steps** (s2b/s3 ended at the 240-step cap). Demo on recorded traces first (slices 40/43): per fixed-sleep poll, how far the sleep ran past the backgrounded job's end, and how many steps a
-     harness-side wait would have freed. The wait would return when the job ends, using its own deadline; no model or prompt
-     change. Build the core change only if the freed steps are material.
+  1. **Harness fault (slice 46): background jobs die when their launching command times out**; the timeout result does
+     not say so. Structural fix with a regression test that reproduces s1:186 (fake-remote `lab_shell`). The fix either
+     names the killed processes in the result or lets `&` children survive, as on a normal exit. $0.
   2. History growth (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output compaction on the
      recorded traces (replay, n small) before any core change.
   3. Toward the gate: move the measured lead (kimi-k3 low, async 300 s, conversation layout; slice 43 inconclusive on
