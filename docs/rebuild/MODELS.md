@@ -313,3 +313,11 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   2/12 per arm, all from the one init reply that already proposed the stock Linux/xtest boot, 0/20 otherwise. Its goal-(a)
   check is OP-TEE's secure-world banner (19/20), usually with a NetBSD boot. Evidence:
   `~/evidence/acceptance-check-demo-2026-10-30/RESULTS.md`.
+- **Own runtime probes before the goal list do not add goal (a)'s Linux proof** (C slice 45, live lab): the kimi-k3 low
+  lead was given `run_shell` on a fresh clean-snapshot lab, with or without "read the setup documentation of the software the task
+  names". It wrote the Linux/xtest boot as required in 0/6 and 0/6 lists (1/6 lenient). It probes little (median 2 of
+  15) and generically (host census, web): 0/43 probes looked under `/home` for the machine's NetBSD project. "The
+  software the task names" was read as NetBSD (NetBSD man pages); one draw read OP-TEE's `qemu_v8.mk`/manifest and still
+  wrote NetBSD as the normal world. Some lists assume NetBSD ships an in-tree optee/tee driver. In the tool loop 21/44
+  kimi-k3 replies carried no `buyer_cost_micro` (unbilled; no-tools lead: 2/218). Evidence:
+  `~/evidence/lead-probe-demo-2026-10-30/RESULTS.md`.

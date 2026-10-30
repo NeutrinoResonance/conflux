@@ -63,6 +63,8 @@ USD comes from provider responses or documented prices — never estimated silen
 | 2026-10-29/30 | Surplus chat (not Conflux) | `deepseek-v4-pro` 1,076, `kimi-k3.1-pro` 4, `glm-5.3` 7 | — | — | 0.251287 | — | unattributed caller on the shared key, counted against the weekly cap: kimi-k3.1-pro $0.097557 at 60% discount (10-29 15:11, 15:41, 16:02, 21:22Z; floor bypass, MISSION a58a30e), deepseek-v4-pro $0.152919 (10-30 06:45–16:34Z), glm-5.3 $0.000811; no controller process, file or Codex session matches |
 | 2026-10-30 | Surplus chat | `kimi-k3` 24 | 23608 | 13506 | 0.001096 | — | C slice 44 per-goal check demo (offline: P1/P2 follow-up turns on 6 recorded kimi-k3 init conversations, 2 draws each); 24/24 export-matched by tokens; `~/evidence/acceptance-check-demo-2026-10-30/reconciled.json` |
 | 2026-10-30 | Surplus chat (not Conflux) | `deepseek-v4-pro` 55, `kimi-k3` 2 | — | — | 0.009536 | — | unattributed caller on the shared key after slice 43 ended (16:34Z–16:56Z export pull; kimi-k3 rows 24–25k input tokens, no slice-44 call matches), counted against the weekly cap |
+| 2026-10-30 | Surplus chat | `kimi-k3` 45 | 88010 | 21271 | 0.000754 | — | C slice 45 lead init-probe demo (live, lab lp1): 12 kimi-k3 low init conversations with `run_shell` probes + 1 preflight; 23 replies billed in-reply, export-matched by tokens; 21 replies without `buyer_cost_micro` absent from the export (`unbilled`, $0); `~/evidence/lead-probe-demo-2026-10-30/reconciled.json` |
+| 2026-10-30 | Surplus chat (not Conflux) | `deepseek-v4-pro` 144, `kimi-k3` 4 | — | — | 0.018639 | — | unattributed caller on the shared key in slice 45's window (17:04–18:22Z export; kimi-k3 rows 19–27k input tokens, no slice-45 call matches), counted against the weekly cap |
 
 C slice 1 rows are reconciled with the export by `python -m conflux.core reconcile` (`~/evidence/core-runs/2026-10-27-c1*/reconciled.json`;
 export total for 2026-10-27: 83 rows, $0.001372).
@@ -75,7 +77,7 @@ charge-bound estimates) are only admission-time bounds. They are replaced by bil
 $0.0108 Jev and $0.0207 rejected-request estimates were billed $0.000006 and $0. Account credit after these runs
 is $9.369476 (`/v1/buyer/me`).
 
-**Metered total: $2.804786** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
+**Metered total: $2.824179** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
 
 ## GCE lab VMs (week 2026-W44 cap $60)
 
@@ -115,5 +117,6 @@ Rate: n2d-standard-8 ≈ $0.338/h running (GCE list price, us-central1) + 100 GB
 | 2026-10-28/29 | `conflux-dev-lab-ol1`, `-ol2` | 14 up→delete windows 23:50Z–08:05Z (two labs at a time) | ≤ 14.87 | ≤ 5.23 | C slice 39 live runs (fresh labs from the clean snapshot, graded, deleted); upper bound: windows include the post-run stop before grading |
 | 2026-10-29 | `conflux-dev-lab-lc1`, `-lc2`, `-lc3` | 08:49–11:23, 11:23–14:03, 14:03–16:30 (one lab at a time) | ≤ 7.7 | ≤ 2.71 | C slice 40 live kimi-k3-lead runs (fresh labs from the clean snapshot, graded, deleted); upper bound incl. post-run grading start |
 | 2026-10-29/30 | `conflux-dev-lab-s1`, `-s2`, `-s2b`, `-s3` | 17:33–23:11, 23:13–01:28, 01:29–10:32, 10:33–16:33 (one lab at a time) | ≤ 22.9 | ≤ 8.07 | C slice 43 live 240-step kimi-k3-lead runs (fresh labs from the clean snapshot, graded, deleted); upper bound incl. post-run grading start |
+| 2026-10-30 | `conflux-dev-lab-lp1` | 17:09:50–17:25:12, 17:26:13–17:43:00, 17:43:48–17:48:06, 17:49:20–18:17:38 (up issued → deleted; 2 stockouts 17:11Z, 17:15Z) | ≤ 1.08 | ≤ 0.38 | C slice 45 lead init-probe demo (4 fresh labs from the clean snapshot, one at a time, deleted; VMs existed ≈ 0.84 h) |
 
-**GCE lab total: ≤ $21.59** (plus the c3 disk while it exists)
+**GCE lab total: ≤ $21.97** (plus the c3 disk while it exists)

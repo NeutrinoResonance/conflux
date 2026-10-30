@@ -136,8 +136,12 @@ gcloud compute instances stop  conflux-dev-worker-1 --zone us-central1-a
 - Output limits: `top_provider.max_completion_tokens` in `/models` (core `MAX_OUTPUT`). `reasoning_effort=low` is accepted
   by glm-5.3, glm-5.3-flash and kimi-k3; `low` cut GLM reviews from 17–20 min to ~2 min. Since 2026-10-29 08:49Z glm-5.3
   rejects `medium` with HTTP 400 `request_rejected` ("must be one of: 'low', 'high', 'max'"; C slice 40).
-- kimi-k3 (low) as a lead: 2/218 replies without `buyer_cost_micro` (C slice 40); settled at bounds they read as $0.32
-  against $0.056 for the 216 billed replies, so per-run settled caps must allow for them; reconcile from the export.
+- kimi-k3 (low) replies without `buyer_cost_micro`:
+  - as a lead without tools, 2/218 (C slice 40);
+  - in a `run_shell` tool loop, 21/44 (C slice 45), none of them in the usage export (unbilled).
+  - Any cap or admission, demos included, uses `core.Budget` with `billing=core.fetch_export`. It defers such replies at
+    $0 and settles them from export rows. Bounds are never counted: slice 45's demo-local bound refused 10 draws at
+    $0.32 against $0.000013 billed.
 - Executed capability matrix: `docs/rebuild/PROVIDERS.md`.
 - Measured model strengths/weaknesses with examples: `docs/rebuild/MODELS.md` (append new findings there).
 
