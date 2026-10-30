@@ -11,6 +11,17 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **C slice 46 (2026-10-30, build-wait demo, offline, $0): a harness wait for the executor's own background jobs would
+  not free material steps or wall clock; both registered rules falsified, no core change.**
+  - Recorded slice-43/40 traces, pre-registered counterfactuals. W2b = a poll waits for the job's end, harness deadline.
+    It frees **11, 18, 0** steps (s1, s2b, s3; rule ≥ 12 in 2/3). The verdict is fragile: without the 3 hand-audit
+    overrides s1 = 13. W2a (bounded by the poll's own `timeout_s`) frees 0 everywhere.
+  - W1 (early-return sleep) frees ≥ 5.8, 1.4, 0.2% of wall (rule ≥ 10% in 2/3); upper bounds are 12.6, 19.1, 1.2%. Most
+    slept time was real build time.
+  - s3 ran builds in the foreground with large `timeout_s` and polled 3 times. s1's peeks fed 6 mid-build kills.
+  - Checked, not a harness defect: a timed-out command's process group is killed with its `&` jobs, and the result
+    says so (`timed out … (process group killed)`, since slice 2). s3:9 acted on it; s1:186 ignored it (≈ 1 step).
+  - Evidence: `~/evidence/build-wait-demo-2026-10-30/RESULTS.md` (`started.txt`, `scan.py`, `audit.json`).
 - **Exploratory re-grade on a task-text reading (2026-10-30, $0, recorded grades only; not the gate).** Goal (a) in
   `task.txt` ("Get QEMU set up with OP-TEE") does not name Linux. Fixtures are grading references (MISSION 773b964), so
   this re-scores the counted runs without G3 (Linux/xtest boot). It also uses **G1′ = OP-TEE sources obtained, any
@@ -382,18 +393,15 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. **Build-wait steps** (s2b/s3 ended at the 240-step cap). Demo on recorded traces first (slices 40/43): per fixed-sleep poll, how far the sleep ran past the backgrounded job's end, and how many steps a
-     harness-side wait would have freed. The wait would return when the job ends, using its own deadline; no model or prompt
-     change. Build the core change only if the freed steps are material.
-  2. History growth (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output compaction on the
+  1. History growth (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output compaction on the
      recorded traces (replay, n small) before any core change.
-  3. Toward the gate: move the measured lead (kimi-k3 low, async 300 s, conversation layout; slice 43 inconclusive on
+  2. Toward the gate: move the measured lead (kimi-k3 low, async 300 s, conversation layout; slice 43 inconclusive on
      the gate scale, supported on the exploratory T-scale) from demo code into core. Retain each run's boot logs (secure +
      normal UART) for independent re-execution of G6/G7. Then a gate run: `task.txt` only, fresh lab; delete the c3 disk.
-  4. Finish judgement against the binding gate: 1/3 false DONE at 240 steps (slice 43, lead-s1: DONE without G3).
+  3. Finish judgement against the binding gate: 1/3 false DONE at 240 steps (slice 43, lead-s1: DONE without G3).
      Demo on the recorded finish reviews (slices 39/40/43): does a different-family finish check (glm-5.3, or another
      family served at the 90% floor) reading the same trace reject that DONE and accept nothing else falsely? Re-check
-     after item 3 with retained logs.
-  5. Missing input (founder, non-blocking): is the Linux boot required for goal (a) when `task.txt` does not name it? The
+     after item 2 with retained logs.
+  4. Missing input (founder, non-blocking): is the Linux boot required for goal (a) when `task.txt` does not name it? The
      gate keeps G3 until it is answered. No further goal-list variant for G3 (slices 42, 44, 45 failed). Separately measured
      gap: the lead's probes never locate the machine's NetBSD project (0/43, slice 45; = slice 33).
