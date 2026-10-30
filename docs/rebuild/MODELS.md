@@ -331,3 +331,11 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
 - glm-5.3 accepted c3-a2, where a faulty check had failed work that was actually done (the slice 3 fix).
 - Latency per conversation (init + finish review): kimi 63–335 s, glm 59–124 s. Evidence:
   `~/evidence/finish-judge-demo-2026-10-30/RESULTS.md`.
+- **With the task text scoped to the sub-goal (C slice 48, 3 draws):**
+  - kimi-k3 low accepts checked-done states 17/21 with 0/15 false DONE. It accepts 3/3 on every positive whose trace
+    shows the proof, and rejects b2-inject 3/3 because the run never read its serial logs.
+  - glm-5.3 low: 13/21 accepted, 0/15 false DONE. It asks for one more re-run more often.
+- **Run-long notes make the kimi-k3 lead accept a false finish (C slice 48):**
+  - s1@237 replayed with the live lead's exact notes + goal list: DONE 3/6. Goal list alone: 0/6. Fresh: 0/4.
+  - The DONE replies ratify concessions from the lead's own earlier answers ("pre-authorized honest-failure path").
+  - No review, in any arm, names the gate's missing Linux boot. Evidence: `~/evidence/finish-judge-v2-2026-10-30/RESULTS.md`.
