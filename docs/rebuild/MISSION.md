@@ -31,6 +31,14 @@ Only then set `MISSION-STATUS: COMPLETE` and open the promotion PR to `main`.
 
 ## Founder decisions (binding; newest first)
 
+- **2026-10-30 — When cost is ambiguous, ask Surplus's billing API; keep the 90% floor.** A reply without
+  `buyer_cost_micro` (or any unsettled cost) is resolved from Surplus's own billing data (`/v1/buyer/usage/export` rows
+  by request id/model/tokens, `/v1/payments/balance` available + held), never by settling it at list-price ceilings.
+  Ceiling settlements have cut four runs at fractions of a cent (slice 39 run-budget, slice 43 lead-s2: $1.59
+  settled vs $0.029 billed). Admission and run caps use billed spend from that API. The price rule stays: every
+  Surplus request carries the 90% minimum-discount floor. The usage export shows kimi-k3.1-pro rows billed at a 60%
+  discount after the floor took effect (2026-10-29 15:11, 15:41, 16:02, 21:22Z) from an unidentified caller: a floor
+  bypass; audit callers against the export each slice.
 - **2026-10-29 — Lower reasoning effort is allowed when it still gets the task done.** A lead (or any role) may run
   at a lower `reasoning_effort` to meet the review cadence (a594bbc); this is not an output cap (90b27cd still applies).
   Founder: "fine as long as it is actually getting the task done". So effort is judged by task outcomes (graded
