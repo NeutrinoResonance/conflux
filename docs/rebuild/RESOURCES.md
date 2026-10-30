@@ -32,6 +32,9 @@
 - GCE stockouts for n2d-standard-8 in us-central1-a can last ≥ 1 h (C slice 33: 21 failed starts). A failed
   `devbox-lab up` of a *new* lab leaves its boot disk behind: delete it (`gcloud compute disks delete
   conflux-dev-lab-<name> --zone us-central1-a`) before retrying, or every retry fails `already exists`.
+- `--lead kimi-k3` (C slice 49) adds the lead: it reviews every 300 s without blocking the executor (`lead.jsonl` next to
+  `trace.jsonl`). On a task with no checks, finish and the step cap go to a fresh lead's finish review, and DONE ends the run
+  `unverified`/`finish_review_done`. Grade that outcome outside the run.
 - The core loop drives a lab with `python -m conflux.core run --lab <name> --workdir '~/optee-work' --lab-hours 4`:
   it runs `up`, waits for ssh, smokes, runs tasks in order, and always runs `stop`. Every command is a detached job in
   `~/.conflux-jobs/<id>/` on the lab (`cmd.sh`, `out`, `err`, `rc`), polled every 5 s over `gcloud compute ssh

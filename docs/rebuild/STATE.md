@@ -11,6 +11,21 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **C slice 49 (2026-10-30, build, $0.000136 metered + $0 GCE): the measured lead and slice 48's stop rule are in core.**
+  - `conflux/core.py` gained `Lead`, `Steering` and `run_task(lead_call=…)`, plus the CLI flag `run --lead kimi-k3`.
+    - The running lead is kimi-k3 low: it reviews every 300 s without blocking, in the conversation layout, with prompts
+      verbatim from slice 43.
+    - On a task with no checks, finish and the step cap go to a **fresh lead**: its own init review at k−10, and none of
+      the running lead's notes, goals or injected replies.
+    - DONE ends the run `unverified`/`finish_review_done`. Tasks with checks are unchanged.
+    - Budget and Trace are thread-safe (re-entrant lock).
+  - Replay seam: core's `Lead` on slice 43's recorded lead runs reproduces **1,796/1,796** lead requests exactly
+    (prompt chars and the last 400 chars).
+  - Regression test: the finish review gets none of the running lead's state. It fails on both mutations (reused Lead,
+    unhidden injections).
+  - Live local smoke: pro + kimi-k3 ran 4 steps; the fresh review said DONE, and the output was checked correct by hand.
+    Spend: $0.000136, export-matched; 15 cost-less replies were unbilled.
+  - Evidence: `~/evidence/core-lead-2026-10-30/RESULTS.md` (`seam.json`, `smoke/`, `reconciled.json`).
 - **C slice 48 (2026-10-30, finish-judgement v2, offline, $0.032298 metered + $0 GCE): with the task text scoped to
   the sub-goal, the kimi-k3 lead's fresh finish review accepts checked-done work (17/21) with 0/15 false DONE: supported.
   The live s1@237 false DONE comes from the lead's run-long notes: supported (3/6 with them vs 0/6 goal list only).**
@@ -430,11 +445,10 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. Toward the gate: move the measured lead (kimi-k3 low, async 300 s, conversation layout) into core, with the stop rule
-     slice 48 supports: a **fresh-context finish review** by kimi-k3 low (task text + trace + finish summary, its own init
-     review, none of the running lead's notes or goal list); the running lead steers but its DONE never stops a run.
-     Regression test that the finish review receives no lead notes. Retain each run's boot logs (secure + normal UART) for
-     independent re-execution of G6/G7. Then a gate run: `task.txt` only, fresh lab; delete the c3 disk.
+  1. Toward the gate (lead + fresh finish review are in core since slice 49): a **gate run** on a fresh lab:
+     `task.txt` only, executor `deepseek-v4-pro`, `--lead kimi-k3`, 240 steps. Its grading script must copy the run's boot
+     logs (secure and normal UART, wherever the run wrote them) off the lab before the lab is deleted, so G6/G7 can be
+     re-executed independently. Delete the c3 disk.
   2. Gate-reason rejection is unmeasured: no review (slices 47–48, 0/16 at s1@237) names the missing Linux boot. With
      `task.txt` alone the lead reads goal (a) as OP-TEE firmware for NetBSD (slices 42/44/45). The gate run measures it; no
      further goal-list variant (two materially identical failures).

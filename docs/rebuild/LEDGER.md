@@ -69,6 +69,8 @@ USD comes from provider responses or documented prices — never estimated silen
 | 2026-10-30 | Surplus chat (not Conflux) | `deepseek-v4-pro` 129, `kimi-k3` 1 | — | — | 0.031831 | — | unattributed caller on the shared key in slice 47's window (19:19–21:09Z export; no pro call from this demo; the one kimi-k3 row ($0.000115) is unmatched to any demo call and may be a demo reply recorded without usage), counted against the weekly cap |
 | 2026-10-30 | Surplus chat | `kimi-k3` 371 calls, `glm-5.3` 228 calls (513 billed in-reply, 86 unbilled) | 9277642 | 370881 | 0.032298 | — | C slice 48 finish-judgement v2 demo (offline: part A 72 scoped-task finish reviews, kimi-k3 $0.010881 + glm-5.3 $0.004779; part B 18 live-state replays, kimi-k3 $0.016638); 513/513 billed calls export-matched, tokens from the export; `~/evidence/finish-judge-v2-2026-10-30/reconciled.json` |
 | 2026-10-30 | Surplus chat (not Conflux) | `deepseek-v4-pro` 191 | — | — | 0.030481 | — | unattributed caller on the shared key in slice 48's window (21:17–22:17Z export; no pro call from this demo) |
+| 2026-10-30 | Surplus chat | `deepseek-v4-pro` 4, `kimi-k3` 14 (3 billed in-reply, 15 unbilled) | 4309 | 718 | 0.000136 | — | C slice 49 core-lead live smoke (local, primes task; executor $0.000111, lead $0.000025; 22:41–22:56Z); `~/evidence/core-lead-2026-10-30/reconciled.json` |
+| 2026-10-30 | Surplus chat (not Conflux) | `deepseek-v4-pro` 75 | — | — | 0.007401 | — | unattributed caller on the shared key in slice 49's smoke window (no call from the smoke) |
 
 C slice 1 rows are reconciled with the export by `python -m conflux.core reconcile` (`~/evidence/core-runs/2026-10-27-c1*/reconciled.json`;
 export total for 2026-10-27: 83 rows, $0.001372).
@@ -81,7 +83,7 @@ charge-bound estimates) are only admission-time bounds. They are replaced by bil
 $0.0108 Jev and $0.0207 rejected-request estimates were billed $0.000006 and $0. Account credit after these runs
 is $9.369476 (`/v1/buyer/me`).
 
-**Metered total: $3.012368** (sum of the USD column, not-Conflux rows included, plus the Jev fair-test decisions at their ≈$0.00028 estimate; the earlier $2.860537 line had fallen behind the rows)
+**Metered total: $3.019905** (sum of the USD column, not-Conflux rows included, plus the Jev fair-test decisions at their ≈$0.00028 estimate; the earlier $2.860537 line had fallen behind the rows)
 
 ## GCE lab VMs (week 2026-W44 cap $60)
 
