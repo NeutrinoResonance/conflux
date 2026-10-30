@@ -806,9 +806,11 @@ class Lead:
 
     def __init__(self, call: Callable[..., tuple[int, object, float]], model: str, budget: Budget, trace: Trace,
                  task_text: str, hide: set[str], role: str = "running", deadline: float | None = None,
-                 on_cost: Callable[[float], None] | None = None):
+                 on_cost: Callable[[float], None] | None = None, may_spend: Callable[[], bool] | None = None):
         self.call, self.model, self.budget, self.trace, self.task_text = call, model, budget, trace, task_text
         self.hide, self.role, self.deadline, self.on_cost = hide, role, deadline, on_cost or (lambda usd: None)
+        self.may_spend = may_spend or (lambda: True)  # the task's own cap (executor + lead spend)
+        self.stopped = False  # set when the task ends: no further call starts
         self.notes, self.goals, self.seen, self.calls = "", [], 0, 0
 
     def _settled(self, step: int, turn: str, usd: float, kind: str, request_id: str | None) -> None:
@@ -818,7 +820,10 @@ class Lead:
 
     def _turn(self, convo: list, step: int, turn: str, finish: bool) -> str | None:
         for attempt in (1, 2):
-            if not self.budget.admit(0.0):
+            if self.stopped:
+                self.trace.write("lead_stopped", role=self.role, step=step, turn=turn)
+                return None
+            if not self.budget.admit(0.0) or not self.may_spend():
                 self.trace.write("lead_denied", role=self.role, step=step, turn=turn, attempt=attempt)
                 return None
             left = None if self.deadline is None else self.deadline - time.monotonic()
@@ -893,6 +898,7 @@ class Steering:
         self.lock = threading.Lock()
         self.thread: threading.Thread | None = None
         self.reply: tuple | None = None
+        self.inflight = False  # a review started and its reply not yet taken
         self.started: float | None = None
         self.n = 0
 
@@ -906,31 +912,48 @@ class Steering:
             self.reply = (text, n, step, time.monotonic() - t0)
 
     def turn(self, messages: list, step: int) -> None:
+        # One critical section: a review is "in flight" until its reply is taken here, so a review finishing during
+        # this turn can never let a successor start (and overwrite its reply) before that reply is injected.
         with self.lock:
             done, self.reply = self.reply, None
+            if done is not None:
+                self.inflight = False
+            start = not self.inflight and not self.lead.stopped and (
+                self.started is None or time.monotonic() - self.started >= self.cadence_s)
+            if start:
+                self.inflight = True
+                self.n += 1
+                self.started = time.monotonic()
         if done and done[0]:
             content = PREFIX + done[0]
             self.lead.hide.add(content)
             messages.append({"role": "user", "content": content})
             self.lead.trace.write("lead_inject", step=step, review=done[1], reviewed_step=done[2],
                                   review_s=round(done[3], 1), chars=len(done[0]))
-        busy = self.thread is not None and self.thread.is_alive()
-        if not busy and (self.started is None or time.monotonic() - self.started >= self.cadence_s):
-            self.n += 1
-            self.started = time.monotonic()
+        if start:
             snap = json.loads(json.dumps(messages))
             self.thread = threading.Thread(target=self._review, args=(snap, step, self.n, self.started), daemon=True)
             self.lead.trace.write("lead_start", step=step, review=self.n)
             self.thread.start()
 
-    def settle_for_finish(self, step: int) -> None:
-        """Before a finish review: wait for an in-flight review and drop its reply (the finish review supersedes it)."""
+    def _drain(self, step: int, event: str) -> None:
+        """Wait for an in-flight review (its call is accounted when it returns) and drop its reply."""
         if self.thread is not None:
             self.thread.join()
         with self.lock:
             if self.reply is not None:
-                self.lead.trace.write("lead_superseded", step=step, review=self.reply[1])
-                self.reply = None
+                self.lead.trace.write(event, step=step, review=self.reply[1])
+            self.reply, self.inflight = None, False
+
+    def settle_for_finish(self, step: int) -> None:
+        """Before a finish review: the finish review supersedes an in-flight review's reply."""
+        self._drain(step, "lead_superseded")
+
+    def close(self, step: int) -> None:
+        """At the task's end, on every exit path: no new review or call starts; an in-flight call completes and is
+        accounted before the task's results are written."""
+        self.lead.stopped = True
+        self._drain(step, "lead_dropped")
 
 
 # ---------------------------------------------------------------- self-audit (work item F, D1)
@@ -1003,7 +1026,20 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
              cadence_s: float = CADENCE_S) -> dict:
     """With `lead_call`, a running lead steers (`Steering`); on a task with no checks a fresh lead's finish review
     is the stop rule: DONE ends the run `unverified` (`finish_review_done`; acceptance needs executed checks),
-    otherwise its reply goes to the executor and the run goes on."""
+    otherwise its reply goes to the executor and the run goes on. Executor and lead spend count against
+    `task.max_usd` together. The lead is closed on every exit, an exception included."""
+    held: dict = {}
+    try:
+        return _run_task(task, chat, shell, trace, budget, model, deadline, lead_call, lead_model, cadence_s, held)
+    except BaseException:
+        if held.get("steering"):
+            held["steering"].close(-1)
+        raise
+
+
+def _run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget, model: str,
+              deadline: float | None, lead_call: Callable[..., tuple[int, object, float]] | None, lead_model: str,
+              cadence_s: float, held: dict) -> dict:
     t0 = time.monotonic()
     steps = retries = 0
     cost = lead_cost = 0.0
@@ -1013,6 +1049,8 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
     result: dict = {}  # returned by `end`; a cost resolved later updates it in place
 
     def end(status: str, reason: str) -> dict:
+        if steering:  # an in-flight lead call completes and is accounted before the results are written
+            steering.close(steps)
         budget.resolve(force=True)
         findings = audit([e for e in trace.events if e.get("task") == task.id])
         trace.write("audit", task=task.id, findings=findings)
@@ -1043,11 +1081,14 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
         if result and usd:  # settled after task_end
             result["lead_cost_usd"] = round(result["lead_cost_usd"] + usd, 8)
 
+    def may_spend() -> bool:
+        return cost + lead_cost < task.max_usd
+
     steering = None
     if lead_call is not None:
         lead_trace = Trace(trace.path.with_name("lead.jsonl") if trace.path else None)
-        steering = Steering(Lead(lead_call, lead_model, budget, lead_trace, task.goal, set(), "running", deadline,
-                                 lead_charged), cadence_s)
+        steering = held["steering"] = Steering(Lead(lead_call, lead_model, budget, lead_trace, task.goal, set(),
+                                                    "running", deadline, lead_charged, may_spend), cadence_s)
 
     def finish_review(summary: str) -> tuple[str | None, str | None]:
         """A fresh lead (no notes, goal list or injected messages of the running lead): init review through step
@@ -1055,7 +1096,7 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
         steering.settle_for_finish(steps)
         running = steering.lead
         fresh = Lead(lead_call, lead_model, budget, running.trace, task.goal, running.hide, "finish", deadline,
-                     lead_charged)
+                     lead_charged, may_spend)
         k = max(1, steps - 10)
         text = fresh.ask(upto(messages, k), k) and fresh.ask(messages, steps, summary)
         if not text:
@@ -1089,7 +1130,7 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
         # One retry when no HTTP response came back (transport error or timeout); each attempt is admitted and settled.
         for attempt in (1, 2):
             budget.resolve()
-            if cost >= task.max_usd:
+            if not may_spend():
                 return end("unverified", "task_budget")
             if not budget.admit(bound):
                 return end("unverified", "run_budget")
@@ -1336,7 +1377,8 @@ def reconcile(calls: list[dict], rows: list[dict], window: float = MATCH_WINDOW_
     with_usage = [c for c in calls if c.get("usage")]
     for call in with_usage + [c for c in calls if not c.get("usage")]:
         i = nearest(call, by_tokens=bool(call.get("usage")))
-        ref = {"task": call.get("task"), "step": call.get("step"), "id": call.get("id")}
+        ref = {"task": call.get("task"), "step": call.get("step"), "id": call.get("id"),
+               **({"lead": call["lead"]} if call.get("lead") else {})}
         if i is None:
             unmatched.append(ref)
             continue
@@ -1362,6 +1404,17 @@ def _load_events(out: Path, event: str) -> list[dict]:
     for p in sorted(out.glob("*/trace.jsonl")):
         rows += [r for r in map(json.loads, p.read_text().splitlines()) if r["event"] == event]
     return rows
+
+
+def _billed_calls(out: Path) -> list[dict]:
+    """Every paid call of a run directory: executor `model_call`s and lead `lead_call`s. A lead call is attributed to
+    its task (the directory) and tagged `lead:<role>` with its review step and turn."""
+    calls = _load_events(out, "model_call")
+    for p in sorted(out.glob("*/lead.jsonl")):
+        for r in map(json.loads, p.read_text().splitlines()):
+            if r["event"] == "lead_call":
+                calls.append({**r, "task": p.parent.name, "lead": f"lead:{r.get('role')}:{r.get('turn')}"})
+    return calls
 
 
 def _utc() -> str:
@@ -1476,7 +1529,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if a.cmd == "reconcile":
         rows = fetch_export(key, a.day)
-        report = reconcile(_load_events(a.out, "model_call"), rows)
+        report = reconcile(_billed_calls(a.out), rows)
+        report["lead_billed_usd"] = round(sum(m["billed_usd"] for m in report["matched"] if m.get("lead")), 8)
         (a.out / "reconciled.json").write_text(json.dumps(report, indent=2))
         print(json.dumps({k: v for k, v in report.items() if k != "matched"}, indent=2))
         return 0

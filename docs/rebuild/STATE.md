@@ -25,6 +25,11 @@ MISSION-STATUS: ACTIVE
     unhidden injections).
   - Live local smoke: pro + kimi-k3 ran 4 steps; the fresh review said DONE, and the output was checked correct by hand.
     Spend: $0.000136, export-matched; 15 cost-less replies were unbilled.
+  - PR #58 review fixes, each with a regression test that fails on the first commit:
+    - executor + lead spend count together against `task.max_usd`, with a zero cap making no lead call;
+    - the lead is closed and its in-flight call accounted on every exit, an exception included;
+    - `reconcile` bills `lead.jsonl` calls, with task and role attribution (`lead_billed_usd`);
+    - a review that finishes mid-turn can no longer be overwritten by its successor.
   - Evidence: `~/evidence/core-lead-2026-10-30/RESULTS.md` (`seam.json`, `smoke/`, `reconciled.json`).
 - **C slice 48 (2026-10-30, finish-judgement v2, offline, $0.032298 metered + $0 GCE): with the task text scoped to
   the sub-goal, the kimi-k3 lead's fresh finish review accepts checked-done work (17/21) with 0/15 false DONE: supported.
