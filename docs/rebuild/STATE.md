@@ -11,6 +11,18 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **C slice 45 (2026-10-30, lead init-probe demo, live, $0.000754 metered + ≤ $0.38 GCE): giving the kimi-k3 lead its
+  own `run_shell` probes on a fresh lab before the init goal list does not add goal (a)'s Linux proof; registered rule
+  falsified in both arms.**
+  - Arms: T0 = probes only (≤ 15, web via the proxy), T1 = T0 + "read the setup documentation of the software the task names".
+    Linux/xtest boot goal with goal (b) kept (hand audit): **T0 0/6, T1 0/6** (lenient 1/6; rule ≥ 3/6). Goal (b) kept 12/12.
+  - The lead probes little and generically: median 2 of 15, host census + web, **0/43 probes looked under `/home`** for the
+    machine's NetBSD project. T1 read NetBSD man pages, not OP-TEE's. One T0 draw read OP-TEE's `qemu_v8.mk`/manifest and
+    still wrote NetBSD as the normal world. Across slices 44–45: 0/32 non-c3 lists derive the gate's Linux boot.
+  - **Demo harness fault (MISSION a58a30e):** the demo's own cap guard held cost-less replies at ceiling bounds and refused
+    10 draws with 0 calls ($0.32 vs $0.000013 billed). Recorded as missing evidence and redrawn under `core.Budget`
+    (export settlement); RESOURCES now says caps always use it. kimi-k3 in a tool loop: 21/44 replies without cost, all unbilled.
+  - Evidence: `~/evidence/lead-probe-demo-2026-10-30/RESULTS.md` (`started.txt`: pre-registration + 3 amendments).
 - **C slice 44 (2026-10-30, per-goal check demo, offline, $0.001096 metered + $0 GCE): asking the kimi-k3 lead, after
   its init turn, for each goal's executed check does not add goal (a)'s Linux proof; registered rule falsified.**
   - One generic added turn (P1: "for each goal, the executed check that would show it is done; rewrite the goal list";
@@ -354,8 +366,8 @@ MISSION-STATUS: ACTIVE
      before changing the lead: does a different-family finish check (glm-5.3, or another family served at the 90% floor) reading the
      same trace reject lead-s1's false DONE and still accept nothing else falsely? Lead runs stay at 240 steps on the core
      with billed-cost settlement.
-  2. Goal (a)'s Linux proof (G3 0/8): prompting the lead's goal list has failed twice (slices 42, 44); kimi-k3 and glm-5.3 read
-     goal (a) as "OP-TEE under NetBSD, proven by the OP-TEE banner". Untested non-prompt hypothesis: a runtime probe
-     chosen by the lead that reads the named components' own upstream setup docs before goals are fixed. Missing input
-     (founder, non-blocking): whether the gate's Linux boot is required for goal (a) when the task text does not name it.
+  2. Goal (a)'s Linux proof (G3 0/8): three lead mechanisms have failed (review, per-goal checks, own probes ± docs;
+     slices 42, 44, 45). No further goal-list variant. Missing input (founder, non-blocking): whether the gate's Linux boot
+     is required for goal (a) when `task.txt` does not name it. Separately measured gap: the lead's probes never locate
+     the machine's NetBSD project (0/43, slice 45; = slice 33).
   3. Completion-gate run: `run12/task.txt` only, unattended from the clean snapshot on a fresh lab; then delete the c3 disk.
