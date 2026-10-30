@@ -309,3 +309,7 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   accepted a userland demo that panicked as an "honest failure" and a GET_OS_REVISION of 0xffffffff as "unknown
   function". Its goal list keeps reading goal (a) as OP-TEE firmware for NetBSD (G3 0/3). Reviews 178–248 s median.
   Evidence: `~/evidence/step-cap-demo-2026-10-29/RESULTS.md`.
+- **Asking the kimi-k3 lead for each goal's executed check does not add goal (a)'s Linux proof** (C slice 44, offline):
+  2/12 per arm, all from the one init reply that already proposed the stock Linux/xtest boot, 0/20 otherwise. Its goal-(a)
+  check is OP-TEE's secure-world banner (19/20), usually with a NetBSD boot. Evidence:
+  `~/evidence/acceptance-check-demo-2026-10-30/RESULTS.md`.

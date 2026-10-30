@@ -11,6 +11,17 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **C slice 44 (2026-10-30, per-goal check demo, offline, $0.001096 metered + $0 GCE): asking the kimi-k3 lead, after
+  its init turn, for each goal's executed check does not add goal (a)'s Linux proof; registered rule falsified.**
+  - One generic added turn (P1: "for each goal, the executed check that would show it is done; rewrite the goal list";
+    P2: + "runnable without the later goals") on the 6 recorded init conversations of slices 40/43, 2 draws each.
+  - Linux/xtest boot goal with goal (b) kept: **P1 2/12, P2 2/12** (rule ≥ 6/12), all from c3, whose init reply already
+    proposed the stock Linux/xtest boot; **0/20 from the other inputs**. Goal (b) kept 24/24.
+  - Goal (a)'s derived check is OP-TEE's secure-world banner (`I/TC: OP-TEE version`) in 19/20 non-c3 lists, with a
+    NetBSD boot in 15/20: a stable literal reading of `task.txt`, the same one the old `lab/` run reported as goal (a) done.
+  - Second materially identical failure (slice 42 review, slice 44 checks): no third prompt variant on the goal list.
+  - Unattributed caller still active on the shared key after slice 43 (57 rows, $0.009536, ledger "not Conflux").
+  - Evidence: `~/evidence/acceptance-check-demo-2026-10-30/RESULTS.md` (24/24 export-matched).
 - **C slice 43 (2026-10-29/30, step-cap demo on full `task.txt`, $0.378958 metered (export) + ≤ $8.07 GCE): a kimi-k3
   low lead at 240 steps (was 120) scores 6, 4, 4 of G1–G7 (median 4): registered rule inconclusive (≥ 5 / ≤ 3).**
   - Every counted run gained after step 120 (+2, +2, +3, paired): G5 3/3, G6 2/3, and the **first G7**: lead-s1's driver
@@ -339,10 +350,12 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. **Goal (a) is the binding gap (G3 0/8 lead runs, slices 39–43).** Slice 42 ruled out a different-family review of the
-     lead's goal list. Next candidate, demo first on recorded traces: give the lead's goal-list step the machine's own
-     evidence before it fixes goals (one generic runtime probe pass), or a second lead family drafting the goal list
-     independently, and measure the Linux/xtest goal on slices 40/43's init inputs. Run lead runs at 240 steps from now on,
-     on the core with billed-cost settlement (slice 43 PR).
-  2. Finish judgement: 1/3 false DONE at 240 steps. Measure on the recorded finish reviews before changing the lead.
+  1. **Finish judgement** (1/3 false DONE at 240 steps, slice 43). Demo on the recorded finish reviews (slices 39/40/43)
+     before changing the lead: does a different-family finish check (glm-5.3, or another family served at the 90% floor) reading the
+     same trace reject lead-s1's false DONE and still accept nothing else falsely? Lead runs stay at 240 steps on the core
+     with billed-cost settlement.
+  2. Goal (a)'s Linux proof (G3 0/8): prompting the lead's goal list has failed twice (slices 42, 44); kimi-k3 and glm-5.3 read
+     goal (a) as "OP-TEE under NetBSD, proven by the OP-TEE banner". Untested non-prompt hypothesis: a runtime probe
+     chosen by the lead that reads the named components' own upstream setup docs before goals are fixed. Missing input
+     (founder, non-blocking): whether the gate's Linux boot is required for goal (a) when the task text does not name it.
   3. Completion-gate run: `run12/task.txt` only, unattended from the clean snapshot on a fresh lab; then delete the c3 disk.
