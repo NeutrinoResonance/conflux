@@ -11,6 +11,24 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **Re-grade (2026-10-30, $0, recorded grades only; operator grading note, MISSION 773b964): milestones restated from
+  `task.txt`.** Goal (a) "Get QEMU set up with OP-TEE" does not name Linux, so **G3 (Linux/xtest boot) is fixture-only
+  and not counted**. It was 0/15 in every graded run, so no count drops. G1's qemu_v8-manifest criterion is a fixture recipe;
+  **G1′ = OP-TEE sources obtained, any method** (inferred from G2). Scale is 0–6: G1′ G2 G4 G5 G6 G7, and goal (a) done = G2 ∧ G6.
+  - Slice 39: lead 3, 3 vs pro alone 3, 3, 3 → still falsified.
+  - Slice 40: 5, 4, 3 (median 4) → inconclusive, was falsified.
+  - Slice 43: **6, 5, 5 (median 5) → supported**, was inconclusive.
+  - Goal (a) done: lead at 240 steps 3/3, at 120 steps 1/3, pro alone 0/3.
+  - **lead-s1 is the first run meeting every task-derived milestone (6/6)**: unattended, clean snapshot, `task.txt` only.
+    Its DONE is no longer a false acceptance on the Linux ground. Caveats: OP-TEE liveness in the driver boot rests on the
+    CALLS_UID reply (secure-UART log not in the trace, lab deleted); the userland client demo failed; GET_OS_REVISION
+    returned 0xffffffff.
+  - Not a gate run: the lead is throwaway demo code, not core; G7 was not independently re-executed; n = 1 of 3.
+  - **Measured cost drivers** (slice 43 traces, `scan.py`). The 240-step cap binds milestones: s2b and s3 hit it missing only G7.
+    - Fixed `sleep ≥ 60` build waits: **36 steps (15%) and 34–39% of wall clock in s1/s2b**, 0 in s3.
+    - History growth: prompts reach 329–393k tokens; latency per step rises 2–3× after step 120. It costs wall clock, not steps.
+  - Slices 42/44/45 chased this fixture detail (G3). Their measurements stand, but they are not progress.
+  - Evidence: `~/evidence/cost-drivers-2026-10-30/REGRADE.md` (`scan.json`).
 - **C slice 45 (2026-10-30, lead init-probe demo, live, $0.000754 metered + ≤ $0.38 GCE): giving the kimi-k3 lead its
   own `run_shell` probes on a fresh lab before the init goal list does not add goal (a)'s Linux proof; registered rule
   falsified in both arms.**
@@ -362,12 +380,14 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. **Finish judgement** (1/3 false DONE at 240 steps, slice 43). Demo on the recorded finish reviews (slices 39/40/43)
-     before changing the lead: does a different-family finish check (glm-5.3, or another family served at the 90% floor) reading the
-     same trace reject lead-s1's false DONE and still accept nothing else falsely? Lead runs stay at 240 steps on the core
-     with billed-cost settlement.
-  2. Goal (a)'s Linux proof (G3 0/8): three lead mechanisms have failed (review, per-goal checks, own probes ± docs;
-     slices 42, 44, 45). No further goal-list variant. Missing input (founder, non-blocking): whether the gate's Linux boot
-     is required for goal (a) when `task.txt` does not name it. Separately measured gap: the lead's probes never locate
-     the machine's NetBSD project (0/43, slice 45; = slice 33).
-  3. Completion-gate run: `run12/task.txt` only, unattended from the clean snapshot on a fresh lab; then delete the c3 disk.
+  1. **Build-wait steps** (task-derived milestones; s2b/s3 ended at the step cap missing only G7). Demo on recorded traces
+     first (slices 40/43): per fixed-sleep poll, how far the sleep ran past the backgrounded job's end, and how many steps a
+     harness-side wait would have freed. The wait would return when the job ends, using its own deadline; no model or prompt
+     change. Build the core change only if the freed steps are material.
+  2. History growth (prompts to ~390k tokens, latency 2–3× after step 120): measure a generic old-output compaction on the
+     recorded traces (replay, n small) before any core change.
+  3. Toward the gate: move the measured lead (kimi-k3 low, async 300 s, conversation layout; slice 43 supported on the
+     T-scale) from demo code into core. Retain each run's boot logs (secure + normal UART) for independent re-execution of
+     G6/G7. Then a gate run: `task.txt` only, fresh lab; delete the c3 disk.
+  4. Finish judgement: on the T-scale 0/3 counted lead runs ended in a false DONE (slice 39's pro-alone controls 3/3).
+     Re-check after item 3 with retained logs.

@@ -23,13 +23,19 @@ Make inexpensive DeepSeek execution achieve the best **reliable work per dollar*
 
 The endeavor is done when **Conflux, driving DeepSeek as its normal executor, completes the full
 run-12 task unattended from the clean OP-TEE snapshot** — goal (a) OP-TEE build + QEMU boot of the
-secure world and Linux, then goal (b) the NetBSD driver work — with every goal's success
+secure world (no Linux boot required: founder decision 2026-10-30), then goal (b) the NetBSD driver work — with every goal's success
 independently verified by executed checks (not model self-grades), within the weekly budgets below.
 Task text: `~/evidence/optee-ctl-runs/run12/task.txt`. Run it on a lab VM (`devbox-lab`). Held-out
 comparisons against bare DeepSeek and the baseline (item E) remain required supporting evidence.
 Only then set `MISSION-STATUS: COMPLETE` and open the promotion PR to `main`.
 
 ## Founder decisions (binding; newest first)
+
+- **2026-10-30 — Milestones come from `task.txt`; G3 (Linux boot) is fixture-only.** Goal (a) reads "Get QEMU set up with
+  OP-TEE" and does not mention Linux. A lead that reads (a) as OP-TEE firmware under the NetBSD normal world is a valid
+  reading. The Linux/xtest boot came from the developer fixture: it is not counted for completion. No further slices on
+  recovering it. Re-grade of slices 39/40/43 recorded in STATE. The next slice is picked by what most moves the
+  task-derived milestones.
 
 - **2026-10-30 — When cost is ambiguous, ask Surplus's billing API; keep the 90% floor.** A reply without
   `buyer_cost_micro` (or any unsettled cost) is resolved from Surplus's own billing data (`/v1/buyer/usage/export` rows
