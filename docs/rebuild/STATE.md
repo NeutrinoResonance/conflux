@@ -11,6 +11,21 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **C slice 48 (2026-10-30, finish-judgement v2, offline, $0.032298 metered + $0 GCE): with the task text scoped to
+  the sub-goal, the kimi-k3 lead's fresh finish review accepts checked-done work (17/21) with 0/15 false DONE: supported.
+  The live s1@237 false DONE comes from the lead's run-long notes: supported (3/6 with them vs 0/6 goal list only).**
+  - A (fresh protocol, 7 P incl. relabelled c3-a2, 5 N, 3 draws). kimi 17/21 accepted, 0/15 false DONE. glm-5.3 low 13/21,
+    0/15 (inconclusive). Every rejected positive has grounds in the trace: b2-inject never read its serial logs (6/6), c3-a2's trace
+    holds the faulty check's failure feedback.
+  - B (live state rebuilt from `lead.jsonl`; seam: prompt chars and ask tail exact on 4/4 live finish states).
+    - s1@237 DONE: L (notes + goals) 3/6; Lg (goals only) 0/6; fresh 0/4 (slice 47).
+    - DONE replies cite the lead's own earlier "pre-authorized honest-failure path".
+    - Other live finish states under L: 0/6.
+    - **No review in any arm names the missing Linux boot (G3)**: rejection is never for the gate's reason.
+  - Inherited demo fidelity fault: `trace_messages` (slices 40/43/47) wrote the finish result as `finish recorded`, while core
+    writes `finish recorded; the harness is running the acceptance checks` (+45–46 chars per finish in the lead prompt; found by the seam, fixed in
+    the demo).
+  - Evidence: `~/evidence/finish-judge-v2-2026-10-30/RESULTS.md` (`started.txt`, `seam_b.json`, `reviews.jsonl`, `reconciled.json`).
 - **C slice 47 (2026-10-30, finish-judgement demo, offline, $0.004527 metered + $0 GCE): the kimi-k3 lead's finish
   review is not a supported stop rule (registered rule falsified: P accepted 6/12, false DONE 0/20, s1@237 0/2); glm-5.3
   low inconclusive (7/12, 1/20). The acceptance half of the instrument is confounded; rejection holds.**
@@ -415,16 +430,16 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. Finish judgement, made testable (slice 47): the review must rest on executed evidence, not one DONE line. Demo on
-     recorded states: the finish review names the executed checks that would prove each goal, the harness runs them as
-     runtime probes on a scratch lab, and DONE requires them to pass. Use sub-goal-scoped task text (the fixture's
-     "this one is: …" clause) for P/N labels, with c3-a2 relabelled P. Also replay s1@237 with the live lead's own
-     notes and goal list, to measure the run-long drift that produced its false DONE.
-  2. Toward the gate: move the measured lead (kimi-k3 low, async 300 s, conversation layout) into core once item 1
-     gives a stop rule. Retain each run's boot logs (secure + normal UART) for independent re-execution of G6/G7.
-     Then a gate run: `task.txt` only, fresh lab; delete the c3 disk.
+  1. Toward the gate: move the measured lead (kimi-k3 low, async 300 s, conversation layout) into core, with the stop rule
+     slice 48 supports: a **fresh-context finish review** by kimi-k3 low (task text + trace + finish summary, its own init
+     review, none of the running lead's notes or goal list); the running lead steers but its DONE never stops a run.
+     Regression test that the finish review receives no lead notes. Retain each run's boot logs (secure + normal UART) for
+     independent re-execution of G6/G7. Then a gate run: `task.txt` only, fresh lab; delete the c3 disk.
+  2. Gate-reason rejection is unmeasured: no review (slices 47–48, 0/16 at s1@237) names the missing Linux boot. With
+     `task.txt` alone the lead reads goal (a) as OP-TEE firmware for NetBSD (slices 42/44/45). The gate run measures it; no
+     further goal-list variant (two materially identical failures).
   3. History growth (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output compaction
      on the recorded traces before any core change.
   4. Missing input (founder, non-blocking): is the Linux boot required for goal (a) when `task.txt` does not name it? The
-     gate keeps G3 until it is answered. No further goal-list variant for G3 (slices 42, 44, 45 failed). Separately measured
-     gap: the lead's probes never locate the machine's NetBSD project (0/43, slice 45; = slice 33).
+     gate keeps G3 until it is answered. Separately measured gap: the lead's probes never locate the machine's NetBSD
+     project (0/43, slice 45; = slice 33).
