@@ -36,6 +36,7 @@ LEDGER = Path(__file__).resolve().parents[1] / "docs/rebuild/LEDGER.md"
 
 SURPLUS = "https://www.surplusintelligence.ai/api/inference/v1"
 DECISIONS = "https://api.surplusintelligence.ai/v1/decisions"
+MIN_DISCOUNT = 90        # X-Min-Discount on every paid Surplus request, chat and decisions (MISSION 5ee7a8b, a58a30e)
 
 EXPERIMENT_CAP = 1.00
 CAMPAIGN_BUDGET = 50.00
@@ -388,7 +389,7 @@ class PaidProber:
     def __init__(self, http: httpx.Client, key: str, budget: Budget, rec: Recorder,
                  pricing: dict, only: list[str] | None = None):
         self.http = http
-        self.headers = {"Authorization": f"Bearer {key}"}
+        self.headers = {"Authorization": f"Bearer {key}", "X-Min-Discount": str(MIN_DISCOUNT)}
         self.budget = budget
         self.rec = rec
         self.pricing = pricing

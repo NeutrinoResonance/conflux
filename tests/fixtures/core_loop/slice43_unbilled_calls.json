@@ -1,0 +1,48 @@
+{
+ "source": "~/evidence/step-cap-demo-2026-10-29/lead-s2 (C slice 43): deepseek-v4-pro replies with usage but no buyer_cost_micro",
+ "note": "absent from the Surplus usage export; balance delta (available+held) = export total /bin/bash.028633, so not billed. The old core settled them at usage x CEILINGS (settled_usd); with the lead's 8 such replies the run ended run_budget at step 107 of 240.",
+ "columns": [
+  "step",
+  "prompt_tokens",
+  "completion_tokens",
+  "settled_usd"
+ ],
+ "calls": [
+  [
+   31,
+   35838,
+   576,
+   0.0760536
+  ],
+  [
+   36,
+   49276,
+   365,
+   0.101326
+  ],
+  [
+   37,
+   49876,
+   626,
+   0.1045096
+  ],
+  [
+   40,
+   52418,
+   346,
+   0.1074656
+  ],
+  [
+   41,
+   52994,
+   308,
+   0.1083288
+  ],
+  [
+   106,
+   186030,
+   721,
+   0.3775396
+  ]
+ ]
+}

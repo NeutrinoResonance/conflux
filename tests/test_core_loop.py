@@ -122,23 +122,98 @@ def test_a_real_check_failure_beats_a_timeout(tmp_path):
     assert res["status"] == "failed"
 
 
-def test_missing_cost_settles_at_usage_bound_and_continues(tmp_path):
+def export_row(model, prompt, completion, usd, ts, rid="01EXPORT"):
+    created = core.datetime.fromtimestamp(ts, core.timezone.utc).isoformat().replace("+00:00", "Z")
+    return {"request_id": rid, "created_at": created, "model": model, "input_tokens": str(prompt),
+            "output_tokens": str(completion), "buyer_cost_usd": f"{usd:.6f}", "settlement_status": "accrued"}
+
+
+def test_missing_cost_is_pending_and_never_settled_at_ceilings(tmp_path):
+    # MISSION a58a30e: without a billing source the cost stays pending at 0, never usage x list-price ceilings.
     chat = Scripted(resp(call("run_shell", {"command": "echo yes > ok.txt"}), micro=None),
                     resp(call("finish", {})))
     res, trace = run(TOUCH, chat, tmp_path)
-    assert res["status"] == "accepted"
+    assert res["status"] == "accepted" and res["pending_calls"] == 1
     first = [e for e in trace.events if e["event"] == "model_call"][0]
-    p, o = core.CEILINGS[core.MODEL]
-    assert first["cost_kind"] == "usage_bound" and first["cost_usd"] == pytest.approx(300 * p + 40 * o)
-    assert 0 < first["cost_usd"] < first["bound_usd"]
+    assert first["cost_kind"] == "pending" and first["cost_usd"] == 0
+    assert res["cost_usd"] == pytest.approx(14e-6)
 
 
-def test_missing_cost_without_usage_settles_at_the_admission_bound(tmp_path):
+def test_pending_cost_settles_from_the_export_row_and_counts_against_the_cap(tmp_path, monkeypatch):
+    # A reply without buyer_cost_micro that Surplus did bill: its export row settles it, and admission uses it.
+    monkeypatch.setattr(core, "BILLING_POLL_S", 0)
+    seen_days = []
+
+    def billing(day):
+        seen_days.append(day)
+        mc = [e for e in trace.events if e["event"] == "model_call"]
+        return [export_row(core.MODEL, 300, 40, 0.02, mc[0]["ts"])] if mc else []
+
+    trace = Trace(tmp_path / "trace.jsonl")
+    chat = Scripted(resp(call("run_shell", {"command": "true"}), micro=None),
+                    resp(call("run_shell", {"command": "true"}, cid="c2")))
+    res = run_task(TOUCH, chat, core.local_shell(tmp_path / "work"), trace, Budget(0.01, billing=billing))
+    assert res["status"] == "unverified" and res["reason"] == "run_budget" and len(chat.seen) == 1
+    r = [e for e in trace.events if e["event"] == "cost_resolved"]
+    assert [(e["step"], e["cost_kind"], e["cost_usd"], e["request_id"]) for e in r] == [(1, "export", 0.02, "01EXPORT")]
+    assert res["cost_usd"] == pytest.approx(0.02) and res["pending_calls"] == 0 and seen_days
+
+
+def test_unbilled_replies_do_not_end_the_run(tmp_path, monkeypatch):
+    # Fault (C slice 43 lead-s2): deepseek-v4-pro replies with usage but no buyer_cost_micro were settled at usage x
+    # CEILINGS; with the lead's, $1.59 settled against $0.029 billed ended a 240-step run at step 107 (run_budget).
+    # They never reached the usage export (balance delta = export total): resolved there, they settle at 0.
+    fx = json.loads((FIXTURES / "slice43_unbilled_calls.json").read_text())["calls"]
+    assert sum(c[3] for c in fx) > 0.5  # what the old core settled for these 6 replies
+    clock = [1_800_000_000.0]
+    monkeypatch.setattr(core.time, "time", lambda: clock[0])
+
+    def billing(day):
+        return [export_row("deepseek-v4-pro", 1000, 50, 0.0001, clock[0] - 30, rid="01OTHER")]  # an unrelated row
+
+    def ticking(messages, tools, timeout=None):
+        clock[0] += core.UNBILLED_AFTER_S  # each reply arrives one unbilled-window after the last
+        return chat(messages, tools, timeout)
+
+    chat = Scripted(*[resp(call("run_shell", {"command": "true"}, cid=f"c{s}"), micro=None, prompt=p, completion=o)
+                      for s, p, o, _ in fx],
+                    resp(call("run_shell", {"command": "echo yes > ok.txt"})), resp(call("finish", {})))
+    task = dataclasses.replace(TOUCH, max_steps=10, max_usd=0.50)
+    trace = Trace(tmp_path / "trace.jsonl")
+    res = run_task(task, ticking, core.local_shell(tmp_path / "work"), trace, Budget(0.50, billing=billing),
+                   model="deepseek-v4-pro")
+    assert res["status"] == "accepted", res
+    kinds = [e["cost_kind"] for e in trace.events if e["event"] == "cost_resolved"]
+    assert kinds == ["unbilled"] * 6 and res["cost_usd"] == pytest.approx(28e-6) and res["pending_calls"] == 0
+
+
+def test_billing_api_down_keeps_costs_pending(tmp_path, monkeypatch):
+    monkeypatch.setattr(core, "BILLING_POLL_S", 0)
+
+    def billing(day):
+        raise httpx.ConnectError("down")
+
+    chat = Scripted(resp(call("run_shell", {"command": "echo yes > ok.txt"}), micro=None), resp(call("finish", {})))
+    trace = Trace(tmp_path / "trace.jsonl")
+    res = run_task(TOUCH, chat, core.local_shell(tmp_path / "work"), trace, Budget(1.0, billing=billing))
+    assert res["status"] == "accepted" and res["pending_calls"] == 1
+    assert not [e for e in trace.events if e["event"] == "cost_resolved"]
+
+
+def test_missing_cost_without_usage_is_pending_and_matched_by_time(tmp_path, monkeypatch):
+    monkeypatch.setattr(core, "BILLING_POLL_S", 0)
     status, body, lat = resp(call("run_shell", {"command": "echo yes > ok.txt"}))
     chat = Scripted((status, {**body, "usage": None}, lat), resp(call("finish", {})))
-    res, trace = run(TOUCH, chat, tmp_path)
+    trace = Trace(tmp_path / "trace.jsonl")
+
+    def billing(day):
+        mc = [e for e in trace.events if e["event"] == "model_call"]
+        return [export_row(core.MODEL, 280, 33, 0.000012, mc[0]["ts"] + 1)] if mc else []
+
+    res = run_task(TOUCH, chat, core.local_shell(tmp_path / "work"), trace, Budget(1.0, billing=billing))
     first = [e for e in trace.events if e["event"] == "model_call"][0]
-    assert res["status"] == "accepted" and first["cost_kind"] == "bound" and first["cost_usd"] == first["bound_usd"]
+    assert res["status"] == "accepted" and first["cost_kind"] == "pending"
+    assert res["cost_usd"] == pytest.approx(0.000012 + 14e-6) and res["pending_calls"] == 0
 
 
 def test_pro_calls_without_cost_do_not_exhaust_the_task_budget(tmp_path):
@@ -161,7 +236,7 @@ def test_pro_calls_without_cost_do_not_exhaust_the_task_budget(tmp_path):
     res = run_task(task, padded, core.local_shell(tmp_path / "work"), Trace(tmp_path / "t.jsonl"), Budget(1.0),
                    model="deepseek-v4-pro")
     assert res["status"] == "accepted", res
-    assert res["cost_usd"] < 0.3  # 20 billed calls + 7 usage bounds (recorded bound sum: $0.94)
+    assert res["cost_usd"] < 0.3 and res["pending_calls"] == 7  # 20 billed calls (recorded bound sum: $0.94)
 
 
 def test_run_budget_refusal_is_unverified_and_makes_no_call(tmp_path):
@@ -1317,7 +1392,7 @@ def test_slow_provider_reply_does_not_end_the_task(tmp_path, monkeypatch):
     assert res["status"] == "accepted", res
     calls = [e for e in trace.events if e["event"] == "model_call"]
     assert [(e["step"], e["attempt"], e["status"]) for e in calls] == [(1, 1, 0), (1, 2, 200), (2, 1, 200)]
-    assert calls[0]["cost_kind"] == "bound" and res["cost_usd"] == pytest.approx(calls[0]["bound_usd"] + 28e-6)
+    assert calls[0]["cost_kind"] == "pending" and res["cost_usd"] == pytest.approx(28e-6) and res["pending_calls"] == 1
     assert res["steps"] == 2 and len(served) == 3
 
 

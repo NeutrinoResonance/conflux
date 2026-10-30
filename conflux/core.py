@@ -3,10 +3,10 @@
 DeepSeek (Surplus chat, plain OpenAI `tools`) proposes shell actions. Deterministic code
 admits each call against the budget, checks each proposal against a permissive policy,
 executes it, and owns acceptance: the task's checks are shell commands the harness runs
-itself. Every model call's cost is the provider's `buyer_cost_micro`; when absent, the
-call is settled at its reported token usage times the executor's ceilings (`cost_kind:
-"usage_bound"`), or, when usage is absent too, at its admission bound if no reply came back (`"bound"`) and at 0 if
-the provider answered with an error and no choices (`"no_usage"`). After a run, `reconcile`
+itself. Every model call's cost is the provider's `buyer_cost_micro`; when absent (or no reply came back) the cost is
+ambiguous: the call is `"pending"` at 0 until Surplus's own billing data resolves it (`Budget.resolve`: a usage-export
+row settles it, `"export"`; still absent UNBILLED_AFTER_S later, it was not billed, `"unbilled"`), never at list-price
+ceilings (MISSION a58a30e). An error reply with no choices and no usage is 0 (`"no_usage"`). After a run, `reconcile`
 matches the calls against the Surplus buyer usage export, the authoritative billed cost. Every call requests the
 model's maximum output (`max_output`); admission bounds the request's input only, never max_tokens x price
 (founder decision MISSION 90b27cd: a capped answer is a harness fault).
@@ -38,6 +38,7 @@ import argparse
 import asyncio
 import base64
 import csv
+import functools
 import io
 import itertools
 import json
@@ -74,14 +75,20 @@ CONTEXT_MARGIN = 1024
 # bytes/token on these tokenizers, so 3 errs high). A cold first call is estimated whole (PR #47 review).
 BYTES_PER_TOKEN = 3
 # Admission bounds per executor: ($/byte of request, $/output token). Tokens <= bytes, so a $/byte above the top input
-# list rate bounds input; output is 2x the top output list rate (used only to settle a reply that reports usage but no
-# cost). Admission charges the input bound alone. An executor without an entry is refused (KeyError).
+# list rate bounds input; the bound is traced with each call and never settled as its cost (MISSION a58a30e). Admission
+# looks at billed spend alone (`Budget`). An executor without an entry is refused (KeyError).
 CEILINGS = {
     "deepseek-v4.1-flash": (4e-7, 2.4e-6),  # top list $0.3/M in, $1.2/M out
     "deepseek-v4-pro": (2e-6, 7.6e-6),      # top list $1.73/M in, $3.796/M out (2026-10-27 /v1/prices, C slice 18)
 }
 CAMPAIGN_BUDGET = 50.00
 MIN_DISCOUNT = 90          # X-Min-Discount on every Surplus request (MISSION 5ee7a8b); never lowered
+# Ambiguous costs (MISSION a58a30e): a reply without `buyer_cost_micro` is looked up in the usage export (rows appear
+# 1-3 min after a call; one fetch ~2 s, so at most one per BILLING_POLL_S). Still absent UNBILLED_AFTER_S after the
+# call, it was not billed: slice 43's 20/20 such replies never reached the export and the balance moved by exactly the
+# export total (lead-s1 $0.160438, lead-s2 $0.028633).
+BILLING_POLL_S = 60
+UNBILLED_AFTER_S = 600
 # No seller at the floor / outage (`_unavailable`): retry with backoff for up to AVAILABILITY_WINDOW_S of wall clock
 # (bounded by the run deadline); Surplus seller availability fluctuates over minutes to hours (slice 39 pair 1).
 AVAILABILITY_BACKOFF_S = (30, 60, 120, 300, 600)   # then the last value repeats
@@ -157,19 +164,58 @@ class Task:
 
 
 class Budget:
-    """Run-level money cap on settled cost (MISSION 90b27cd): a call is admitted while the spend so far is below the
-    allowance; no per-call bound is reserved. Slice 39b: a 250 KB deepseek-v4-pro request's input bound (~$0.3-0.5)
-    refused calls that bill ~$0.0001 and ended a run at step 63 with $0.002 spent. One call may overshoot by its cost."""
+    """Run-level money cap on billed cost (MISSION 90b27cd, a58a30e): a call is admitted while the spend so far is below
+    the allowance; no per-call bound is reserved. Slice 39b: a 250 KB deepseek-v4-pro request's input bound (~$0.3-0.5)
+    refused calls that bill ~$0.0001 and ended a run at step 63 with $0.002 spent. One call may overshoot by its cost.
 
-    def __init__(self, allowance: float):
+    A call whose cost is ambiguous is `defer`red (counted at 0) and resolved from Surplus's billing data: `billing(day)`
+    returns that UTC day's usage-export rows (`fetch_export`). Without `billing` it stays pending."""
+
+    def __init__(self, allowance: float, billing: Callable[[str], list[dict]] | None = None):
         self.allowance = allowance
         self.committed = 0.0
+        self.billing = billing
+        self.pending: list[tuple[dict, Callable[[float, str, str | None], None]]] = []
+        self.used: set[str] = set()  # export request_ids already given to a pending call
+        self.polled = float("-inf")
 
     def admit(self, bound: float) -> bool:
+        self.resolve()
         return self.committed < self.allowance
 
     def settle(self, bound: float, cost: float) -> None:
         self.committed += cost
+
+    def defer(self, call: dict, on_settle: Callable[[float, str, str | None], None]) -> None:
+        """`call` has model, usage (or None) and ts; `on_settle(usd, kind, request_id)` runs once when resolved."""
+        self.pending.append((call, on_settle))
+
+    def resolve(self, force: bool = False, now: float | None = None) -> None:
+        """Settle pending calls from the usage export: a matched row at its `buyer_cost_usd` (`"export"`), an unmatched
+        call older than UNBILLED_AFTER_S at 0 (`"unbilled"`). The billing API being down leaves them pending."""
+        now = time.time() if now is None else now
+        if not self.pending or self.billing is None or (not force and now - self.polled < BILLING_POLL_S):
+            return
+        self.polled = now
+        days = sorted({datetime.fromtimestamp(c["ts"], timezone.utc).strftime("%Y-%m-%d") for c, _ in self.pending})
+        try:
+            rows = [r for d in days for r in self.billing(d) if r.get("request_id") not in self.used]
+        except (httpx.HTTPError, OSError, ValueError, KeyError):
+            return
+        calls = [{**c, "id": i} for i, (c, _) in enumerate(self.pending)]
+        matched = {m["id"]: m for m in reconcile(calls, rows)["matched"]}
+        keep = []
+        for i, (c, on_settle) in enumerate(self.pending):
+            if i in matched:
+                m = matched[i]
+                self.used.add(m["request_id"])
+                self.committed += m["billed_usd"]
+                on_settle(m["billed_usd"], "export", m["request_id"])
+            elif now - c["ts"] >= UNBILLED_AFTER_S:
+                on_settle(0.0, "unbilled", None)
+            else:
+                keep.append((c, on_settle))
+        self.pending = keep
 
 
 @dataclass
@@ -193,17 +239,6 @@ def billed_cost(body: object) -> float | None:
     if isinstance(v, (int, float)) and not isinstance(v, bool):
         return v / 1e6
     return None
-
-
-def usage_bound(body: object, price_ceiling: float, output_ceiling: float) -> float | None:
-    """Upper bound on a call's charge from its reported usage (ceilings exceed the top list rates per token);
-    None without token counts. Pro omitted `buyer_cost_micro` on 7/27 calls in C slice 20: settled at the request
-    bound instead, they summed to $0.94 against $0.0007 billed and ended the task at `task_budget`."""
-    usage = body.get("usage") if isinstance(body, dict) else None
-    p, c = (usage.get("prompt_tokens"), usage.get("completion_tokens")) if isinstance(usage, dict) else (None, None)
-    if not all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in (p, c)):
-        return None
-    return p * price_ceiling + c * output_ceiling
 
 
 _PS_MARK = "__CONFLUX_PIPESTATUS="
@@ -659,16 +694,25 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
     t0 = time.monotonic()
     steps = retries = 0
     cost = 0.0
-    price_ceiling, output_ceiling = CEILINGS[model]
+    price_ceiling = CEILINGS[model][0]
     trace.write("task_start", task=task.id, model=model, max_steps=task.max_steps, max_usd=task.max_usd)
 
     def end(status: str, reason: str) -> dict:
+        budget.resolve(force=True)
         findings = audit([e for e in trace.events if e.get("task") == task.id])
         trace.write("audit", task=task.id, findings=findings)
+        # Calls still pending here are resolved later (a `cost_resolved` row after task_end) or by `reconcile`.
         row = trace.write("task_end", task=task.id, status=status, reason=reason, steps=steps,
                           retries=retries, cost_usd=round(cost, 8), audit_hits=len(findings),
+                          pending_calls=sum(c.get("task") == task.id for c, _ in budget.pending),
                           latency_s=round(time.monotonic() - t0, 2))
         return {k: v for k, v in row.items() if k not in ("event", "ts")}
+
+    def resolved(step: int, attempt: int, usd: float, kind: str, request_id: str | None) -> None:
+        nonlocal cost
+        cost += usd
+        trace.write("cost_resolved", task=task.id, step=step, attempt=attempt, cost_usd=usd, cost_kind=kind,
+                    request_id=request_id)
 
     def past_deadline() -> bool:
         return deadline is not None and time.monotonic() >= deadline
@@ -697,6 +741,7 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
         bound = len(json.dumps(request).encode()) * price_ceiling
         # One retry when no HTTP response came back (transport error or timeout); each attempt is admitted and settled.
         for attempt in (1, 2):
+            budget.resolve()
             if cost >= task.max_usd:
                 return end("unverified", "task_budget")
             if not budget.admit(bound):
@@ -704,13 +749,20 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
             status, body, latency = chat(messages, TOOLS,
                                          timeout=None if deadline is None else deadline - time.monotonic())
             c, kind = billed_cost(body), "billed"
+            usage = body.get("usage") if isinstance(body, dict) else None
+            answered = isinstance(body, dict) and bool(body.get("choices"))
+            if c is None and status != 0 and not answered and not usage:
+                # An HTTP error reply without usage was not billed (slice 39: a 200 `no_healthy_sellers` settled at its
+                # $0.66 input bound).
+                c, kind = 0.0, "no_usage"
             if c is None:
-                c, kind = usage_bound(body, price_ceiling, output_ceiling), "usage_bound"
-            if c is None:
-                # An HTTP reply without usage is an error the provider did not bill (slice 39: a 200
-                # `no_healthy_sellers` settled at its $0.66 input bound); a lost reply (status 0) may still be billed.
-                answered = isinstance(body, dict) and bool(body.get("choices"))
-                c, kind = (0.0, "no_usage") if status != 0 and not answered else (bound, "bound")
+                # Ambiguous (no buyer_cost_micro, or a lost reply that may still be billed): Surplus's billing data
+                # resolves it (MISSION a58a30e). Slice 43 lead-s2: 14 such replies settled at usage x ceilings ($1.59
+                # vs $0.029 billed) ended the run at step 107.
+                c, kind = 0.0, "pending"
+                budget.defer({"task": task.id, "step": steps, "model": model, "ts": time.time(),
+                              "usage": usage if isinstance(usage, dict) else None},
+                             functools.partial(resolved, steps, attempt))
             budget.settle(bound, c)
             cost += c
             choices = body.get("choices") if isinstance(body, dict) else None
@@ -1036,7 +1088,7 @@ def main(argv: list[str] | None = None) -> int:
     if a.only:
         tasks = [t for t in tasks if t.id in a.only.split(",")]
     remaining = CAMPAIGN_BUDGET - parse_ledger_total(LEDGER.read_text())
-    budget = Budget(min(a.cap, remaining))
+    budget = Budget(min(a.cap, remaining), billing=lambda day: fetch_export(key, day))
     chat = surplus_chat(key, a.model)
     if a.lab:
         run_lab(tasks, chat, budget, a.out, a.lab, a.workdir, a.lab_hours, a.model)
