@@ -11,6 +11,28 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **C slice 47 (2026-10-30, finish-judgement demo, offline, $0.004527 metered + $0 GCE): the kimi-k3 lead's finish
+  review is not a supported stop rule (registered rule falsified: P accepted 6/12, false DONE 0/20, s1@237 0/2); glm-5.3
+  low inconclusive (7/12, 1/20). The acceptance half of the instrument is confounded; rejection holds.**
+  - 16 recorded states labelled by executed checks: 6 P (sub-goal checks passed), 6 fixture N, 4 gate N (incl. s1@237).
+    2 draws each, slice 43's review protocol.
+  - Confound (design flaw): fixture goals open "Overall task …; this one is: …" while the review asks about the
+    *whole* task. 4/6 of kimi's rejected positives say the sub-goal is done and the overall task is not. The other 2
+    (b2-inject) rightly note that the run never read its serial logs. 0/6 rejections are unfounded.
+  - c3-a2's N label is wrong: its check required a file OP-TEE lacks, fixed in slice 3. glm's DONE there is correct.
+  - Holds: 0 false DONE on the 9 validly labelled refuted states (36 reviews, both models). The replay rejects s1@237
+    4/4, while the live lead said DONE: the live false DONE came from its run-long notes and goal list. DONE on one
+    state flips between draws (b1b-31, c4-a2, c3-a1).
+  - Demo faults: a deadlock in demo code (deferred-settlement callback under a non-reentrant lock; the operator saw it
+    as a hang) and a missing `traces/` dir. Both fixed and redrawn; recorded as missing evidence, not results.
+  - Core fix (operator request; regression tests fail on the old core):
+    - a lost reply (server closed the connection, read timeout) now takes `surplus_post`'s availability backoff
+      instead of ending the task `provider_0` after one retry;
+    - the whole reply body is bounded by the request limit (a trickling server blocked past it);
+    - earlier lost attempts come back in `conflux_lost` and are deferred to the export by `run_task`.
+  - Holds did not clear: `fiat_held` went $1.87 → $4.10 with nothing of ours in flight; available + held stayed
+    $30.71, so they are reservations, not spend. The other caller's deepseek-v4-pro traffic (129 rows) was in the window.
+  - Evidence: `~/evidence/finish-judge-demo-2026-10-30/RESULTS.md` (`started.txt`, `reviews.jsonl`, `reconciled.json`).
 - **C slice 46 (2026-10-30, build-wait demo, offline, $0): a harness wait for the executor's own background jobs would
   not free material steps or wall clock; both registered rules falsified, no core change.**
   - Recorded slice-43/40 traces, pre-registered counterfactuals. W2b = a poll waits for the job's end, harness deadline.
@@ -393,15 +415,16 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. History growth (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output compaction on the
-     recorded traces (replay, n small) before any core change.
-  2. Toward the gate: move the measured lead (kimi-k3 low, async 300 s, conversation layout; slice 43 inconclusive on
-     the gate scale, supported on the exploratory T-scale) from demo code into core. Retain each run's boot logs (secure +
-     normal UART) for independent re-execution of G6/G7. Then a gate run: `task.txt` only, fresh lab; delete the c3 disk.
-  3. Finish judgement against the binding gate: 1/3 false DONE at 240 steps (slice 43, lead-s1: DONE without G3).
-     Demo on the recorded finish reviews (slices 39/40/43): does a different-family finish check (glm-5.3, or another
-     family served at the 90% floor) reading the same trace reject that DONE and accept nothing else falsely? Re-check
-     after item 2 with retained logs.
+  1. Finish judgement, made testable (slice 47): the review must rest on executed evidence, not one DONE line. Demo on
+     recorded states: the finish review names the executed checks that would prove each goal, the harness runs them as
+     runtime probes on a scratch lab, and DONE requires them to pass. Use sub-goal-scoped task text (the fixture's
+     "this one is: …" clause) for P/N labels, with c3-a2 relabelled P. Also replay s1@237 with the live lead's own
+     notes and goal list, to measure the run-long drift that produced its false DONE.
+  2. Toward the gate: move the measured lead (kimi-k3 low, async 300 s, conversation layout) into core once item 1
+     gives a stop rule. Retain each run's boot logs (secure + normal UART) for independent re-execution of G6/G7.
+     Then a gate run: `task.txt` only, fresh lab; delete the c3 disk.
+  3. History growth (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output compaction
+     on the recorded traces before any core change.
   4. Missing input (founder, non-blocking): is the Linux boot required for goal (a) when `task.txt` does not name it? The
      gate keeps G3 until it is answered. No further goal-list variant for G3 (slices 42, 44, 45 failed). Separately measured
      gap: the lead's probes never locate the machine's NetBSD project (0/43, slice 45; = slice 33).

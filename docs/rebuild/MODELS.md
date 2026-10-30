@@ -321,3 +321,13 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   wrote NetBSD as the normal world. Some lists assume NetBSD ships an in-tree optee/tee driver. In the tool loop 21/44
   kimi-k3 replies carried no `buyer_cost_micro` (unbilled; no-tools lead: 2/218). Evidence:
   `~/evidence/lead-probe-demo-2026-10-30/RESULTS.md`.
+
+## `kimi-k3` / `glm-5.3` (low) as finish reviewers on recorded states (C slice 47, offline, 2 draws per state)
+- Rejection: **0 false DONE on 9 validly labelled refuted states** (36 reviews, both models), incl. slice 43's s1@237.
+  The replay rejects s1@237 4/4, while the live kimi lead said DONE there after ~50 reviews' worth of its own notes.
+- Acceptance is untested here: the fixture goals frame a sub-goal inside an "overall task", and the review is asked about
+  the whole task. kimi rejected 6/12 sub-goal-done states. It gave reasons each time: 4 "sub-goal done, overall task
+  not", 2 "the run never read its serial logs". glm rejected 5/12. One state's verdict flips between draws.
+- glm-5.3 accepted c3-a2, where a faulty check had failed work that was actually done (the slice 3 fix).
+- Latency per conversation (init + finish review): kimi 63–335 s, glm 59–124 s. Evidence:
+  `~/evidence/finish-judge-demo-2026-10-30/RESULTS.md`.

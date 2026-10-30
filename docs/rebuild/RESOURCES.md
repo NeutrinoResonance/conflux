@@ -130,9 +130,14 @@ gcloud compute instances stop  conflux-dev-worker-1 --zone us-central1-a
   `404 minimum_discount_not_met` = no seller at the floor now. Served at the floor 2026-10-29: `deepseek-v4-pro`,
   `glm-5.3`, `glm-5.3-flash`, `kimi-k3`; refused: `kimi-k3.1-pro`, `kimi-k3-fast-api`, `glm-5.3-flashx`, `minimax-m2.7`.
   HTTP 200 with `{"error": no_healthy_sellers}` and no choices also happens (C slice 39): core waits these out (≤ 4 h).
+- **Lost replies (C slice 47):** a closed connection or a reply not complete within the request limit (whole body, not
+  per read) takes `surplus_post`'s availability backoff. Earlier lost attempts, which may be billed, come back in the
+  body's `conflux_lost` and are settled from the export. A 2026-10-30 "hang" with sockets in CLOSE-WAIT was a demo
+  deadlock: no thread was reading those idle keep-alive connections.
 - **Holds:** Surplus holds each in-flight request's worst case (max output × price) in `credit_balance_usdc`; see
   `GET /v1/payments/balance` (`fiat_available_usdc`, `fiat_held_usdc`). A ~$0.45 `fiat_held_usdc` persisted with nothing
-  in flight on 2026-10-29: reconcile spend from the usage export, not from available + held.
+  in flight on 2026-10-29, and on 2026-10-30 `fiat_held` grew $1.87 → $4.10 with no request of ours in flight while
+  available + held stayed $30.71 (C slice 47): reconcile spend from the usage export, not from available + held.
 - Output limits: `top_provider.max_completion_tokens` in `/models` (core `MAX_OUTPUT`). `reasoning_effort=low` is accepted
   by glm-5.3, glm-5.3-flash and kimi-k3; `low` cut GLM reviews from 17–20 min to ~2 min. Since 2026-10-29 08:49Z glm-5.3
   rejects `medium` with HTTP 400 `request_rejected` ("must be one of: 'low', 'high', 'max'"; C slice 40).
