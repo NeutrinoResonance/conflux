@@ -1342,6 +1342,99 @@ def test_a_retry_never_outlasts_the_availability_window(monkeypatch):
     assert status == 404 and timeouts[0] == core.CHAT_TIMEOUT and len(timeouts) == 2 and timeouts[1] <= 45
 
 
+def test_a_lost_reply_takes_the_backoff_path_and_reports_the_lost_attempts(monkeypatch):
+    # Operator report (C slice 47): a request whose connection the server closed, or that ran past its time limit,
+    # returned status 0 at once; run_task retried once and ended the task `provider_0`. It now waits out the
+    # availability backoff like an outage, and the lost attempts (which may be billed) come back in `conflux_lost`.
+    script = [httpx.RemoteProtocolError("Server disconnected without sending a response."),
+              httpx.ReadTimeout("timed out"), 200]
+
+    def handler(request):
+        st = script.pop(0)
+        if isinstance(st, Exception):
+            raise st
+        return httpx.Response(200, json={"id": "g", "choices": [{"message": {"role": "assistant", "content": ""}}],
+                                         "usage": {"prompt_tokens": 1, "completion_tokens": 1}})
+    clock = FakeClock()
+    monkeypatch.setattr(core, "time", clock)
+    chat = core.surplus_chat("k", "deepseek-v4-pro", httpx.Client(transport=httpx.MockTransport(handler)))
+    status, body, _ = chat([{"role": "user", "content": "hi"}], core.TOOLS)
+    assert status == 200 and clock.slept == [30, 60] and len(body["conflux_lost"]) == 2
+    # within a caller deadline shorter than the backoff the lost reply is returned at once, not slept through;
+    # it is the caller's to settle, so it is not also listed as lost
+    script[:] = [httpx.RemoteProtocolError("closed"), 200]
+    clock.slept.clear()
+    status, body, _ = chat([{"role": "user", "content": "hi"}], core.TOOLS, timeout=20)
+    assert status == 0 and body == {"error": "RemoteProtocolError"} and clock.slept == [] and script == [200]
+
+
+def _serve_once(behaviour):
+    """A one-connection local HTTP server: `behaviour(conn)` after the request has been read."""
+    import socket
+    import threading
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(4)
+
+    def loop():
+        while True:
+            try:
+                conn, _ = srv.accept()
+            except OSError:
+                return
+            conn.recv(65536)
+            behaviour(conn)
+    threading.Thread(target=loop, daemon=True).start()
+    return srv, f"http://127.0.0.1:{srv.getsockname()[1]}"
+
+
+@pytest.mark.parametrize("kind", ["closed", "trickle"])
+def test_a_request_never_blocks_past_its_limit_on_a_real_socket(monkeypatch, kind):
+    # A server that closes the connection without a reply, or that keeps sending a few bytes so that no single read
+    # times out: either fails within the request's limit (old core: `trickle` blocked for as long as the bytes came).
+    import time as _t
+
+    def closed(conn):
+        conn.close()
+
+    def trickle(conn):
+        conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 1000000\r\n\r\n")
+        try:
+            for _ in range(60):
+                conn.sendall(b" ")
+                _t.sleep(0.25)
+        except OSError:
+            pass
+        conn.close()
+    srv, url = _serve_once({"closed": closed, "trickle": trickle}[kind])
+    monkeypatch.setattr(core, "SURPLUS", url)
+    monkeypatch.setattr(core, "AVAILABILITY_BACKOFF_S", (0.5,))
+    t0 = _t.monotonic()
+    try:
+        status, body, _ = core.surplus_post(httpx.Client(), "k", {"model": "m"}, timeout=2.5)
+    finally:
+        srv.close()
+    took = _t.monotonic() - t0
+    assert status == 0 and took < 5, (body, took)
+    assert body["error"] in ("RemoteProtocolError", "ReadTimeout", "ReadError")
+
+
+def test_lost_attempts_inside_the_backoff_are_settled_from_the_export(tmp_path, monkeypatch):
+    # A lost attempt before the returned reply may have been billed: run_task defers it like a lost reply of its own.
+    monkeypatch.setattr(core, "BILLING_POLL_S", 0)
+    clock = [1_800_000_000.0]
+    monkeypatch.setattr(core.time, "time", lambda: clock[0])
+    st, body, lat = resp(call("run_shell", {"command": "echo yes > ok.txt"}))
+    chat = Scripted((st, {**body, "conflux_lost": [clock[0] - 40]}, lat), resp(call("finish", {}), rid="gen-2"))
+    trace = Trace(tmp_path / "trace.jsonl")
+    res = run_task(TOUCH, chat, core.local_shell(tmp_path / "work"), trace,
+                   Budget(0.5, billing=lambda day: [export_row(core.MODEL, 280, 0, 0.003, clock[0] - 39)]))
+    assert res["status"] == "accepted"
+    r = [e for e in trace.events if e["event"] == "cost_resolved"]
+    assert [(e["step"], e["cost_kind"], e["cost_usd"]) for e in r] == [(1, "export", 0.003)]
+    assert res["cost_usd"] == pytest.approx(0.003 + 28e-6)
+
+
 def test_a_provider_outage_never_ends_the_task_as_the_executors_doing(tmp_path, monkeypatch):
     # Slice 39 pair 1: HTTP 200 {"error": no_healthy_sellers} with no choices/usage ended both runs `unverified
     # provider_200` (lead at step 40, control at 107) and was settled at its input bound ($0.24, $0.66). Outages
@@ -1447,18 +1540,20 @@ def _slow_once_surplus():
 
 def test_slow_provider_reply_does_not_end_the_task(tmp_path, monkeypatch):
     # Fault: a reply slower than CHAT_TIMEOUT came back as status 0 and ended the task `unverified provider_0`
-    # (headroom demo: 10/18 flash calls > 180 s). One transport failure is now retried, each attempt settled.
+    # (headroom demo: 10/18 flash calls > 180 s). Since C slice 47 surplus_post retries the lost reply on its
+    # availability backoff; the lost attempt (maybe billed) is deferred to the export, so it stays pending here.
     srv, served = _slow_once_surplus()
     monkeypatch.setattr(core, "SURPLUS", f"http://127.0.0.1:{srv.server_address[1]}")
     monkeypatch.setattr(core, "CHAT_TIMEOUT", 0.3)
+    monkeypatch.setattr(core, "AVAILABILITY_BACKOFF_S", (0.1,))
     try:
         res, trace = run(TOUCH, core.surplus_chat("k"), tmp_path)
     finally:
         srv.shutdown()
     assert res["status"] == "accepted", res
     calls = [e for e in trace.events if e["event"] == "model_call"]
-    assert [(e["step"], e["attempt"], e["status"]) for e in calls] == [(1, 1, 0), (1, 2, 200), (2, 1, 200)]
-    assert calls[0]["cost_kind"] == "pending" and res["cost_usd"] == pytest.approx(28e-6) and res["pending_calls"] == 1
+    assert [(e["step"], e["attempt"], e["status"]) for e in calls] == [(1, 1, 200), (2, 1, 200)]
+    assert res["cost_usd"] == pytest.approx(28e-6) and res["pending_calls"] == 1
     assert res["steps"] == 2 and len(served) == 3
 
 

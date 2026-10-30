@@ -770,6 +770,10 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
                                          timeout=None if deadline is None else deadline - time.monotonic())
             c, kind = billed_cost(body), "billed"
             usage = body.get("usage") if isinstance(body, dict) else None
+            for ts in (body.get("conflux_lost") or []) if isinstance(body, dict) else []:
+                # an earlier lost attempt inside surplus_post's retries may still be billed: the export settles it
+                budget.defer({"task": task.id, "step": steps, "model": model, "ts": ts, "usage": None},
+                             functools.partial(resolved, steps, attempt))
             answered = isinstance(body, dict) and bool(body.get("choices"))
             if c is None and status != 0 and not answered and not usage:
                 # An HTTP error reply without usage was not billed (slice 39: a 200 `no_healthy_sellers` settled at its
@@ -877,8 +881,13 @@ def surplus_post(http: httpx.Client, key: str, payload: dict, timeout: float | N
                  timeout_cap: float | None = None) -> tuple[int, object, float]:
     """One Surplus chat completion bought only at >= MIN_DISCOUNT % off (MISSION 5ee7a8b). While no seller can serve
     it (`_unavailable`: below the floor, or an outage), wait AVAILABILITY_BACKOFF_S and retry, for up to
-    AVAILABILITY_WINDOW_S and within `timeout`; then return the last reply (never a lower floor)."""
+    AVAILABILITY_WINDOW_S and within `timeout`; then return the last reply (never a lower floor).
+
+    A lost reply (the server closed the connection, a transport error, or no complete reply within the request's
+    time limit, counted over the whole body, not per read) takes the same backoff path. Such a request may still be
+    billed: the wall-clock times of the lost attempts before the returned one are in the body's `conflux_lost`."""
     t0 = time.monotonic()
+    lost: list[float] = []
     timeout_cap = CHAT_TIMEOUT if timeout_cap is None else timeout_cap
     for attempt in itertools.count():
         elapsed = time.monotonic() - t0
@@ -886,25 +895,40 @@ def surplus_post(http: httpx.Client, key: str, payload: dict, timeout: float | N
         if attempt:  # a retry also ends with the availability window (PR #47 review)
             limit = min(limit, AVAILABILITY_WINDOW_S - elapsed)
         if limit <= 0:
-            return (resp.status_code, body, elapsed) if attempt else (0, {"error": "TimeoutBeforeSend"}, elapsed)
+            return _with_lost(status, body, lost[:-1] if status == 0 else lost, elapsed) if attempt else (
+                0, {"error": "TimeoutBeforeSend"}, elapsed)
+        sent = time.monotonic()
         try:
-            resp = http.post(f"{SURPLUS}/chat/completions", timeout=max(0.1, limit),
-                             # Surplus's compressed bodies break httpx decoding.
+            # Surplus's compressed bodies break httpx decoding.
+            with http.stream("POST", f"{SURPLUS}/chat/completions", timeout=max(0.1, limit), json=payload,
                              headers={"Authorization": f"Bearer {key}", "Accept-Encoding": "identity",
-                                      "X-Min-Discount": str(MIN_DISCOUNT)},
-                             json=payload)
+                                      "X-Min-Discount": str(MIN_DISCOUNT)}) as resp:
+                raw = b""
+                for chunk in resp.iter_bytes():  # each read is bounded by `limit`; the whole body is bounded here
+                    raw += chunk
+                    if time.monotonic() - sent > limit:
+                        raise httpx.ReadTimeout("reply not complete within the request's time limit")
+            status = resp.status_code
+            try:
+                body = json.loads(raw)
+            except ValueError:
+                body = {"error": raw.decode(errors="replace")[:500]}
         except httpx.HTTPError as e:
-            return 0, {"error": type(e).__name__}, time.monotonic() - t0
-        try:
-            body = resp.json()
-        except ValueError:
-            body = {"error": resp.text[:500]}
+            status, body = 0, {"error": type(e).__name__}
+            lost.append(time.time())
         wait = AVAILABILITY_BACKOFF_S[min(attempt, len(AVAILABILITY_BACKOFF_S) - 1)]
         elapsed = time.monotonic() - t0  # after the response: a slow refusal uses up time too (PR #47 review)
-        if not _unavailable(resp.status_code, body) or elapsed + wait > AVAILABILITY_WINDOW_S or (
+        if not (status == 0 or _unavailable(status, body)) or elapsed + wait > AVAILABILITY_WINDOW_S or (
                 timeout is not None and timeout - elapsed <= wait):
-            return resp.status_code, body, time.monotonic() - t0
+            # a returned lost reply is the caller's to settle; only the earlier lost attempts are reported
+            return _with_lost(status, body, lost[:-1] if status == 0 else lost, time.monotonic() - t0)
         time.sleep(wait)
+
+
+def _with_lost(status: int, body: object, lost: list[float], elapsed: float) -> tuple[int, object, float]:
+    if lost and isinstance(body, dict):
+        body = {**body, "conflux_lost": lost}
+    return status, body, elapsed
 
 
 def surplus_chat(key: str, model: str = MODEL, http: httpx.Client | None = None) -> Chat:
