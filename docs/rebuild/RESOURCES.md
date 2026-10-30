@@ -93,9 +93,12 @@ gcloud compute instances stop  conflux-dev-worker-1 --zone us-central1-a
   per-option `probabilities` and token usage, but no billed cost.
 - **Surplus chat returns no logprobs.** `deepseek-v4-pro` rejects the parameter with 400. Flash and the other models accept it and return
   nothing, even though the catalogue lists `logprobs`.
-- Surplus chat usage reports the charge as `buyer_cost_micro` (micro-USD). Some replies omit it (C slice 36: 7/40
-  `kimi-k3.1-pro`/`glm-5.3` replies), and those requests are also missing from the usage export: use the `/v1/buyer/me`
-  balance delta as the bound.
+- Surplus chat usage reports the charge as `buyer_cost_micro` (micro-USD). Some replies omit it (C slice 36: 7/40; slice 43:
+  25/2,625), and those requests are missing from the usage export and move no balance: they were not billed. Core keeps
+  them `pending` and settles them from export rows (`core.Budget.resolve`, MISSION a58a30e); export rows appear 1-3 min after
+  a call and their `created_at` is within 3 s of the reply.
+- The Surplus key is shared with an unidentified caller (2026-10-29/30: kimi-k3.1-pro at 60% discount, 1,076 deepseek-v4-pro
+  rows; not from this controller). Attribute spend by matching export rows to a run's own calls, never by window totals.
 - `kimi-k3.1-pro` and `glm-5.3` do native tool calls on Surplus chat (C slice 36). Prompt caching makes K3.1-pro
   ≈ $0.004/step at 40k tokens. Jev decisions carry no cost field.
 - **Accounting source (authoritative):** the Surplus buyer API on `https://api.surplusintelligence.ai`, with the same key.
