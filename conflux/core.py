@@ -169,14 +169,16 @@ class Budget:
     refused calls that bill ~$0.0001 and ended a run at step 63 with $0.002 spent. One call may overshoot by its cost.
 
     A call whose cost is ambiguous is `defer`red (counted at 0) and resolved from Surplus's billing data: `billing(day)`
-    returns that UTC day's usage-export rows (`fetch_export`). Without `billing` it stays pending."""
+    returns that UTC day's usage-export rows (`fetch_export`). Without `billing` it stays pending. Calls billed in their
+    reply are `observe`d too, so their export rows are reserved and never charged again to a pending call."""
 
     def __init__(self, allowance: float, billing: Callable[[str], list[dict]] | None = None):
         self.allowance = allowance
         self.committed = 0.0
         self.billing = billing
         self.pending: list[tuple[dict, Callable[[float, str, str | None], None]]] = []
-        self.used: set[str] = set()  # export request_ids already given to a pending call
+        self.billed: list[dict] = []  # recent calls billed in their reply, until their export row is reserved
+        self.used: set[str] = set()  # export request_ids already matched to a call
         self.polled = float("-inf")
 
     def admit(self, bound: float) -> bool:
@@ -190,6 +192,10 @@ class Budget:
         """`call` has model, usage (or None) and ts; `on_settle(usd, kind, request_id)` runs once when resolved."""
         self.pending.append((call, on_settle))
 
+    def observe(self, call: dict) -> None:
+        """A call billed in its reply (model, usage, ts): its export row is reserved when pending calls are matched."""
+        self.billed.append(call)
+
     def resolve(self, force: bool = False, now: float | None = None) -> None:
         """Settle pending calls from the usage export: a matched row at its `buyer_cost_usd` (`"export"`), an unmatched
         call older than UNBILLED_AFTER_S at 0 (`"unbilled"`). The billing API being down leaves them pending."""
@@ -197,18 +203,26 @@ class Budget:
         if not self.pending or self.billing is None or (not force and now - self.polled < BILLING_POLL_S):
             return
         self.polled = now
-        days = sorted({datetime.fromtimestamp(c["ts"], timezone.utc).strftime("%Y-%m-%d") for c, _ in self.pending})
+        # A billed call matters only while a pending call could share its match window.
+        self.billed = [c for c in self.billed if c["ts"] >= now - UNBILLED_AFTER_S - 2 * MATCH_WINDOW_S]
+        # Every UTC day the match window of a pending call touches (an export row may fall just past midnight).
+        days = sorted({datetime.fromtimestamp(c["ts"] + d, timezone.utc).strftime("%Y-%m-%d")
+                       for c, _ in self.pending for d in (-MATCH_WINDOW_S, 0, MATCH_WINDOW_S)})
         try:
-            rows = [r for d in days for r in self.billing(d) if r.get("request_id") not in self.used]
+            rows = {r["request_id"]: r for d in days for r in self.billing(d)}
         except (httpx.HTTPError, OSError, ValueError, KeyError):
             return
-        calls = [{**c, "id": i} for i, (c, _) in enumerate(self.pending)]
+        rows = [r for rid, r in rows.items() if rid not in self.used]
+        # Billed calls are matched alongside, so a lost reply's time match cannot take a billed retry's row.
+        calls = ([{**c, "id": ("p", i)} for i, (c, _) in enumerate(self.pending)]
+                 + [{**c, "id": ("b", i)} for i, c in enumerate(self.billed)])
         matched = {m["id"]: m for m in reconcile(calls, rows)["matched"]}
+        self.used |= {m["request_id"] for m in matched.values()}
+        self.billed = [c for i, c in enumerate(self.billed) if ("b", i) not in matched]
         keep = []
         for i, (c, on_settle) in enumerate(self.pending):
-            if i in matched:
-                m = matched[i]
-                self.used.add(m["request_id"])
+            if ("p", i) in matched:
+                m = matched[("p", i)]
                 self.committed += m["billed_usd"]
                 on_settle(m["billed_usd"], "export", m["request_id"])
             elif now - c["ts"] >= UNBILLED_AFTER_S:
@@ -697,6 +711,8 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
     price_ceiling = CEILINGS[model][0]
     trace.write("task_start", task=task.id, model=model, max_steps=task.max_steps, max_usd=task.max_usd)
 
+    result: dict = {}  # returned by `end`; a cost resolved later updates it in place
+
     def end(status: str, reason: str) -> dict:
         budget.resolve(force=True)
         findings = audit([e for e in trace.events if e.get("task") == task.id])
@@ -706,13 +722,17 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
                           retries=retries, cost_usd=round(cost, 8), audit_hits=len(findings),
                           pending_calls=sum(c.get("task") == task.id for c, _ in budget.pending),
                           latency_s=round(time.monotonic() - t0, 2))
-        return {k: v for k, v in row.items() if k not in ("event", "ts")}
+        result.update({k: v for k, v in row.items() if k not in ("event", "ts")})
+        return result
 
     def resolved(step: int, attempt: int, usd: float, kind: str, request_id: str | None) -> None:
         nonlocal cost
         cost += usd
         trace.write("cost_resolved", task=task.id, step=step, attempt=attempt, cost_usd=usd, cost_kind=kind,
                     request_id=request_id)
+        if result:  # settled after task_end: refresh the returned result (run summaries are summed from it)
+            result["cost_usd"] = round(result["cost_usd"] + usd, 8)
+            result["pending_calls"] -= 1
 
     def past_deadline() -> bool:
         return deadline is not None and time.monotonic() >= deadline
@@ -763,6 +783,8 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
                 budget.defer({"task": task.id, "step": steps, "model": model, "ts": time.time(),
                               "usage": usage if isinstance(usage, dict) else None},
                              functools.partial(resolved, steps, attempt))
+            elif kind == "billed" and isinstance(usage, dict):
+                budget.observe({"task": task.id, "step": steps, "model": model, "ts": time.time(), "usage": usage})
             budget.settle(bound, c)
             cost += c
             choices = body.get("choices") if isinstance(body, dict) else None
@@ -1037,6 +1059,7 @@ def run_lab(tasks: list[Task], chat: Chat, budget: Budget, out: Path, name: str,
                                        timeout=600).returncode
         except (OSError, subprocess.SubprocessError) as e:
             stop_exit = repr(e)
+        budget.resolve(force=True)  # late settlements refresh the task results summed below
         lab.update(stopped=_utc(), stop_exit=stop_exit,
                    wall_s=round(time.monotonic() - (deadline - hours * 3600), 1),
                    keep_disk=bool(results) and results[0]["status"] == "accepted")
@@ -1102,6 +1125,7 @@ def main(argv: list[str] | None = None) -> int:
             res = run_task(task, chat, local_shell(d / "work"), Trace(d / "trace.jsonl"), budget, a.model)
             results.append(res)
             print(json.dumps(res))
+    budget.resolve(force=True)  # late settlements refresh the task results summed below
     summary = {"model": a.model, "allowance_usd": budget.allowance, "committed_usd": budget.committed,
                "runs": results,
                "accepted": sum(r["status"] == "accepted" for r in results),

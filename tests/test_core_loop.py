@@ -187,6 +187,72 @@ def test_unbilled_replies_do_not_end_the_run(tmp_path, monkeypatch):
     assert kinds == ["unbilled"] * 6 and res["cost_usd"] == pytest.approx(28e-6) and res["pending_calls"] == 0
 
 
+def test_a_lost_reply_does_not_take_its_billed_retrys_export_row(tmp_path, monkeypatch):
+    # PR #51 review: a pending lost reply is matched by time alone; the retry billed in its reply must keep its own row.
+    monkeypatch.setattr(core, "BILLING_POLL_S", 0)
+    clock = [1_800_000_000.0]
+    monkeypatch.setattr(core.time, "time", lambda: clock[0])
+    trace = Trace(tmp_path / "trace.jsonl")
+
+    def billing(day):  # only the retry was billed; its row is 1 s after the lost attempt
+        mc = [e for e in trace.events if e["event"] == "model_call"]
+        return [export_row(core.MODEL, 300, 40, 0.02, mc[0]["ts"] + 1)] if len(mc) > 1 else []
+
+    def ticking(messages, tools, timeout=None):
+        clock[0] += 1
+        return chat(messages, tools, timeout)
+
+    chat = Scripted((0, {"error": "ReadTimeout"}, 0.1),
+                    resp(call("run_shell", {"command": "echo yes > ok.txt"}), micro=20000), resp(call("finish", {})))
+    budget = Budget(0.03, billing=billing)
+    res = run_task(TOUCH, ticking, core.local_shell(tmp_path / "work"), trace, budget)
+    assert res["status"] == "accepted", res  # the old matcher charged the retry's $0.02 row twice: run_budget
+    budget.resolve(force=True, now=clock[0] + core.UNBILLED_AFTER_S)
+    r = [(e["step"], e["attempt"], e["cost_kind"], e["cost_usd"]) for e in trace.events if e["event"] == "cost_resolved"]
+    assert r == [(1, 1, "unbilled", 0.0)] and budget.committed == pytest.approx(0.02 + 14e-6)
+    assert res["pending_calls"] == 0 and res["cost_usd"] == pytest.approx(0.02 + 14e-6)
+
+
+def test_a_cost_resolved_after_its_task_ended_refreshes_the_result_and_summary(tmp_path, devbox_lab, monkeypatch):
+    # PR #51 review: task 1's pending call settles during task 2; run_lab's summary must sum the refreshed cost.
+    monkeypatch.setattr(core, "BILLING_POLL_S", 0)
+    rows = []
+    budget = Budget(1.0, billing=lambda day: list(rows))
+    second = dataclasses.replace(TOUCH, id="touch2")
+
+    class Chat(Scripted):
+        def __call__(self, messages, tools, timeout=None):
+            if len(self.seen) == 2 and not rows:  # task 1 has ended with its first call pending: Surplus bills it now
+                rows.append(export_row(core.MODEL, 300, 40, 0.003, budget.pending[0][0]["ts"]))
+            return super().__call__(messages, tools, timeout)
+
+    chat = Chat(resp(call("run_shell", {"command": "echo yes > ok.txt"}), micro=None), resp(call("finish", {})),
+                resp(call("finish", {})))
+    summary = _run_lab(tmp_path, chat, tasks=(TOUCH, second), budget=budget)
+    first, nxt = summary["runs"]
+    assert first["status"] == nxt["status"] == "accepted"
+    assert first["cost_usd"] == pytest.approx(0.003 + 14e-6) and first["pending_calls"] == 0
+    assert summary["cost_usd"] == pytest.approx(0.003 + 28e-6) and budget.committed == pytest.approx(0.003 + 28e-6)
+    assert json.loads((tmp_path / "out/summary.json").read_text())["cost_usd"] == pytest.approx(summary["cost_usd"])
+
+
+def test_resolve_fetches_the_next_utc_day_for_a_call_just_before_midnight(monkeypatch):
+    # PR #51 review: a 23:59:30Z reply's export row can be stamped 00:00:10Z the next day.
+    midnight = core.datetime(2026, 10, 31, tzinfo=core.timezone.utc).timestamp()
+    asked, settled = [], []
+
+    def billing(day):
+        asked.append(day)
+        return [export_row(core.MODEL, 300, 40, 0.004, midnight + 10)] if day == "2026-10-31" else []
+
+    b = Budget(1.0, billing=billing)
+    b.defer({"task": "t", "step": 1, "model": core.MODEL, "ts": midnight - 30,
+             "usage": {"prompt_tokens": 300, "completion_tokens": 40}}, lambda *a: settled.append(a))
+    b.resolve(force=True, now=midnight + core.UNBILLED_AFTER_S)
+    assert "2026-10-31" in asked and settled == [(0.004, "export", "01EXPORT")]
+    assert b.committed == pytest.approx(0.004)
+
+
 def test_billing_api_down_keeps_costs_pending(tmp_path, monkeypatch):
     monkeypatch.setattr(core, "BILLING_POLL_S", 0)
 
@@ -463,10 +529,10 @@ def no_sudo_setup(monkeypatch):
     monkeypatch.setattr(core, "EGRESS_CHECK", "true")
 
 
-def _run_lab(tmp_path, chat, hours=1.0, tasks=(TOUCH,)):
+def _run_lab(tmp_path, chat, hours=1.0, tasks=(TOUCH,), budget=None):
     """The tunnel is a long sleep that records its pid, so tests can check it is gone afterwards."""
     pidfile = tmp_path / "tunnel.pid"
-    return core.run_lab(list(tasks), chat, Budget(1.0), tmp_path / "out", "c2", str(tmp_path / "w"), hours,
+    return core.run_lab(list(tasks), chat, budget or Budget(1.0), tmp_path / "out", "c2", str(tmp_path / "w"), hours,
                         remote=core.local_remote,
                         tunnel=lambda port: ["bash", "-c", f"echo $$ > {pidfile}; exec sleep 1000"])
 
