@@ -11,6 +11,23 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **C slice 43 (2026-10-29/30, step-cap demo on full `task.txt`, $0.378958 metered (export) + ≤ $8.07 GCE): a kimi-k3
+  low lead at 240 steps (was 120) scores 6, 4, 4 of G1–G7 (median 4): registered rule inconclusive (≥ 5 / ≤ 3).**
+  - Every counted run gained after step 120 (+2, +2, +3, paired): G5 3/3, G6 2/3, and the **first G7**: lead-s1's driver
+    attached and its CALLS_UID SMC got OP-TEE's API UID words back. G3 (Linux) still 0/3, G1 1/3: goal (a) stays lost.
+  - First live finish reviews: 18/19 finish proposals answered not DONE; 1 DONE (lead-s1) is a **false acceptance under
+    the gate** (no Linux; it accepted a failed client demo and a wrong GET_OS_REVISION). Reviews median 178–248 s, 1/154 > 10 min.
+  - Offline: the lead named 4/7 of slice 40's masked failures and made "exit 0 ≠ success" a standing rule.
+  - **Harness fault, fixed in core (MISSION a58a30e):** lead-s2 ended `run_budget` at step 107 on $1.59 of usage × ceiling
+    settlements vs $0.029 billed (14 replies without `buyer_cost_micro`; 25/25 such replies never reach the export, the
+    balance moves by exactly the export total). Core now leaves such costs `pending` and settles them from export rows
+    (`Budget.resolve`; `"unbilled"` at 0 after 10 min); regression test replays lead-s2's 6 pro replies. lead-s2 not counted,
+    lead-s2b replaced it; lead-s3 ran on a frozen checkout of the registered core.
+  - **Floor audit:** `scripts/provider_probe.py` sent paid requests without `X-Min-Discount` (fixed, tested); core always
+    sends it. The 60%-discount kimi-k3.1-pro rows (10-29) and 1,076 deepseek-v4-pro rows (10-30) come from an unidentified
+    caller on the shared key, not from this controller (ledger row "not Conflux"). Missing input (founder): who else holds
+    `surplus.key`; a dedicated key or a key-level floor in the Surplus dashboard closes it.
+  - Evidence: `~/evidence/step-cap-demo-2026-10-29/RESULTS.md` (`grade-lead-*.json`, `started.txt`).
 - **C slice 42 (2026-10-29, goal-list review demo, offline, $0.001207 metered + $0 GCE): a different-family review of
   the kimi-k3 lead's initial goal list does not restore goal (a)'s Linux proof; registered rule falsified.**
   - Inputs: slice 40's 3 recorded init replies (goal (a) read as "QEMU + OP-TEE with NetBSD as normal world"), generic
@@ -322,9 +339,10 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. **Change one more lead factor (68ad22c): the step cap, kimi-k3 low lead unchanged.** Lead runs hit 120 steps
-     while progressing (G5 2/3, G6 1/3); controls finished by step 93, so slice 39's controls stay valid. Slice 42 ruled
-     out a goal-list reviewer for goal (a)'s loss. Secondary: does any lead review name the executor's masked failures
-     (slice 41 D1 true hits)? Harness: `~/evidence/lead-factor-demo-2026-10-29/demo.py` (`MAX_STEPS`). Surplus credit:
-     $7.55 available.
-  2. Completion-gate run: `run12/task.txt` only, unattended from the clean snapshot on a fresh lab; then delete the c3 disk.
+  1. **Goal (a) is the binding gap (G3 0/8 lead runs, slices 39–43).** Slice 42 ruled out a different-family review of the
+     lead's goal list. Next candidate, demo first on recorded traces: give the lead's goal-list step the machine's own
+     evidence before it fixes goals (one generic runtime probe pass), or a second lead family drafting the goal list
+     independently, and measure the Linux/xtest goal on slices 40/43's init inputs. Run lead runs at 240 steps from now on,
+     on the core with billed-cost settlement (slice 43 PR).
+  2. Finish judgement: 1/3 false DONE at 240 steps. Measure on the recorded finish reviews before changing the lead.
+  3. Completion-gate run: `run12/task.txt` only, unattended from the clean snapshot on a fresh lab; then delete the c3 disk.

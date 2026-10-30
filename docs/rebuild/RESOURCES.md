@@ -93,9 +93,12 @@ gcloud compute instances stop  conflux-dev-worker-1 --zone us-central1-a
   per-option `probabilities` and token usage, but no billed cost.
 - **Surplus chat returns no logprobs.** `deepseek-v4-pro` rejects the parameter with 400. Flash and the other models accept it and return
   nothing, even though the catalogue lists `logprobs`.
-- Surplus chat usage reports the charge as `buyer_cost_micro` (micro-USD). Some replies omit it (C slice 36: 7/40
-  `kimi-k3.1-pro`/`glm-5.3` replies), and those requests are also missing from the usage export: use the `/v1/buyer/me`
-  balance delta as the bound.
+- Surplus chat usage reports the charge as `buyer_cost_micro` (micro-USD). Some replies omit it (C slice 36: 7/40; slice 43:
+  25/2,625), and those requests are missing from the usage export and move no balance: they were not billed. Core keeps
+  them `pending` and settles them from export rows (`core.Budget.resolve`, MISSION a58a30e); export rows appear 1-3 min after
+  a call and their `created_at` is within 3 s of the reply.
+- The Surplus key is shared with an unidentified caller (2026-10-29/30: kimi-k3.1-pro at 60% discount, 1,076 deepseek-v4-pro
+  rows; not from this controller). Attribute spend by matching export rows to a run's own calls, never by window totals.
 - `kimi-k3.1-pro` and `glm-5.3` do native tool calls on Surplus chat (C slice 36). Prompt caching makes K3.1-pro
   ≈ $0.004/step at 40k tokens. Jev decisions carry no cost field.
 - **Accounting source (authoritative):** the Surplus buyer API on `https://api.surplusintelligence.ai`, with the same key.
@@ -120,7 +123,9 @@ gcloud compute instances stop  conflux-dev-worker-1 --zone us-central1-a
   `deepseek-v4-pro` offers on 2026-10-27: $0.875–1.73/M in, $1.75–3.80/M out (billed ≈ $0.000046/call in C slice 18).
   Admission bounds are per executor in `core.CEILINGS` (v4.1-flash 4e-7 $/byte, 2.4e-6 $/out-token; pro 2e-6, 7.6e-6);
   a model without an entry is refused before any call. Pro's per-call bound is ≥ $0.062, so pro tasks need `max_usd` ≫ 0.15.
-  A reply without `buyer_cost_micro` (pro: 7/27 in C slice 20) is settled at its usage × ceilings (`usage_bound`).
+  The bound is traced, never settled as a cost. A reply without `buyer_cost_micro` (pro: 7/27 in C slice 20), or a lost
+  reply, is `pending` at 0 until the usage export settles it (`export`, its `buyer_cost_usd`) or it is still absent 10 min
+  later (`unbilled`, 0); rows already matched to calls billed in their reply are reserved (MISSION a58a30e).
 - **Discount floor (MISSION 5ee7a8b):** every Surplus chat request sends `X-Min-Discount: 90` (`core.surplus_post`).
   `404 minimum_discount_not_met` = no seller at the floor now. Served at the floor 2026-10-29: `deepseek-v4-pro`,
   `glm-5.3`, `glm-5.3-flash`, `kimi-k3`; refused: `kimi-k3.1-pro`, `kimi-k3-fast-api`, `glm-5.3-flashx`, `minimax-m2.7`.

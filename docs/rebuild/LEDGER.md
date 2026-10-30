@@ -59,6 +59,8 @@ USD comes from provider responses or documented prices — never estimated silen
 | 2026-10-28/29 | Surplus chat | `deepseek-v4-pro` 864, `glm-5.3` 556, `kimi-k3.1-pro` 11, `glm-5.3-flash` 28, `kimi-k3` 15, 3 others 3 | 54439659 | 2510622 | 0.377811 | — | C slice 39 other-model-leads demo: preflights + 11 live lab runs (export 2026-10-28T22:40Z–2026-10-29T08:10Z, 1,477 rows, token totals from its input_tokens/output_tokens columns, 0 rows missing; available-balance delta $0.3814; kimi-k3.1-pro $0.1912 was billed before the 90% floor); `~/evidence/other-model-leads-demo-2026-10-28/reconciled.json` |
 | 2026-10-29 | Surplus chat | `kimi-k3` 637, `deepseek-v4-pro` 359, `glm-5.3` 40 | 53475464 | 964562 | 0.198894 | — | C slice 40 lead-factor demo: 3 live kimi-k3-lead runs (lead 606 + executor 359 requests) + finish replay (kimi-k3 31, glm-5.3 40); 4 glm-5.3 `medium` 400s unbilled (absent from the export); export 2026-10-29T08:49Z–16:28Z excluding 3 `kimi-k3.1-pro` rows ($0.015657, 15:12–16:02Z) that match no slice-40 call (another consumer of the key); `~/evidence/lead-factor-demo-2026-10-29/reconciled.json` |
 | 2026-10-29 | Surplus chat | `kimi-k3` 21, `glm-5.3` 15 | 25225 | 18210 | 0.001207 | — | C slice 42 goal-list review demo (offline: 6 kimi-k3 init draws + 15 glm-5.3 low and 15 kimi-k3 low reviews of slice 40's 3 init goal lists); 36/36 export-matched, = balance delta 7.548428 → 7.547221 |
+| 2026-10-29/30 | Surplus chat | `kimi-k3` 1,606, `deepseek-v4-pro` 994 | 176885432 | 2249586 | 0.378958 | — | C slice 43 step-cap demo: 4 live kimi-k3-lead runs at 240 steps (lead-s1, -s2 cut by the ceiling-settlement fault, -s2b, -s3); export rows matched by tokens per run (`~/evidence/step-cap-demo-2026-10-29/export-s*.csv`, `cost.json`), 25 replies without `buyer_cost_micro` absent from the export |
+| 2026-10-29/30 | Surplus chat (not Conflux) | `deepseek-v4-pro` 1,076, `kimi-k3.1-pro` 4, `glm-5.3` 7 | — | — | 0.251287 | — | unattributed caller on the shared key, counted against the weekly cap: kimi-k3.1-pro $0.097557 at 60% discount (10-29 15:11, 15:41, 16:02, 21:22Z; floor bypass, MISSION a58a30e), deepseek-v4-pro $0.152919 (10-30 06:45–16:34Z), glm-5.3 $0.000811; no controller process, file or Codex session matches |
 
 C slice 1 rows are reconciled with the export by `python -m conflux.core reconcile` (`~/evidence/core-runs/2026-10-27-c1*/reconciled.json`;
 export total for 2026-10-27: 83 rows, $0.001372).
@@ -71,7 +73,7 @@ charge-bound estimates) are only admission-time bounds. They are replaced by bil
 $0.0108 Jev and $0.0207 rejected-request estimates were billed $0.000006 and $0. Account credit after these runs
 is $9.369476 (`/v1/buyer/me`).
 
-**Metered total: $2.163909** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
+**Metered total: $2.794154** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
 
 ## GCE lab VMs (week 2026-W44 cap $60)
 
@@ -110,5 +112,6 @@ Rate: n2d-standard-8 ≈ $0.338/h running (GCE list price, us-central1) + 100 GB
 | 2026-10-28 | `conflux-dev-lab-c3` | 21:50:55–22:03:02 | 0.20 | 0.07 | C slice 38 stage-1 runtime probes (21 slice-37 test commands, 5 restores); stopped, disk kept (slice-27 state) |
 | 2026-10-28/29 | `conflux-dev-lab-ol1`, `-ol2` | 14 up→delete windows 23:50Z–08:05Z (two labs at a time) | ≤ 14.87 | ≤ 5.23 | C slice 39 live runs (fresh labs from the clean snapshot, graded, deleted); upper bound: windows include the post-run stop before grading |
 | 2026-10-29 | `conflux-dev-lab-lc1`, `-lc2`, `-lc3` | 08:49–11:23, 11:23–14:03, 14:03–16:30 (one lab at a time) | ≤ 7.7 | ≤ 2.71 | C slice 40 live kimi-k3-lead runs (fresh labs from the clean snapshot, graded, deleted); upper bound incl. post-run grading start |
+| 2026-10-29/30 | `conflux-dev-lab-s1`, `-s2`, `-s2b`, `-s3` | 17:33–23:11, 23:13–01:28, 01:29–10:32, 10:33–16:33 (one lab at a time) | ≤ 22.9 | ≤ 8.07 | C slice 43 live 240-step kimi-k3-lead runs (fresh labs from the clean snapshot, graded, deleted); upper bound incl. post-run grading start |
 
-**GCE lab total: ≤ $13.52** (plus the c3 disk while it exists)
+**GCE lab total: ≤ $21.59** (plus the c3 disk while it exists)

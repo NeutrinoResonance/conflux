@@ -220,6 +220,21 @@ def test_jev_decision_without_billed_cost_settles_derived(tmp_path):
     assert resp[0]["cost_kind"] == "derived"
 
 
+def test_every_paid_request_carries_the_discount_floor(tmp_path):
+    # MISSION a58a30e: kimi-k3.1-pro rows billed at 60% off after the 90% floor took effect; every paid request this
+    # script sends (chat, stream, decisions) must carry X-Min-Discount like core.surplus_post.
+    seen = []
+
+    def handler(request):
+        seen.append(request.headers.get("x-min-discount"))
+        return httpx.Response(200, json={"answers": {}, "usage": {"input_tokens": 340, "output_tokens": 0}})
+    p = _prober(handler, tmp_path)
+    p.decision("score", 0)
+    p._post(pp.SURPLUS + "/chat/completions", {"model": "m", "messages": []}, 0.0, {"model": "m"})
+    p._post(pp.SURPLUS + "/chat/completions", {"model": "m", "messages": []}, 0.0, {"model": "m"}, stream=True)
+    assert seen == ["90", "90", "90"]
+
+
 def test_jev_decision_without_usage_still_stops(tmp_path):
     p = _prober(lambda r: httpx.Response(200, json={"answers": {}}), tmp_path)
     p.decision("choice", 0)
