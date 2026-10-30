@@ -22,12 +22,14 @@ reverse-tunnels it to the lab's 127.0.0.1:3128 over ssh, and exports `PROXY_ENV`
 
 Terminal statuses: `accepted` (all checks pass), `failed` (checks ran and failed when
 steps ran out), `unverified` (no verdict: provider error, budget refusal, check timeout,
-transport error, lab deadline).
+transport error, lab deadline). With a lead (`--lead`), a task with no checks ends on a fresh lead's finish review:
+DONE is `unverified`/`finish_review_done`, a stop rule, not an acceptance (graded outside the run).
 
 Usage:
   python -m conflux.core run --tasks tests/fixtures/core_loop/tasks.json --out DIR --repeats 2
   python -m conflux.core run --tasks tests/fixtures/core_loop/optee_goal_a.json --out DIR \
       --lab c2 --workdir '~/optee-work' --lab-hours 4
+  python -m conflux.core run --tasks TASK.json --out DIR --model deepseek-v4-pro --lead kimi-k3 --lab g1 ...
   python -m conflux.core reconcile --out DIR --day 2026-10-27
   python -m conflux.core audit DIR/*/trace.jsonl
 """
@@ -170,9 +172,13 @@ class Budget:
 
     A call whose cost is ambiguous is `defer`red (counted at 0) and resolved from Surplus's billing data: `billing(day)`
     returns that UTC day's usage-export rows (`fetch_export`). Without `billing` it stays pending. Calls billed in their
-    reply are `observe`d too, so their export rows are reserved and never charged again to a pending call."""
+    reply are `observe`d too, so their export rows are reserved and never charged again to a pending call.
+
+    Shared by the executor loop and the lead's review thread: every method holds one re-entrant lock (a deferred
+    settlement callback runs inside `resolve`; slice 47's demo deadlocked on a non-reentrant one)."""
 
     def __init__(self, allowance: float, billing: Callable[[str], list[dict]] | None = None):
+        self.lock = threading.RLock()
         self.allowance = allowance
         self.committed = 0.0
         self.billing = billing
@@ -182,23 +188,31 @@ class Budget:
         self.polled = float("-inf")
 
     def admit(self, bound: float) -> bool:
-        self.resolve()
-        return self.committed < self.allowance
+        with self.lock:
+            self.resolve()
+            return self.committed < self.allowance
 
     def settle(self, bound: float, cost: float) -> None:
-        self.committed += cost
+        with self.lock:
+            self.committed += cost
 
     def defer(self, call: dict, on_settle: Callable[[float, str, str | None], None]) -> None:
         """`call` has model, usage (or None) and ts; `on_settle(usd, kind, request_id)` runs once when resolved."""
-        self.pending.append((call, on_settle))
+        with self.lock:
+            self.pending.append((call, on_settle))
 
     def observe(self, call: dict) -> None:
         """A call billed in its reply (model, usage, ts): its export row is reserved when pending calls are matched."""
-        self.billed.append(call)
+        with self.lock:
+            self.billed.append(call)
 
     def resolve(self, force: bool = False, now: float | None = None) -> None:
         """Settle pending calls from the usage export: a matched row at its `buyer_cost_usd` (`"export"`), an unmatched
         call older than UNBILLED_AFTER_S at 0 (`"unbilled"`). The billing API being down leaves them pending."""
+        with self.lock:
+            self._resolve(force, now)
+
+    def _resolve(self, force: bool, now: float | None) -> None:
         now = time.time() if now is None else now
         if not self.pending or self.billing is None or (not force and now - self.polled < BILLING_POLL_S):
             return
@@ -232,6 +246,9 @@ class Budget:
         self.pending = keep
 
 
+_TRACE_LOCK = threading.Lock()
+
+
 @dataclass
 class Trace:
     path: Path | None = None
@@ -239,10 +256,11 @@ class Trace:
 
     def write(self, event: str, **fields) -> dict:
         row = {"event": event, "ts": time.time(), **fields}
-        self.events.append(row)
-        if self.path:
-            with self.path.open("a") as f:
-                f.write(json.dumps(row) + "\n")
+        with _TRACE_LOCK:  # the lead's review thread settles costs into the executor's trace too
+            self.events.append(row)
+            if self.path:
+                with self.path.open("a") as f:
+                    f.write(json.dumps(row) + "\n")
         return row
 
 
@@ -634,9 +652,285 @@ def _check_feedback(results: list[dict]) -> str:
 
 
 def _goal_text(task: Task) -> str:
+    if not task.checks:  # the task text alone (slices 39-43 lead runs: task.txt verbatim, no empty checks header)
+        return task.goal
     checks = "\n".join(f"- `{c.cmd}`" + (f" must print {c.expect_stdout!r}" if c.expect_stdout is not None
                                          else " must exit 0") for c in task.checks)
     return f"{task.goal}\n\nAcceptance checks (run by the harness in the workspace):\n{checks}"
+
+
+# ---------------------------------------------------------------- lead (C slices 39-48)
+# A different-family model reviews the executor's trace every CADENCE_S of wall clock without blocking it (MISSION
+# a594bbc), in the conversation layout (cda6dac): the data first, then one goal per turn, then the request. It keeps
+# its own goal list (`GOAL: ` lines) and notes; its reply reaches the executor at the next turn. On a task with no
+# checks, finish (and the step cap) is judged by a *fresh* lead: own init review, none of the running lead's notes,
+# goal list or messages (slice 48: the live false DONE came from the run-long notes, 3/6 vs 0/6). Model, effort,
+# cadence, layout and prompt text are the measured ones (`~/evidence/step-cap-demo-2026-10-29/demo.py`, slice 43).
+
+LEAD = "kimi-k3"
+LEAD_EFFORT = "low"   # glm-5.3/kimi-k3 low: reviews ~2-4 min (default effort 17-20 min, MISSION a594bbc)
+CADENCE_S = 300       # a new review at most every 5 min of wall clock; never more than one in flight
+LEAD_TIMEOUT = 1800
+CLIP_OUT = 1500
+CLIP_REASON = 1500
+WINDOW_MAX = 60_000
+INDEX_LINE = 200
+CLIP_ANSWER = 2500
+MAX_GOALS = 12
+LEAD_SYSTEM = ("You supervise an agent that works through a shell on a lab machine toward the user's task. "
+               "You cannot run commands yourself. The agent receives your final reply verbatim as a message from "
+               "its supervisor.")
+FINISH_ASK = "If the whole task is done and proven, make the last line of your reply exactly DONE."
+GOAL_FORMAT = "one goal per line, each line starting with `GOAL: `"
+INIT_ASK = f"From this, write our goal list ({GOAL_FORMAT}). Then give the agent its next steps."
+FIRST_GOAL = "Check where we are with regard to our goals. Goal 1 of {n}:\nGOAL: {g}"
+NEXT_GOAL = "Goal {i} of {n}:\nGOAL: {g}"
+FINAL_ASK = (f"Now write the updated goal list ({GOAL_FORMAT}; revise, split, add or drop goals as the evidence "
+             "requires) and give the agent its next steps.")
+GOAL_RE = re.compile(r"(?m)^[ \t]*(?:[-*][ \t]*)?\**GOAL\**[ \t]*:\**[ \t]*(.+?)[ \t]*$")
+PREFIX = "Message from your supervisor (a different model reviewing your work):\n\n"
+CAP_SUMMARY = "(no finish: the step limit was reached)"
+
+
+def _clip_head(s: str, n: int) -> str:
+    return s if len(s) <= n else s[:n] + f"\n[... {len(s) - n} chars clipped]"
+
+
+def _clip_tail(s: str, n: int) -> str:
+    return s if len(s) <= n else f"[{len(s) - n} chars clipped ...]\n" + s[-n:]
+
+
+def command_index(messages: list) -> str:
+    """One line per executed tool call over the whole run: step, result head, command."""
+    lines, step, pending = [], 0, {}
+    for m in messages:
+        if m["role"] == "assistant":
+            step += 1
+            for c in m.get("tool_calls") or []:
+                fn = c.get("function") or {}
+                try:
+                    cmd = json.loads(fn.get("arguments") or "{}").get("command", "")
+                except (json.JSONDecodeError, AttributeError):
+                    cmd = fn.get("arguments") or ""
+                pending[c.get("id", "")] = (step, fn.get("name"), str(cmd))
+        elif m["role"] == "tool" and m.get("tool_call_id", "") in pending:
+            s, name, cmd = pending.pop(m["tool_call_id"])
+            head = (m.get("content") or "").split("\n", 1)[0][:60]
+            what = " ".join(cmd.split()) if name == "run_shell" else f"<{name}>"
+            lines.append(f"{s:>3} | {head} | {what[:INDEX_LINE]}")
+    return "\n".join(lines)
+
+
+def activity(messages: list, start: int, hide: set[str]) -> str:
+    """Executor turns and tool results from message index `start` on, newest kept if over WINDOW_MAX. User messages
+    whose text is in `hide` (the running lead's own replies) are left out."""
+    parts, step = [], sum(m["role"] == "assistant" for m in messages[:start])
+    for m in messages[start:]:
+        if m["role"] == "assistant":
+            step += 1
+            bits = [f"### step {step}"]
+            if m.get("reasoning_content"):
+                bits.append("agent reasoning (tail):\n" + _clip_tail(m["reasoning_content"], CLIP_REASON))
+            if m.get("content"):
+                bits.append("agent says:\n" + m["content"])
+            for c in m.get("tool_calls") or []:
+                fn = c.get("function") or {}
+                bits.append(f"agent calls {fn.get('name')}: {_clip_head(fn.get('arguments') or '', 3000)}")
+            parts.append("\n".join(bits))
+        elif m["role"] == "tool":
+            parts.append("result:\n" + _clip_head(m.get("content") or "", CLIP_OUT))
+        elif m["role"] == "user" and m["content"] not in hide:
+            parts.append("harness message to the agent:\n" + _clip_head(m["content"], CLIP_OUT))
+    return _clip_tail("\n\n".join(parts), WINDOW_MAX)
+
+
+def lead_data(task_text: str, notes: str, messages: list, start: int, finish_summary: str | None,
+              hide: set[str]) -> str:
+    """Conversation layout, first message: 'Analyze this:' and all the data; no request yet."""
+    idx = command_index(messages)
+    act = activity(messages, start, hide)
+    text = (f"Analyze this:\n\nThe user's task (verbatim):\n{task_text.strip()}\n\n"
+            f"Your notes from your last review (progress per goal, next steps you gave):\n"
+            f"{notes or '(none: the run is starting)'}\n\n"
+            f"All agent commands so far (step | result | command):\n{idx or '(none)'}\n\n"
+            f"Agent activity since your last review:\n{act or '(none)'}")
+    if finish_summary is not None:
+        text += f"\n\nThe agent has called finish with this summary:\n{finish_summary}"
+    return text
+
+
+def parse_goals(text: str) -> list[str]:
+    return [g.strip("* ") for g in GOAL_RE.findall(text) if g.strip("* ")][:MAX_GOALS]
+
+
+def upto(messages: list, step: int) -> list:
+    """Messages through executor step `step` (its tool results and the messages that follow them included)."""
+    n, out = 0, []
+    for m in messages:
+        if m["role"] == "assistant":
+            n += 1
+            if n > step:
+                break
+        out.append(m)
+    return out
+
+
+def reply_text(status: int, body: object) -> str | None:
+    """Usable lead reply: HTTP 200, content present, not cut off."""
+    if status != 200 or not isinstance(body, dict) or not body.get("choices"):
+        return None
+    ch = body["choices"][0]
+    content = ((ch.get("message") or {}).get("content") or "").strip()
+    if not content or ch.get("finish_reason") == "length":
+        return None
+    return content
+
+
+def surplus_lead(key: str, model: str = LEAD, effort: str | None = LEAD_EFFORT,
+                 http: httpx.Client | None = None) -> Callable[..., tuple[int, object, float]]:
+    """Lead requests (no tools) through `surplus_post`: the discount floor and the model's own maximum output."""
+    http = http or httpx.Client(timeout=LEAD_TIMEOUT)
+
+    def call(messages: list, timeout: float | None = None) -> tuple[int, object, float]:
+        n = max_output(model, messages)
+        return surplus_post(http, key, {"model": model, "messages": messages, **({"max_tokens": n} if n else {}),
+                                        **({"reasoning_effort": effort} if effort else {})}, timeout, LEAD_TIMEOUT)
+    return call
+
+
+class Lead:
+    """One lead: its goal list, notes and the messages it has seen; every request is admitted on the run's Budget and
+    traced (`lead_call`, `lead_goals`). With no goal list yet a review is one turn (data + INIT_ASK); otherwise data +
+    goal 1, one turn per goal, then FINAL_ASK. `ask` returns the final answer (None when a turn got no reply).
+    `hide` is the set of the running lead's injected messages, left out of every lead's activity."""
+
+    def __init__(self, call: Callable[..., tuple[int, object, float]], model: str, budget: Budget, trace: Trace,
+                 task_text: str, hide: set[str], role: str = "running", deadline: float | None = None,
+                 on_cost: Callable[[float], None] | None = None):
+        self.call, self.model, self.budget, self.trace, self.task_text = call, model, budget, trace, task_text
+        self.hide, self.role, self.deadline, self.on_cost = hide, role, deadline, on_cost or (lambda usd: None)
+        self.notes, self.goals, self.seen, self.calls = "", [], 0, 0
+
+    def _settled(self, step: int, turn: str, usd: float, kind: str, request_id: str | None) -> None:
+        self.trace.write("lead_cost_resolved", role=self.role, step=step, turn=turn, cost_usd=usd, cost_kind=kind,
+                         request_id=request_id)
+        self.on_cost(usd)
+
+    def _turn(self, convo: list, step: int, turn: str, finish: bool) -> str | None:
+        for attempt in (1, 2):
+            if not self.budget.admit(0.0):
+                self.trace.write("lead_denied", role=self.role, step=step, turn=turn, attempt=attempt)
+                return None
+            left = None if self.deadline is None else self.deadline - time.monotonic()
+            if left is not None and left <= 0:
+                self.trace.write("lead_deadline", role=self.role, step=step, turn=turn)
+                return None
+            status, body, lat = self.call(convo, left)
+            settle = functools.partial(self._settled, step, turn)
+            c, kind = billed_cost(body), "billed"
+            usage = body.get("usage") if isinstance(body, dict) else None
+            usage = usage if isinstance(usage, dict) else None
+            for ts in (body.get("conflux_lost") or []) if isinstance(body, dict) else []:
+                self.budget.defer({"model": self.model, "ts": ts, "usage": None}, settle)
+            if c is None and status != 0 and not (isinstance(body, dict) and body.get("choices")) and not usage:
+                c, kind = 0.0, "no_usage"
+            if c is None:  # ambiguous: Surplus's billing data resolves it (MISSION a58a30e)
+                c, kind = 0.0, "pending"
+                self.budget.defer({"model": self.model, "ts": time.time(), "usage": usage}, settle)
+            elif kind == "billed" and usage:
+                self.budget.observe({"model": self.model, "ts": time.time(), "usage": usage})
+            self.budget.settle(0.0, c)
+            self.on_cost(c)
+            self.calls += 1
+            text = reply_text(status, body)
+            ch = (body.get("choices") or [{}])[0] if isinstance(body, dict) else {}
+            msg = ch.get("message") or {}
+            self.trace.write("lead_call", role=self.role, step=step, turn=turn, attempt=attempt, model=self.model,
+                             status=status, id=body.get("id") if isinstance(body, dict) else None,
+                             latency_s=round(lat, 3), usage=usage, cost_usd=c, cost_kind=kind, finish=finish,
+                             prompt_chars=sum(len(m["content"]) for m in convo), finish_reason=ch.get("finish_reason"),
+                             reasoning_chars=len(msg.get("reasoning_content") or msg.get("reasoning") or ""),
+                             ask=convo[-1]["content"][-400:], reply=text, error=None if text else str(body)[:500])
+            if text:
+                return text
+        return None
+
+    def ask(self, messages: list, step: int, finish_summary: str | None = None) -> str | None:
+        fin = finish_summary is not None
+        data = lead_data(self.task_text, self.notes, messages, self.seen, finish_summary, self.hide)
+        goals = list(self.goals)
+        asks = ([("init", data + "\n\n" + INIT_ASK + (f"\n\n{FINISH_ASK}" if fin else ""))] if not goals else
+                [(f"goal{i}", (data + "\n\n" + FIRST_GOAL.format(n=len(goals), g=g)) if i == 1 else
+                  NEXT_GOAL.format(i=i, n=len(goals), g=g)) for i, g in enumerate(goals, 1)]
+                + [("final", FINAL_ASK + (f"\n\n{FINISH_ASK}" if fin else ""))])
+        convo = [{"role": "system", "content": LEAD_SYSTEM}]
+        answers, text = [], None
+        for turn, content in asks:
+            convo.append({"role": "user", "content": content})
+            text = self._turn(convo, step, turn, fin)
+            if text is None:
+                self.trace.write("lead_no_reply", role=self.role, step=step, turn=turn)
+                return None
+            convo.append({"role": "assistant", "content": text})
+            if turn.startswith("goal"):
+                answers.append(f"GOAL: {goals[int(turn[4:]) - 1]}\n{_clip_head(text, CLIP_ANSWER)}")
+        new = parse_goals(text)
+        self.trace.write("lead_goals", role=self.role, step=step, goals=new or goals, parsed=len(new),
+                         kept_previous=not new)
+        self.goals = new or goals
+        self.notes = "\n\n".join(answers + [f"Your final answer last time:\n{text}"])
+        self.seen = len(messages)
+        return text
+
+
+class Steering:
+    """The running lead, never blocking the executor (MISSION a594bbc). At each executor turn (`turn`) a finished
+    review's reply is appended to the messages first; then, if no review is in flight and CADENCE_S has passed since
+    the last one started (or none has), a review starts in a thread on a snapshot of the messages."""
+
+    def __init__(self, lead: Lead, cadence_s: float = CADENCE_S):
+        self.lead, self.cadence_s = lead, cadence_s
+        self.lock = threading.Lock()
+        self.thread: threading.Thread | None = None
+        self.reply: tuple | None = None
+        self.started: float | None = None
+        self.n = 0
+
+    def _review(self, snapshot: list, step: int, n: int, t0: float) -> None:
+        try:
+            text = self.lead.ask(snapshot, step)
+        except Exception as e:  # a review thread must never take the run down; the executor goes on without it
+            self.lead.trace.write("lead_error", step=step, review=n, error=repr(e)[:500])
+            text = None
+        with self.lock:
+            self.reply = (text, n, step, time.monotonic() - t0)
+
+    def turn(self, messages: list, step: int) -> None:
+        with self.lock:
+            done, self.reply = self.reply, None
+        if done and done[0]:
+            content = PREFIX + done[0]
+            self.lead.hide.add(content)
+            messages.append({"role": "user", "content": content})
+            self.lead.trace.write("lead_inject", step=step, review=done[1], reviewed_step=done[2],
+                                  review_s=round(done[3], 1), chars=len(done[0]))
+        busy = self.thread is not None and self.thread.is_alive()
+        if not busy and (self.started is None or time.monotonic() - self.started >= self.cadence_s):
+            self.n += 1
+            self.started = time.monotonic()
+            snap = json.loads(json.dumps(messages))
+            self.thread = threading.Thread(target=self._review, args=(snap, step, self.n, self.started), daemon=True)
+            self.lead.trace.write("lead_start", step=step, review=self.n)
+            self.thread.start()
+
+    def settle_for_finish(self, step: int) -> None:
+        """Before a finish review: wait for an in-flight review and drop its reply (the finish review supersedes it)."""
+        if self.thread is not None:
+            self.thread.join()
+        with self.lock:
+            if self.reply is not None:
+                self.lead.trace.write("lead_superseded", step=step, review=self.reply[1])
+                self.reply = None
 
 
 # ---------------------------------------------------------------- self-audit (work item F, D1)
@@ -704,10 +998,15 @@ def audit(rows: list[dict]) -> list[dict]:
     return findings
 
 def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
-             model: str = MODEL, deadline: float | None = None) -> dict:
+             model: str = MODEL, deadline: float | None = None,
+             lead_call: Callable[..., tuple[int, object, float]] | None = None, lead_model: str = LEAD,
+             cadence_s: float = CADENCE_S) -> dict:
+    """With `lead_call`, a running lead steers (`Steering`); on a task with no checks a fresh lead's finish review
+    is the stop rule: DONE ends the run `unverified` (`finish_review_done`; acceptance needs executed checks),
+    otherwise its reply goes to the executor and the run goes on."""
     t0 = time.monotonic()
     steps = retries = 0
-    cost = 0.0
+    cost = lead_cost = 0.0
     price_ceiling = CEILINGS[model][0]
     trace.write("task_start", task=task.id, model=model, max_steps=task.max_steps, max_usd=task.max_usd)
 
@@ -720,6 +1019,7 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
         # Calls still pending here are resolved later (a `cost_resolved` row after task_end) or by `reconcile`.
         row = trace.write("task_end", task=task.id, status=status, reason=reason, steps=steps,
                           retries=retries, cost_usd=round(cost, 8), audit_hits=len(findings),
+                          **({"lead_cost_usd": round(lead_cost, 8)} if lead_call else {}),
                           pending_calls=sum(c.get("task") == task.id for c, _ in budget.pending),
                           latency_s=round(time.monotonic() - t0, 2))
         result.update({k: v for k, v in row.items() if k not in ("event", "ts")})
@@ -736,6 +1036,31 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
 
     def past_deadline() -> bool:
         return deadline is not None and time.monotonic() >= deadline
+
+    def lead_charged(usd: float) -> None:
+        nonlocal lead_cost
+        lead_cost += usd
+        if result and usd:  # settled after task_end
+            result["lead_cost_usd"] = round(result["lead_cost_usd"] + usd, 8)
+
+    steering = None
+    if lead_call is not None:
+        lead_trace = Trace(trace.path.with_name("lead.jsonl") if trace.path else None)
+        steering = Steering(Lead(lead_call, lead_model, budget, lead_trace, task.goal, set(), "running", deadline,
+                                 lead_charged), cadence_s)
+
+    def finish_review(summary: str) -> tuple[str | None, str | None]:
+        """A fresh lead (no notes, goal list or injected messages of the running lead): init review through step
+        k-10, then the finish review. (verdict "pass" | "fail" | None, reply)."""
+        steering.settle_for_finish(steps)
+        running = steering.lead
+        fresh = Lead(lead_call, lead_model, budget, running.trace, task.goal, running.hide, "finish", deadline,
+                     lead_charged)
+        k = max(1, steps - 10)
+        text = fresh.ask(upto(messages, k), k) and fresh.ask(messages, steps, summary)
+        if not text:
+            return None, None
+        return ("pass" if text.strip().splitlines()[-1].strip() == "DONE" else "fail"), text
 
     if task.setup:
         r = shell(task.setup, EXEC_TIMEOUT)
@@ -754,6 +1079,8 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
         if task.inject and steps == task.inject_step:
             messages.append({"role": "user", "content": task.inject})
             trace.write("inject", task=task.id, step=steps, content=task.inject)
+        if steering:
+            steering.turn(messages, steps)
         limit = max_output(model, messages, TOOLS, known)
         request = {"model": model, "messages": messages, "tools": TOOLS,
                    **({"max_tokens": limit} if limit is not None else {})}
@@ -815,6 +1142,7 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
                          **({"tool_calls": calls} if calls else {})})
         truncated = _truncated(body, limit)
         finished = not calls and not truncated
+        summary = msg.get("content") or ""
         if truncated and not calls:
             messages.append({"role": "user", "content": TRUNCATED})
         for call in calls:
@@ -827,6 +1155,7 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
                 content = f"denied: {deny}" + (f"; {TRUNCATED}" if deny == "truncated_at_max_tokens" else "")
             elif name == "finish":
                 finished = True
+                summary = str(args.get("summary") or "")
                 content = "finish recorded; the harness is running the acceptance checks"
             else:
                 r = shell(args["command"], args["timeout_s"])
@@ -836,7 +1165,16 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
                     return end("unverified", "lab_deadline")
                 content = _tool_result(r, args["timeout_s"])
             messages.append({"role": "tool", "tool_call_id": call.get("id", ""), "content": content})
-        if finished:
+        if finished and steering and not task.checks:
+            verdict, text = finish_review(summary)
+            trace.write("finish_review", task=task.id, step=steps, verdict=verdict, reply=text)
+            if verdict == "pass":
+                return end("unverified", "finish_review_done")
+            if verdict is None:
+                return end("unverified", "lab_deadline" if past_deadline() else "finish_review_no_reply")
+            retries += 1
+            messages.append({"role": "user", "content": PREFIX + text})
+        elif finished:
             verdict, results = run_checks(task.checks, shell)
             trace.write("acceptance", task=task.id, step=steps, verdict=verdict, results=results)
             if any(r.get("deadline") for r in results):
@@ -848,6 +1186,14 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
             retries += 1
             messages.append({"role": "user", "content": _check_feedback(results)})
 
+    if steering and not task.checks:
+        verdict, text = finish_review(CAP_SUMMARY)
+        trace.write("finish_review", task=task.id, step=steps, verdict=verdict, reply=text)
+        if verdict == "pass":
+            return end("unverified", "finish_review_done_at_step_cap")
+        if verdict is None:
+            return end("unverified", "lab_deadline" if past_deadline() else "finish_review_no_reply")
+        return end("unverified", "step_cap")  # a review is not an executed check: no verdict
     verdict, results = run_checks(task.checks, shell)
     trace.write("acceptance", task=task.id, step=steps, verdict=verdict, results=results)
     if any(r.get("deadline") for r in results):
@@ -1024,7 +1370,8 @@ def _utc() -> str:
 
 def run_lab(tasks: list[Task], chat: Chat, budget: Budget, out: Path, name: str, workdir: str,
             hours: float, model: str = MODEL, remote: Callable[[str], list[str]] | None = None,
-            tunnel: Callable[[int], list[str]] | None = None) -> dict:
+            tunnel: Callable[[int], list[str]] | None = None,
+            lead_call: Callable[..., tuple[int, object, float]] | None = None, lead_model: str = LEAD) -> dict:
     """Own one lab's lifecycle: up, egress tunnel, smoke, setup + egress check, tasks in order (stop at
     the first non-accepted one), stop.
 
@@ -1060,7 +1407,8 @@ def run_lab(tasks: list[Task], chat: Chat, budget: Budget, out: Path, name: str,
                     break
                 d = out / task.id
                 d.mkdir(parents=True, exist_ok=False)
-                res = run_task(task, chat, shell, Trace(d / "trace.jsonl"), budget, model, deadline)
+                res = run_task(task, chat, shell, Trace(d / "trace.jsonl"), budget, model, deadline,
+                               lead_call, lead_model)
                 results.append(res)
                 print(json.dumps(res), flush=True)
                 if res["status"] != "accepted":
@@ -1109,6 +1457,8 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--lab", default="", help="devbox-lab name: run tasks in order on that lab")
     run.add_argument("--workdir", default="~/conflux-work", help="lab workdir (with --lab)")
     run.add_argument("--lab-hours", type=float, default=4.0, help="lab wall-time deadline (with --lab)")
+    run.add_argument("--lead", default="", help="lead model (e.g. kimi-k3): steers; judges finish on tasks without checks")
+    run.add_argument("--lead-effort", default=LEAD_EFFORT)
     rec = sub.add_parser("reconcile")
     rec.add_argument("--out", type=Path, required=True)
     rec.add_argument("--day", default=datetime.now(timezone.utc).strftime("%Y-%m-%d"))
@@ -1137,8 +1487,10 @@ def main(argv: list[str] | None = None) -> int:
     remaining = CAMPAIGN_BUDGET - parse_ledger_total(LEDGER.read_text())
     budget = Budget(min(a.cap, remaining), billing=lambda day: fetch_export(key, day))
     chat = surplus_chat(key, a.model)
+    lead = surplus_lead(key, a.lead, a.lead_effort or None) if a.lead else None
     if a.lab:
-        run_lab(tasks, chat, budget, a.out, a.lab, a.workdir, a.lab_hours, a.model)
+        run_lab(tasks, chat, budget, a.out, a.lab, a.workdir, a.lab_hours, a.model, lead_call=lead,
+                lead_model=a.lead or LEAD)
         return 0
     a.out.mkdir(parents=True, exist_ok=True)
     results = []
@@ -1146,7 +1498,8 @@ def main(argv: list[str] | None = None) -> int:
         for task in tasks:
             d = a.out / f"{task.id}-{n}"
             d.mkdir(parents=True, exist_ok=False)
-            res = run_task(task, chat, local_shell(d / "work"), Trace(d / "trace.jsonl"), budget, a.model)
+            res = run_task(task, chat, local_shell(d / "work"), Trace(d / "trace.jsonl"), budget, a.model,
+                           lead_call=lead, lead_model=a.lead or LEAD)
             results.append(res)
             print(json.dumps(res))
     budget.resolve(force=True)  # late settlements refresh the task results summed below
