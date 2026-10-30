@@ -27,8 +27,8 @@ MISSION-STATUS: ACTIVE
     - The userland client demo failed.
     - GET_OS_REVISION returned 0xffffffff.
   - **Measured cost drivers** (slice 43 traces, `scan.py` → `scan.json`). The 240-step cap binds: s2b and s3 hit it.
-    - Fixed `sleep ≥ 60` waits (a model command, not running qemu): **s1 37 (16% of steps, 41% of wall clock); s2b 37
-      (15%, 35%)**; s3 1 (0%).
+    - Fixed `sleep ≥ 60` waits (model `exec` with `sleep N`, N ≥ 60, not running qemu; `scan.json` `fixed_sleep`):
+      **s1 37 commands, 8,100 s (16% of steps, 41% of wall clock); s2b 37, 11,160 s (15%, 35%)**; s3 1, 60 s (0%).
     - History growth: prompts reach 329–393k tokens. Latency per step rises 1.5–3× after step 120. It costs wall clock, not steps.
   - Evidence: `~/evidence/cost-drivers-2026-10-30/REGRADE.md` (`scan.py`, `scan.json`).
 - **C slice 45 (2026-10-30, lead init-probe demo, live, $0.000754 metered + ≤ $0.38 GCE): giving the kimi-k3 lead its
