@@ -61,6 +61,8 @@ USD comes from provider responses or documented prices — never estimated silen
 | 2026-10-29 | Surplus chat | `kimi-k3` 21, `glm-5.3` 15 | 25225 | 18210 | 0.001207 | — | C slice 42 goal-list review demo (offline: 6 kimi-k3 init draws + 15 glm-5.3 low and 15 kimi-k3 low reviews of slice 40's 3 init goal lists); 36/36 export-matched, = balance delta 7.548428 → 7.547221 |
 | 2026-10-29/30 | Surplus chat | `kimi-k3` 1,606, `deepseek-v4-pro` 994 | 176885432 | 2249586 | 0.378958 | — | C slice 43 step-cap demo: 4 live kimi-k3-lead runs at 240 steps (lead-s1, -s2 cut by the ceiling-settlement fault, -s2b, -s3); export rows matched by tokens per run (`~/evidence/step-cap-demo-2026-10-29/export-s*.csv`, `cost.json`), 25 replies without `buyer_cost_micro` absent from the export |
 | 2026-10-29/30 | Surplus chat (not Conflux) | `deepseek-v4-pro` 1,076, `kimi-k3.1-pro` 4, `glm-5.3` 7 | — | — | 0.251287 | — | unattributed caller on the shared key, counted against the weekly cap: kimi-k3.1-pro $0.097557 at 60% discount (10-29 15:11, 15:41, 16:02, 21:22Z; floor bypass, MISSION a58a30e), deepseek-v4-pro $0.152919 (10-30 06:45–16:34Z), glm-5.3 $0.000811; no controller process, file or Codex session matches |
+| 2026-10-30 | Surplus chat | `kimi-k3` 24 | 23608 | 13506 | 0.001096 | — | C slice 44 per-goal check demo (offline: P1/P2 follow-up turns on 6 recorded kimi-k3 init conversations, 2 draws each); 24/24 export-matched by tokens; `~/evidence/acceptance-check-demo-2026-10-30/reconciled.json` |
+| 2026-10-30 | Surplus chat (not Conflux) | `deepseek-v4-pro` 55, `kimi-k3` 2 | — | — | 0.009536 | — | unattributed caller on the shared key after slice 43 ended (16:34Z–16:56Z export pull; kimi-k3 rows 24–25k input tokens, no slice-44 call matches), counted against the weekly cap |
 
 C slice 1 rows are reconciled with the export by `python -m conflux.core reconcile` (`~/evidence/core-runs/2026-10-27-c1*/reconciled.json`;
 export total for 2026-10-27: 83 rows, $0.001372).
@@ -73,7 +75,7 @@ charge-bound estimates) are only admission-time bounds. They are replaced by bil
 $0.0108 Jev and $0.0207 rejected-request estimates were billed $0.000006 and $0. Account credit after these runs
 is $9.369476 (`/v1/buyer/me`).
 
-**Metered total: $2.794154** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
+**Metered total: $2.804786** (the Jev fair-test decisions are counted at their ≈$0.00028 estimate)
 
 ## GCE lab VMs (week 2026-W44 cap $60)
 
