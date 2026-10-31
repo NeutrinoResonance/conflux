@@ -369,3 +369,12 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   the tree state before prescribing a command.
 - Fresh reviews are cheaper and faster: S1 median 165 s vs 297 s, 34 vs 60 calls. Evidence:
   `~/evidence/fresh-review-demo-2026-10-31/RESULTS.md`.
+
+## `kimi-k3` (low) revising its review after its own commands ran in a scratch copy (C slice 53, offline + lab, 24 reviews)
+- **It reads execution results well:** at step 239, 9/12 revisions name the duplicate `files.fdt` stanza that its first
+  reply missed (1/12 before).
+- **It does not turn them into working commands:** 2/12 revisions configure on the replayed tree (0/12 before). The
+  rewritten invocations bring new errors: cwd-relative paths, a stale include kept, the srcdir regressed. 4/12 ask for the
+  fix in prose instead of a command block.
+- **It reads scratch effects as real** in 3/24 ("config is already done"), although told the agent's machine is unchanged.
+- Evidence: `~/evidence/verify-deliver-demo-2026-10-31/RESULTS.md`.
