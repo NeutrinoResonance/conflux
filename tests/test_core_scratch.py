@@ -599,5 +599,5 @@ def test_deliver_text_without_reply():
 
 def test_verify_ask_does_not_claim_the_reply_is_held():
     # C slice 59: the reply reaches the agent before the session; the ask must not say otherwise (PR #68 critic;
-    # wording measured in ~/evidence/verify-ask-text-demo-2026-10-31/RESULTS.md)
+    # wording measured in ~/evidence/verify-prompt-demo-2026-10-31/RESULTS.md)
     assert "Before your reply reaches" not in core.VERIFY_ASK and "has been sent to the agent" in core.VERIFY_ASK

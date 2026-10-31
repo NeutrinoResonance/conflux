@@ -28,7 +28,7 @@ MISSION-STATUS: ACTIVE
     - Demo on slice 55's 24 R1 conversations, kimi-k3 low, first call: run_shell first 48/48 both before and after, 0
       deliver-first and 0 no-tool, $0.007675.
     - This is a first-turn proxy only: the effect on delivered outcomes is unmeasured.
-  - Evidence: `~/evidence/core-session-cadence-2026-10-31/RESULTS.md`, `~/evidence/verify-ask-text-demo-2026-10-31/RESULTS.md`.
+  - Evidence: `~/evidence/core-session-cadence-2026-10-31/RESULTS.md`, `~/evidence/verify-prompt-demo-2026-10-31/RESULTS.md`.
 - **C slice 58 (2026-10-31, cadence-review demo, offline, $0.017903 metered + $0 GCE): running reviews on selected
   prefixes of slice 57's run reject its false proof. Registered rule supported: R∧Q 6/6 (a detection result on those
   prefixes, not a runtime cadence measurement). A session wall bound is ruled out.**
