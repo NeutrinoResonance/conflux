@@ -78,6 +78,8 @@ USD comes from provider responses or documented prices — never estimated silen
 | 2026-10-31 | Surplus chat (not Conflux) | `glm-5.3` 7, `kimi-k3` 6, `deepseek-v4-pro` 2 | — | — | 0.001299 | — | unattributed caller on the shared key in slice 53's window (09:07–09:40Z; kimi-k3 rows 1.7k–28k input tokens, every demo prompt ≥ 35k), counted against the weekly cap |
 | 2026-10-31 | Surplus chat | `kimi-k3` 60 calls (all billed in-reply) | 2806464 | 97919 | 0.012297 | — | C slice 54 iterated verify-before-deliver demo (offline + lab; rounds R3–R5 on slice 53's 24 reviews, 09:53–10:59Z); 60/60 export-matched; `~/evidence/verify-iter-demo-2026-10-31/rec/reconciled.json` |
 | 2026-10-31 | Surplus chat (not Conflux) | `kimi-k3` 6 | — | — | 0.000390 | — | unattributed caller on the shared key in slice 54's window (09:52–11:10Z; input 3,982–35,132 tokens, every demo call ≥ 36,993), counted against the weekly cap |
+| 2026-10-31 | Surplus chat | `kimi-k3` 392 calls (365 billed in-reply, 27 cost-less and unbilled) | 18351289 | 115815 | 0.034519 | — | C slice 55 executed-sequence delivery demo (lab; 24 reviewer sessions with `run_shell` on a persistent scratch + `deliver`, 11:57–14:45Z); 365/365 export-matched, 27 without an export row (unbilled, $0); `~/evidence/exec-deliver-demo-2026-10-31/rec/reconciled.json` |
+| 2026-10-31 | Surplus chat (not Conflux) | `deepseek-v4-pro` 1, `kimi-k3` 2 | — | — | 0.000517 | — | unattributed caller on the shared key in slice 55's window (11:55–14:50Z; input 322, 519 and 35,620 tokens (the last is deepseek-v4-pro); no demo call matches), counted against the weekly cap |
 
 C slice 1 rows are reconciled with the export by `python -m conflux.core reconcile` (`~/evidence/core-runs/2026-10-27-c1*/reconciled.json`;
 export total for 2026-10-27: 83 rows, $0.001372).
@@ -90,7 +92,7 @@ charge-bound estimates) are only admission-time bounds. They are replaced by bil
 $0.0108 Jev and $0.0207 rejected-request estimates were billed $0.000006 and $0. Account credit after these runs
 is $9.369476 (`/v1/buyer/me`).
 
-**Metered total: $3.256109** (sum of the USD column, not-Conflux rows included, plus the Jev fair-test decisions at their ≈$0.00028 estimate; the earlier $2.860537 line had fallen behind the rows)
+**Metered total: $3.291145** (sum of the USD column, not-Conflux rows included, plus the Jev fair-test decisions at their ≈$0.00028 estimate; the earlier $2.860537 line had fallen behind the rows; slice 55 adds $0.035036)
 
 ## GCE lab VMs (week 2026-W44 cap $60)
 
@@ -136,5 +138,6 @@ Rate: n2d-standard-8 ≈ $0.338/h running (GCE list price, us-central1) + 100 GB
 | 2026-10-31 | `conflux-dev-lab-v52` | 08:27:01–08:41:28 (up issued → deleted) | ≈ 0.24 | ≈ 0.08 | C slice 52 harness-only validation of the reviews' `nbconfig` corrections on the replayed recorded tree (fresh lab from the clean snapshot, deleted) |
 | 2026-10-31 | `conflux-dev-lab-v53` | 09:07:31–09:35:42 (up issued → delete issued) | ≈ 0.47 | ≈ 0.17 | C slice 53 verify-before-deliver demo: executed 48 reviewer replies (R1 + R2) on the replayed recorded tree (fresh lab from the clean snapshot, deleted) |
 | 2026-10-31 | `conflux-dev-lab-v54` | 09:53:25–11:12:24 (up issued → delete issued) | ≈ 1.32 | ≈ 0.46 | C slice 54 iterated verify demo: instrument check + executed 60 reviewer replies (R3–R5) on the replayed recorded tree (fresh lab from the clean snapshot, deleted) |
+| 2026-10-31 | `conflux-dev-lab-v55` | 11:43:15–15:16:59 (up issued → delete issued) | ≈ 3.56 | ≈ 1.25 | C slice 55 executed-sequence delivery demo: base layers + instrument check + 24 reviewer sessions with replays and grader builds (fresh lab from the clean snapshot, deleted) |
 
-**GCE lab total: ≤ $26.78** (no lab disk left)
+**GCE lab total: ≤ $28.03** (no lab disk left)
