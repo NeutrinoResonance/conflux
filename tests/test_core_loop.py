@@ -1189,6 +1189,17 @@ def test_d1_keeps_stderr_diagnostics_of_filter_reads():
     assert core.audit([{**row, "stdout": "fatal error: in the log\n", "stderr": ""}]) == []
 
 
+@pytest.mark.parametrize("cmd", ["awk 'BEGIN{system(\"make 2>&1\"); exit 0}'",
+                                 "awk 'BEGIN{while ((\"make 2>&1\" | getline l) > 0) print l}'",
+                                 "awk '{print | \"sh\"}' cmds.txt"])
+def test_d1_scans_stdout_of_awk_programs_that_run_commands(cmd):
+    """An awk program that runs a failing subprocess and exits 0 hides its status; its stdout must stay scanned."""
+    row = {"event": "exec", "source": "model", "step": 1, "command": cmd, "exit": 0, "failed_cmds": 0,
+           "stdout": "make: *** [all] Error 2\n", "stderr": ""}
+    assert [f["evidence"] for f in core.audit([row])] == ["make: *** [all] Error 2"]
+    assert core.audit([{**row, "command": "awk '/BUILD ABORTED/{c++} c>=1' log"}]) == []
+
+
 def test_d1_ignores_failed_exits_harness_rows_and_reads():
     out = "make: *** [all] Error 2"
     rows = [{"event": "exec", "source": "model", "step": 1, "command": "make", "exit": 2, "stdout": out},
