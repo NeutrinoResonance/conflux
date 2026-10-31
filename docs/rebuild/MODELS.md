@@ -378,3 +378,13 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   fix in prose instead of a command block.
 - **It reads scratch effects as real** in 3/24 ("config is already done"), although told the agent's machine is unchanged.
 - Evidence: `~/evidence/verify-deliver-demo-2026-10-31/RESULTS.md`.
+
+## `kimi-k3` (low) revising its review over repeated scratch-verify rounds (C slice 54, offline + lab, 24 reviews, ≤ 3 more rounds)
+- **It sometimes finds a working sequence in the scratch, then loses it in the next rewrite.** At step 239, configures go
+  R3 6/12 → R4 4/12 → R5 3/12. One reply built the kernel with the driver at R4, and its R5 dropped all three fixes that
+  made it work.
+- **It writes each revision as a delta on the scratch's state, although told the scratch is reset before every run.**
+  Replies that use the build dir with no `nbconfig`: 5/22 → 8/20 → 9/18 over R3–R5.
+- **It masks its own build failures:** `nohup … &` or output sent to a log, so its blocks exit 0 while the build fails. 3/3
+  configured replies stopped on all-pass do this.
+- Evidence: `~/evidence/verify-iter-demo-2026-10-31/RESULTS.md`.

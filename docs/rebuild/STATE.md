@@ -11,6 +11,23 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **C slice 54 (2026-10-31, iterated verify-before-deliver demo, offline + lab, $0.012297 metered + ≈ $0.46 GCE): up to 3
+  more scratch-verify rounds on slice 53's R2. The scratch is reset per run, and the feedback says so. Each reply stops when
+  all its blocks exit 0. Registered rule falsified: S2 delivered configures 3/12 (R2 2/12), S1 2/12, 0 kernels delivered.**
+  - Rounds oscillate. S2 configures R3 6/12 → R4 4/12 → R5 3/12.
+    - One reply built the kernel with `optee.o` at R4 (F-S2-2), the first in slices 52–54.
+    - Its R5 dropped all three fixes that had worked in its R4 run.
+  - **Each revision is written as a delta on the scratch's state**, although the feedback says the scratch is reset:
+    - replies that use the build dir with no `nbconfig`: R3 5/22, R4 8/20, R5 9/18;
+    - 5 of them dropped a configure step that had worked in the previous round.
+  - **Exit status is a weak stop signal.** 3/3 configured replies delivered on all-pass hide a failed build (`nohup … &` ×2,
+    output to a log ×1). This is D1's masking class, in the reviewer's own commands.
+  - Scratch-only absences are 61–67% of failing blocks (image, `virt.dtb`, OP-TEE tree, QEMU, `/tmp` logs). It is a demo
+    fidelity limit: the run's daily NetBSD image cannot be rebuilt.
+  - Seams: $0 conversation seam 24/24. Feedback pre-flight passed every round. The lab instrument check reproduces slice 53.
+  - Billing: 60/60 export-matched. Other caller: 6 rows, $0.000390. Lab v54 deleted.
+  - **Second materially identical failure** (slices 53, 54: the review's rewritten text is the deliverable) → change hypothesis.
+  - Evidence: `~/evidence/verify-iter-demo-2026-10-31/RESULTS.md`.
 - **C slice 53 (2026-10-31, verify-before-deliver demo, offline + lab, $0.004922 metered + ≈ $0.17 GCE): the reviewer's
   shell blocks are run in a scratch copy and the results go back for one revision turn. The revision names the blocker but
   still does not configure. Registered rule falsified: S2 configures 2/12 after revision (0/12 before); S1 drops 4/12 → 2/12.**
@@ -527,13 +544,14 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. Iterated verify demo on slice 53's R2 replies.
-     - Rounds: each revision is itself run in the scratch and fed back, until a reply's blocks run with no failing block,
-       up to 3 rounds.
-     - The feedback tells the reviewer the scratch is reset before each round.
-     - Primary: S2 configures and builds per round. Secondary: the scratch-as-real rate.
-     - If iteration does not converge, change hypothesis: either the reviewer drives the scratch itself with tools (probe,
-       then prescribe), or a second, different model checks the revision before delivery.
+  1. Changed hypothesis (slice 54): deliver the executed sequence, not a rewrite.
+     - The reviewer (kimi-k3 low) works on a **persistent** scratch of the S1/S2 replayed trees, with a `run_shell` tool or
+       with blocks that are not reset between rounds.
+     - The delivered correction is the harness-recorded ordered list of commands that ran there (failed ones dropped by
+       the reviewer's own final selection). That list is replayed once on a fresh scratch before delivery.
+     - Primary: S2 delivered configures, and the kernel with `optee.o`, on a fresh replay (slice 54: 3/12, 0).
+     - Secondary: D1's masking check applied to the reviewer's commands as the stop signal, against exit codes alone.
+     - Alternative if that fails: a second, different model checks the sequence before delivery.
      - Generic rule only, cost-capped, pre-registered.
   2. Widen slice 52's veto finding before building a fresh-context running review: more recorded running-review states
      with standing orders (slices 43/50), L vs F, outcome = a reply that forbids a route the trace shows still live.
