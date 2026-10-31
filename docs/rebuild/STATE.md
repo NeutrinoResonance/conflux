@@ -11,6 +11,23 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **C slice 52 (2026-10-31, fresh-context review demo, offline + lab validation, $0.064569 metered + ≈ $0.08 GCE): a
+  fresh-context running review (core's finish-review protocol) does not give a better correction on slice 50's G7 stall.
+  Registered rule falsified: at step 206, K∧W is 2/6 for both arms. But the veto comes from the running lead's notes:
+  V 4/6 with them vs 0/6 fresh. No arm's correction configures and builds a kernel on the run's replayed tree.**
+  - States: review 56 (step 206; the live reply was the veto) and review 68 (step 239). Arms: L = running lead with its
+    recorded state; F = fresh lead. kimi-k3 low, 6 draws each. Seam: 593/593 recorded running-lead calls reproduced exactly.
+  - Step 206: fresh keeps the kernel route 6/6 (L 2/6). 3 of L's 4 vetoes order the executor to delete its in-tree files.
+  - Lab validation (harness-only, verbatim commands on the run's file writes replayed onto the snapshot's NetBSD tree; the
+    run's own 205/238 failures reproduce exactly):
+    - Step 206: 4 of the 7 distinct invocations configure (F1, F2, L2, L3). The build stops on the driver. The stale
+      step-202 copy is in the tree; with F2's own fix applied, `optee_modcmd` is defined only under `_MODULE`.
+    - Step 239: **0/13 configure**, although every draw gives `-s <tree>/sys`. The run's tree has a duplicate `files.fdt`
+      stanza (steps 202 + 236) and step 238's `sys/arch/…` include. 1/12 replies name the duplicate.
+  - Missing capability (Conflux, not the model): a reviewer's correction is never checked against the tree state before it
+    is delivered. Correct in text ≠ a working correction.
+  - Billing: 223/223 export-matched; no other caller's rows in the window. Lab v52 deleted.
+  - Evidence: `~/evidence/fresh-review-demo-2026-10-31/RESULTS.md` (`started.txt`, `seam.json`, `grades.json`, `lab/`).
 - **C slice 51 (2026-10-31, D1 read parsing, offline, $0): D1 now counts `tr`, `ps`, `tac`, `awk` segments as reads;
   slice 50's hits go 39 → 10 with all 8 real masking hits kept (supported).** The 2 remaining false positives are mixed
   read/write commands (step 54 `sed -i`, step 62 `cp` + `make`). Corpus check over 64 recorded traces: hits 119 → 88,
@@ -488,16 +505,18 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. Correction latency and lock-in on slice 50's G7 stall: the cause was named, but the working fix came at step 239, 36 steps after the first failed `nbconfig`,
-     and the lead vetoed its own route from step 206 on. Offline demo on the recorded trace at the states after steps
-     205 and 237. Does a fresh-context reviewer (no run-long notes; slice 48 tied the false DONE to those notes) keep the
-     built-in-kernel route and give a working `nbconfig` invocation? Compare with the live lead's recorded replies at
-     206 and 239. Then validate (verification, not a guess): execute each proposed invocation harness-only on a fresh lab
-     against the run's recorded tree changes; it must configure and build a kernel. Build only if the numbers support it.
-  2. Gate grading: copy the lab's `/tmp` and every job's output before `run_lab` stops the lab, or have core keep
+  1. Verify-before-deliver demo (correction self-check from runtime probes) on slice 52's replayed S2 tree:
+     - before a review's correction is injected, the harness executes the commands the reviewer prescribed (in a scratch
+       copy of the task tree on the lab);
+     - the reviewer then gets their output for one more turn.
+     - Primary: the share of corrections that configure (slice 52 baseline: 0/13). Arms: fresh vs running lead.
+     - Generic rule only: no developer-chosen command. Cost-capped, pre-registered.
+  2. Widen slice 52's veto finding before building a fresh-context running review: more recorded running-review states
+     with standing orders (slices 43/50), L vs F, outcome = a reply that forbids a route the trace shows still live.
+  3. Gate grading: copy the lab's `/tmp` and every job's output before `run_lab` stops the lab, or have core keep
      each run's QEMU logs. Then G6/G7 do not rest on re-executing boots alone.
-  3. History growth (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output compaction
+  4. History growth (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output compaction
      on the recorded traces before any core change.
-  4. Missing input (founder, non-blocking): is the Linux boot required for goal (a) when `task.txt` does not name it? The
+  5. Missing input (founder, non-blocking): is the Linux boot required for goal (a) when `task.txt` does not name it? The
      gate keeps G3 until it is answered. No review in slices 47–48 or 50 names the missing Linux boot. The completion gate
      also needs item E's held-out comparisons and an unmerged promotion PR to `main`.

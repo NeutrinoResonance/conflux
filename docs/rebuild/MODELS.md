@@ -350,7 +350,7 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
     ever", a standing order repeated through step 220.
   - Step 234: it named the cause ("attach requires the driver to be present during FDT autoconfig — i.e., built into the
     kernel").
-  - The exact working `nbconfig -s ~/netbsd-src/sys` argument came only at step 239, after 5 identical failures (203–205,
+  - The `nbconfig -s ~/netbsd-src/sys` argument (slice 52: right srcdir, but not enough on the run's tree) came only at step 239, after 5 identical failures (203–205,
     236–238), and was never delivered. Step 224's fix kept the wrong `-s`.
   - Diagnosis ≠ repair: no kernel was built, so the fix is unverified.
 - **Executor (`deepseek-v4-pro`), same run:** 8 real masking events (`build.sh … &`, then `sleep; tail log` with exit 0 on a
@@ -358,3 +358,14 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   `nbconfig` invocation 5 times.
 - Lead cost/latency: 68 reviews, 640 calls, per-call median 30 s (max 243 s); kimi-k3 $0.077203 billed, 126 cost-less replies
   unbilled. Evidence: `~/evidence/gate-run-2026-10-31/RESULTS.md` (`grade.json`, `d1-classified.json`, `run/run12/lead.jsonl`).
+
+## `kimi-k3` (low) running review: fresh context vs its run-long notes (C slice 52, offline, slice 50 states, 6 draws each)
+- **The veto comes from the notes:** at step 206 the lead with its recorded notes forbids the in-tree kernel route 4/6 (3 of the 4
+  also order the executor to delete its in-tree files). A fresh lead (core's finish-review protocol) vetoes 0/6 and keeps the
+  route 6/6.
+- **Fresh context does not make the correction right:** the working srcdir (`-s <tree>/sys`) appears 2/6 in both arms at
+  step 206. At step 239 all 12 replies give it, and 0/13 configure on the replayed run tree (live reply included). The tree
+  has a duplicate `files.fdt` stanza and a changed include, and only 1/12 replies name the duplicate. Neither arm reads back
+  the tree state before prescribing a command.
+- Fresh reviews are cheaper and faster: S1 median 165 s vs 297 s, 34 vs 60 calls. Evidence:
+  `~/evidence/fresh-review-demo-2026-10-31/RESULTS.md`.

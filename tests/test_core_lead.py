@@ -130,7 +130,8 @@ def test_goal_turns_on_later_reviews(tmp_path):
 
 def test_never_blocks_and_one_in_flight(tmp_path):
     lead = FakeLead(delay=0.15)
-    res, trace, seen, gaps, rows = go(tmp_path, lambda i: "shell", lead, steps=30, cadence=0.1, delay=0.02)
+    # 60 steps x 0.02 s: room for >= 3 reviews (a goal-turn review is 3 calls x 0.15 s) on a slow CI runner
+    res, trace, seen, gaps, rows = go(tmp_path, lambda i: "shell", lead, steps=60, cadence=0.1, delay=0.02)
     starts = [e for e in rows if e["event"] == "lead_start"]
     assert len(starts) >= 3 and lead.peak == 1
     assert max(gaps) < 0.1  # the executor never waited for a running review (step cap review comes after)
