@@ -35,6 +35,15 @@
 - `--lead kimi-k3` (C slice 49) adds the lead: it reviews every 300 s without blocking the executor (`lead.jsonl` next to
   `trace.jsonl`). On a task with no checks, finish and the step cap go to a fresh lead's finish review, and DONE ends the run
   `unverified`/`finish_review_done`. Grade that outcome outside the run.
+- With a lead, each running review is followed by a verify session (C slice 56, `core.Lead.verify`; off with
+  `--no-scratch`):
+  - The lead runs commands in a scratch: a private mount namespace held by `sleep infinity`, with an overlay of the live
+    `/home`. Upper dirs are under `/var/tmp/conflux-scratch/` (root-owned).
+  - The scratch's `/tmp` is private and empty, and `~/.conflux-jobs` is hidden.
+  - Writes outside `/home` and `/tmp` are **not** isolated.
+  - The first scratch installs `/etc/sudoers.d/zz-conflux-nopty` (`!use_pty`, as in slice 55's demo).
+  - Each scratch command is one lab job: about 13 s round trip even for `true`.
+  - At task end, `Steering.close` kills every scratch namespace (`killall`); the kill never targets the root namespace.
 - The core loop drives a lab with `python -m conflux.core run --lab <name> --workdir '~/optee-work' --lab-hours 4`:
   it runs `up`, waits for ssh, smokes, runs tasks in order, and always runs `stop`. Every command is a detached job in
   `~/.conflux-jobs/<id>/` on the lab (`cmd.sh`, `out`, `err`, `rc`), polled every 5 s over `gcloud compute ssh
