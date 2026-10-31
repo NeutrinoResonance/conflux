@@ -560,7 +560,8 @@ kill_ns() {  # every process in the scratch's mount namespace; fails closed: nev
 case $op in
   kill) kill_ns "$S" ;;
   killall) for d in "$R"/*/; do [ -d "$d" ] && kill_ns "${d%/}"; done; true ;;
-  rm) kill_ns "$S"; sudo -n rm -rf "$S" ;;
+  rm) kill_ns "$S"; sudo -n rm -rf "$S" "$S.holder.log"; [ ! -e "$S" ] ;;
+  purge) for d in "$R"/*/; do [ -d "$d" ] && kill_ns "${d%/}"; done; sudo -n rm -rf "$R"; [ ! -e "$R" ] ;;
   new)
     [ -f /etc/sudoers.d/zz-conflux-nopty ] || { echo 'Defaults !use_pty' > /tmp/zz-conflux-nopty &&
       sudo -n install -m 0440 /tmp/zz-conflux-nopty /etc/sudoers.d/zz-conflux-nopty &&
@@ -584,7 +585,7 @@ case $op in
     exec sudo -n -E nsenter -t "$p" -m -- sudo -n -E -u "$(id -un)" bash -c '
       w=$1; case $w in "~/"*) w=$HOME/${w#"~/"};; esac
       mkdir -p "$w" && cd "$w" || exit 97; exec bash -c "$2"' _ "$4" "$(echo "$3" | base64 -d)" </dev/null ;;
-  *) echo "usage: new|run|rm|kill|killall ID" >&2; exit 2 ;;
+  *) echo "usage: new|run|rm|kill|killall|purge ID" >&2; exit 2 ;;
 esac
 """
 
@@ -594,18 +595,26 @@ class ScratchError(RuntimeError):
 
 
 class LabScratch:
-    """Scratches on the lab behind `shell` (`lab_shell`); scratch commands run in the task `workdir`."""
+    """Scratches on the lab behind `shell` (`lab_shell`); scratch commands run in the task `workdir`. Teardown (`rm`,
+    `kill_all`, `purge`) goes through `teardown`, a shell whose deadline outlasts the task's (`run_lab`: + TEARDOWN_S),
+    so it still runs when the task ended on its deadline; a teardown that did not complete raises ScratchError."""
 
     describe = ("The scratch is a copy-on-write view of the machine as it is now: your writes under /home and /tmp stay "
                 "in the scratch (its /tmp starts empty); writes elsewhere (packages, /etc, mounts) also reach the "
                 "agent's machine.")
 
-    def __init__(self, shell: Shell, workdir: str):
-        self.shell, self.workdir = shell, workdir
+    def __init__(self, shell: Shell, workdir: str, teardown: Shell | None = None):
+        self.shell, self.workdir, self.teardown = shell, workdir, teardown or shell
 
-    def _op(self, *args: str, timeout: float = 300) -> dict:
-        return self.shell("exec bash -c " + shlex.quote(SCRATCH_SH) + " _ " + " ".join(map(shlex.quote, args)),
-                          timeout)
+    def _op(self, *args: str, timeout: float = 300, shell: Shell | None = None) -> dict:
+        return (shell or self.shell)("exec bash -c " + shlex.quote(SCRATCH_SH) + " _ "
+                                     + " ".join(map(shlex.quote, args)), timeout)
+
+    def _down(self, *args: str) -> None:
+        r = self._op(*args, shell=self.teardown)
+        if r["exit"] != 0:
+            raise ScratchError(f"scratch {' '.join(args)}: exit={r['exit']} timed_out={r['timed_out']} "
+                               f"{(r['stdout'] + r['stderr'])[-300:]}")
 
     def new(self, sid: str) -> None:
         r = self._op("new", sid, timeout=120)
@@ -617,22 +626,25 @@ class LabScratch:
         return self._op("run", sid, b64, self.workdir, timeout=timeout)
 
     def rm(self, sid: str) -> None:
-        self._op("rm", sid)
+        self._down("rm", sid)
 
     def kill_all(self) -> None:
-        self._op("killall", "-")
+        self._down("killall", "-")
+
+    def purge(self) -> None:
+        self._down("purge", "-")
 
 
 class LocalScratch:
-    """A scratch is a `cp -a` copy of the workdir (offline tests, local runs). `kill_all` kills running commands'
-    process groups."""
+    """A scratch is a `cp -a` copy of the workdir (offline tests, local runs). Every command starts its own process
+    group, kept per scratch until `rm` (background jobs outlive the command): `rm` and `kill_all` kill the groups."""
 
     describe = ("The scratch is a copy of the agent's workspace as it is now; paths outside the workspace are the "
                 "agent's machine.")
 
     def __init__(self, workdir: Path, root: Path):
         self.workdir, self.root = workdir, root
-        self.procs: set[subprocess.Popen] = set()
+        self.groups: dict[str, set[int]] = {}
         self.lock = threading.Lock()
 
     def new(self, sid: str) -> None:
@@ -648,40 +660,61 @@ class LocalScratch:
         t0 = time.monotonic()
         p = subprocess.Popen(["bash", "-c", _wrap(command)], cwd=self.root / sid, stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE, stdin=subprocess.DEVNULL, text=True, errors="replace",
-                             start_new_session=True)
+                             start_new_session=True, env={**os.environ, "CONFLUX_SCRATCH": self._mark(sid)})
         with self.lock:
-            self.procs.add(p)
+            self.groups.setdefault(sid, set()).add(p.pid)
         timed_out = False
         try:
             out, err = p.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
             timed_out = True
-            self._kill(p)
+            self._kill(p.pid)
             out, err = p.communicate()
-        finally:
-            with self.lock:
-                self.procs.discard(p)
         stderr, ps, nf = _split_pipestatus(err)
         killed = p.returncode is not None and p.returncode < 0
         return {"exit": None if timed_out or killed else p.returncode, "stdout": _clip(out), "stderr": _clip(stderr),
                 "pipestatus": ps, "failed_cmds": nf, "timed_out": timed_out or killed,
                 "duration_s": round(time.monotonic() - t0, 3)}
 
+    def _mark(self, sid: str) -> str:
+        return f"{self.root.resolve()}/{sid}"
+
     @staticmethod
-    def _kill(p: subprocess.Popen) -> None:
+    def _kill(pgid: int) -> None:
         try:
-            os.killpg(p.pid, signal.SIGKILL)
+            os.killpg(pgid, signal.SIGKILL)
         except ProcessLookupError:
             pass
 
+    def _kill_groups(self, sid: str, groups: set[int]) -> None:
+        """Kill the processes still in `groups` that carry this scratch's CONFLUX_SCRATCH marker (a group id may have
+        been reused by an unrelated process once all of its members ended)."""
+        mark = f"CONFLUX_SCRATCH={self._mark(sid)}".encode()
+        for proc in Path("/proc").glob("[0-9]*"):
+            try:
+                pgid = int((proc / "stat").read_text().rsplit(")", 1)[1].split()[2])
+                if pgid in groups and mark in (proc / "environ").read_bytes().split(b"\0"):
+                    os.kill(int(proc.name), signal.SIGKILL)
+            except (OSError, ValueError, IndexError):
+                continue
+
     def rm(self, sid: str) -> None:
-        subprocess.run(["rm", "-rf", str(self.root / sid)], check=False)
+        with self.lock:
+            groups = self.groups.pop(sid, set())
+        self._kill_groups(sid, groups)
+        subprocess.run(["rm", "-rf", str(self.root / sid)], check=True)
 
     def kill_all(self) -> None:
         with self.lock:
-            procs = list(self.procs)
-        for p in procs:
-            self._kill(p)
+            items = [(sid, set(gs)) for sid, gs in self.groups.items()]
+        for sid, gs in items:
+            self._kill_groups(sid, gs)
+
+    def purge(self) -> None:
+        with self.lock:
+            sids = list(self.groups)
+        for sid in sids:
+            self.rm(sid)
 
 
 def run_checks(checks: list[Check], shell: Shell) -> tuple[str | None, list[dict]]:
@@ -844,6 +877,7 @@ VERIFY_EXTRA = 10
 VERIFY_MAX_CALLS = 90
 VERIFY_CMD_TIMEOUT = 1800
 VERIFY_WALL_S = 6000
+TEARDOWN_S = 600         # run_lab: scratch teardown may run this long past the task deadline
 KILL_JOIN_S = 5         # Steering.close: kill scratch commands, wait this long, repeat while the review runs
 VERIFY_ASK = ("Before your reply reaches the agent, check it in a scratch copy of the lab machine. {describe} Run "
               "commands in the scratch with run_shell, as the agent would; the scratch keeps its state between your "
@@ -1011,6 +1045,7 @@ class Lead:
         self.stopped = False  # set when the task ends: no further call starts
         self.notes, self.goals, self.seen, self.calls = "", [], 0, 0
         self.convo: list = []
+        self.cancel_verify = False  # set while a finish review supersedes the running review (Steering)
 
     def _settled(self, step: int, turn: str, usd: float, kind: str, request_id: str | None) -> None:
         self.trace.write("lead_cost_resolved", role=self.role, step=step, turn=turn, cost_usd=usd, cost_kind=kind,
@@ -1117,7 +1152,7 @@ class Lead:
             new(sid)
             res = []
             for k, i in enumerate(ids, 1):
-                if self.stopped:
+                if self.stopped or self.cancel_verify:
                     raise _Stopped
                 c = cmds[i - 1]
                 r = scratch.run(sid, c["command"], c["timeout_s"])
@@ -1136,7 +1171,7 @@ class Lead:
                 if calls >= VERIFY_MAX_CALLS:
                     why = "max_calls"
                     break
-                if self.stopped:
+                if self.stopped or self.cancel_verify:
                     raise _Stopped
                 if not self.budget.admit(0.0) or not self.may_spend():
                     why = "budget"
@@ -1200,7 +1235,7 @@ class Lead:
                         elif len(cmds) >= limit:
                             tm["content"] = "command limit reached; command not run"
                         else:
-                            if self.stopped:
+                            if self.stopped or self.cancel_verify:
                                 raise _Stopped
                             t = min(t, VERIFY_CMD_TIMEOUT)
                             r = scratch.run(f"{tag}-s", cmd, t)
@@ -1254,7 +1289,7 @@ class Lead:
 
 
 class _Stopped(Exception):
-    """The task ended during a verify session: no delivery."""
+    """The task ended, or a finish review superseded the review, during a verify session: no delivery."""
 
 
 class Steering:
@@ -1278,7 +1313,7 @@ class Steering:
             self.lead.trace.write("lead_error", step=step, review=n, error=repr(e)[:500])
             text = None
         delivery = None
-        if text and self.scratch is not None and not self.lead.stopped:
+        if text and self.scratch is not None and not self.lead.stopped and not self.lead.cancel_verify:
             try:  # the review's correction is checked in a scratch before it reaches the executor (C slice 55)
                 delivery = self.lead.verify(step, self.scratch)
             except Exception as e:
@@ -1321,22 +1356,38 @@ class Steering:
                 self.lead.trace.write(event, step=step, review=self.reply[1])
             self.reply, self.inflight = None, False
 
-    def settle_for_finish(self, step: int) -> None:
-        """Before a finish review: the finish review supersedes an in-flight review's reply."""
-        self._drain(step, "lead_superseded")
-
-    def close(self, step: int) -> None:
-        """At the task's end, on every exit path: no new review or call starts; an in-flight call completes and is
-        accounted before the task's results are written."""
-        self.lead.stopped = True
+    def _cancel_scratch(self, step: int) -> None:
+        """While the review thread runs: kill its scratch commands (again, if one started after the last kill) so it
+        reaches a cancellation check promptly; an in-flight model call completes and is accounted."""
         while self.scratch is not None and self.thread is not None and self.thread.is_alive():
-            try:  # a running scratch command ends now (again, if one started after the last kill), so the join is prompt
+            try:
                 self.scratch.kill_all()
             except Exception as e:
                 self.lead.trace.write("lead_error", step=step, error=f"scratch kill_all: {e!r}"[:500])
                 break
             self.thread.join(KILL_JOIN_S)
+
+    def settle_for_finish(self, step: int) -> None:
+        """Before a finish review: the finish review supersedes an in-flight review's reply, and its verify session is
+        cancelled (no delivery)."""
+        self.lead.cancel_verify = True
+        try:
+            self._cancel_scratch(step)
+            self._drain(step, "lead_superseded")
+        finally:
+            self.lead.cancel_verify = False
+
+    def close(self, step: int) -> None:
+        """At the task's end, on every exit path: no new review or call starts; an in-flight call completes and is
+        accounted before the task's results are written."""
+        self.lead.stopped = True
+        self._cancel_scratch(step)
         self._drain(step, "lead_dropped")
+        if self.scratch is not None and self.n:
+            try:  # backstop: no scratch outlives its task (each session already removes its own)
+                self.scratch.purge()
+            except Exception as e:
+                self.lead.trace.write("lead_error", step=step, error=f"scratch purge: {e!r}"[:500])
 
 
 # ---------------------------------------------------------------- self-audit (work item F, D1)
@@ -1830,6 +1881,7 @@ def run_lab(tasks: list[Task], chat: Chat, budget: Budget, out: Path, name: str,
     try:
         subprocess.run(["devbox-lab", "up", name], check=True, capture_output=True, text=True, timeout=600)
         shell = lab_shell(remote or gcloud_remote(name), workdir, deadline, env=PROXY_ENV)
+        teardown = lab_shell(remote or gcloud_remote(name), workdir, deadline + TEARDOWN_S, env=PROXY_ENV)
         for _ in range(SSH_WAIT_TRIES):  # a fresh VM takes a while to accept ssh
             if shell("true", 60)["exit"] == 0 or time.monotonic() >= deadline:
                 break
@@ -1851,7 +1903,7 @@ def run_lab(tasks: list[Task], chat: Chat, budget: Budget, out: Path, name: str,
                 d = out / task.id
                 d.mkdir(parents=True, exist_ok=False)
                 res = run_task(task, chat, shell, Trace(d / "trace.jsonl"), budget, model, deadline,
-                               lead_call, lead_model, scratch=LabScratch(shell, workdir) if lead_call and scratch
+                               lead_call, lead_model, scratch=LabScratch(shell, workdir, teardown) if lead_call and scratch
                                else None)
                 results.append(res)
                 print(json.dumps(res), flush=True)

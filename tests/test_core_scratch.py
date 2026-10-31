@@ -5,9 +5,12 @@ receives the replayed commands verbatim."""
 
 import base64
 import json
+from pathlib import Path
 import subprocess
 import threading
 import time
+
+import pytest
 
 from conflux import core
 from conflux.core import Budget, Check, Lead, LocalScratch, Task, Trace, run_task
@@ -39,6 +42,8 @@ class ScriptedLead:
 
     def __call__(self, convo, timeout=None, tools=None):
         if tools is None:
+            if threading.current_thread() is threading.main_thread():  # a finish review (fresh lead)
+                return body(content="GOAL: g1\nfinish review\nDONE")
             return body(content=f"GOAL: g1\n{self.review}")
         with self.lock:
             self.verify_convos.append(json.loads(json.dumps(convo)))
@@ -253,8 +258,8 @@ def executor(n_shell, delay=0.05):
     return chat, seen, gaps
 
 
-def go(tmp_path, lead_call, n_shell, delay=0.05):
-    task = Task(id="t", goal=TASK, checks=[Check("true")], max_steps=200, max_usd=100.0)
+def go(tmp_path, lead_call, n_shell, delay=0.05, checks=(Check("true"),)):
+    task = Task(id="t", goal=TASK, checks=list(checks), max_steps=200, max_usd=100.0)
     trace = Trace(tmp_path / "trace.jsonl")
     chat, seen, gaps = executor(n_shell, delay)
     sc = LocalScratch(tmp_path / "w", tmp_path / "scr")
@@ -382,3 +387,76 @@ def test_verify_calls_are_reconciled_with_the_run(tmp_path):
     calls = core._billed_calls(tmp_path)
     assert [c["lead"] for c in calls] == ["lead:running:verify1", "lead:running:verify2"]
     assert all(c["usage"] and c["cost_kind"] == "billed" for c in calls)
+
+
+def test_finish_review_cancels_a_running_verify_session(tmp_path):
+    # Task without checks: finish goes to a fresh lead's finish review, which supersedes the running review. Its verify
+    # session (here inside a long scratch command) is cancelled, not waited for.
+    lead_call = ScriptedLead(run([("run_shell", {"command": "sleep 120", "timeout_s": 600})],
+                                 [("deliver", {"commands": [1]})]))
+    t0 = time.monotonic()
+    res, seen, gaps, lead_rows = go(tmp_path, lead_call, n_shell=10, delay=0.1, checks=())
+    assert time.monotonic() - t0 < 30
+    assert res["reason"] == "finish_review_done"
+    d = [r for r in lead_rows if r["event"] == "lead_deliver"]
+    assert len(d) == 1 and d[0]["why"] == "stopped"
+    assert [r["event"] for r in lead_rows].count("lead_superseded") == 1
+    assert not [r for r in lead_rows if r["event"] == "lead_inject"]
+    assert [c["cost_kind"] for c in (r for r in lead_rows if r["event"] == "lead_call" and r["turn"] == "verify1")] \
+        == ["billed"]  # the in-flight verify call was accounted
+    assert not any((tmp_path / "scr").iterdir())
+
+
+def test_local_scratch_kills_background_jobs_of_finished_commands(tmp_path):
+    for how in ("rm", "kill_all"):
+        (tmp_path / how).mkdir()
+        sc = scratch_for(tmp_path / how)
+        sc.new("s")
+        r = sc.run("s", "nohup sleep 3600 >/dev/null 2>&1 & echo $!", 30)
+        pid = int(r["stdout"].strip())
+        assert r["exit"] == 0 and Path(f"/proc/{pid}").exists()  # the launching shell has exited; the job runs on
+        getattr(sc, how)(*(["s"] if how == "rm" else []))
+        for _ in range(50):
+            if not Path(f"/proc/{pid}").exists() or "Z" in Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1][:3]:
+                break
+            time.sleep(0.1)
+        else:
+            raise AssertionError(f"{how}: background job {pid} still running")
+        sc.rm("s")
+
+
+def test_local_scratch_never_kills_a_reused_group_id(tmp_path):
+    sc = scratch_for(tmp_path)
+    sc.new("s")
+    other = subprocess.Popen(["sleep", "60"], start_new_session=True)
+    try:
+        sc.groups["s"] = {other.pid}  # as if the scratch's group id had been reused by an unrelated process
+        sc.rm("s")
+        assert other.poll() is None
+    finally:
+        other.kill()
+
+
+def test_lab_scratch_teardown_runs_after_the_task_deadline(tmp_path, monkeypatch):
+    shims = tmp_path / "bin"
+    shims.mkdir()
+    for name, body_ in SHIMS.items():
+        (shims / name).write_text("#!/bin/bash\n" + body_ + "\n")
+        (shims / name).chmod(0o755)
+    root = tmp_path / "scr"
+    monkeypatch.setenv("PATH", f"{shims}:/usr/bin:/bin")
+    monkeypatch.setenv("CONFLUX_SCRATCH_ROOT", str(root))
+    jobs = str(tmp_path / "w")
+    expired = core.lab_shell(core.local_remote, jobs, deadline=time.monotonic() - 1, poll_s=0.1)
+    live = core.lab_shell(core.local_remote, jobs, deadline=time.monotonic() + 120, poll_s=0.1)
+    (root / "x" / "up").mkdir(parents=True)
+    (root / "y" / "up").mkdir(parents=True)
+    with pytest.raises(core.ScratchError):  # a teardown that could not run is an error, never silent
+        core.LabScratch(expired, jobs).rm("x")
+    assert (root / "x").exists()
+    sc = core.LabScratch(expired, jobs, teardown=live)
+    sc.rm("x")
+    assert not (root / "x").exists() and (root / "y").exists()
+    sc.kill_all()
+    sc.purge()
+    assert not root.exists()

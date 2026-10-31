@@ -30,7 +30,13 @@ MISSION-STATUS: ACTIVE
     - The kill guard was made fail-closed.
     - Tries 2–3 pass every check. They cover isolation, a fresh replay → feedback → delivery, injection, cleanup,
       `kill_all`, close during a 900 s scratch command (161.8 s task), and the proxy.
-  - Tests: `tests/test_core_scratch.py` (17); full suite 873 passed.
+  - Critic round 1 (offline fixes, regression tests fail on the round-0 code):
+    - a finish review now cancels the running verify session;
+    - scratch teardown runs on its own shell, `deadline + TEARDOWN_S`, and its results are checked;
+    - `LocalScratch` kills a scratch's background jobs on `rm`, marker-checked;
+    - task end purges every lab scratch.
+    - The lab smoke ran before round 1; the teardown shell and `purge` are offline-tested only.
+  - Tests: `tests/test_core_scratch.py` (21); full suite passes.
   - Not measured: the live effect (gate run). Each scratch command is a lab job, about 13 s round trip.
   - Evidence: `~/evidence/core-scratch-2026-10-31/RESULTS.md`.
 - **C slice 55 (2026-10-31, executed-sequence delivery demo, lab, $0.034519 metered + ≈ $1.25 GCE): the reviewer works
