@@ -11,6 +11,28 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **C slice 53 (2026-10-31, verify-before-deliver demo, offline + lab, $0.004922 metered + ≈ $0.17 GCE): the reviewer's
+  shell blocks are run in a scratch copy and the results go back for one revision turn. The revision names the blocker but
+  still does not configure. Registered rule falsified: S2 configures 2/12 after revision (0/12 before); S1 drops 4/12 → 2/12.**
+  - Setup:
+    - R1 = slice 52's 24 recorded reviews.
+    - The harness runs every fenced shell block of a reply, each as its own `bash -o pipefail` script in the job cwd. The
+      scratch copy is the run's replayed tree on lab v53.
+    - The results go back as one fixed message; one turn gives R2. R1 and R2 are graded by execution on a fresh replayed tree.
+  - Diagnosis improves: at S2, R2 names the duplicate `files.fdt` stanza in 9/12 replies (slice 52 R1: 1/12).
+  - Working commands do not:
+    - Only 5/12 carry a dedup command in a shell block.
+    - The rewritten invocations bring new errors: cwd-relative paths (2), step 238's include kept (3), `-s` regressed (1).
+    - The redefinition remains in 4.
+    - The 2 that configure fail the build on `optee_modcmd` (the `_MODULE` guard).
+  - **Scratch read as real:** 3/24 R2 replies act as if the scratch run had happened on the agent's machine ("config is
+    already done"). The feedback says the machine is unchanged.
+  - Partial scratch: the OP-TEE tree and NetBSD image are absent. 4/24 add steps for tools missing only there.
+  - Seams: 24/24 recorded reviews replayed exactly ($0). Step 238's error reproduced on the lab. R1 configures exactly slice 52's set.
+  - Demo harness fault, caught before any paid call: the first launch's feedback said "no shell blocks" for every reply.
+    It was fixed, and a $0 pre-flight check was added.
+  - Billing: 24/24 export-matched. Other caller: 15 rows, $0.001299. Lab v53 deleted.
+  - Evidence: `~/evidence/verify-deliver-demo-2026-10-31/RESULTS.md` (`started.txt`, `seam.json`, `grades.json`, `out/`).
 - **C slice 52 (2026-10-31, fresh-context review demo, offline + lab validation, $0.064569 metered + ≈ $0.08 GCE): a
   fresh-context running review (core's finish-review protocol) does not give a better correction on slice 50's G7 stall.
   Registered rule falsified: at step 206, K∧W is 2/6 for both arms. But the veto comes from the running lead's notes:
@@ -505,12 +527,14 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. Verify-before-deliver demo (correction self-check from runtime probes) on slice 52's replayed S2 tree:
-     - before a review's correction is injected, the harness executes the commands the reviewer prescribed (in a scratch
-       copy of the task tree on the lab);
-     - the reviewer then gets their output for one more turn.
-     - Primary: the share of corrections that configure (slice 52 baseline: 0/13). Arms: fresh vs running lead.
-     - Generic rule only: no developer-chosen command. Cost-capped, pre-registered.
+  1. Iterated verify demo on slice 53's R2 replies.
+     - Rounds: each revision is itself run in the scratch and fed back, until a reply's blocks run with no failing block,
+       up to 3 rounds.
+     - The feedback tells the reviewer the scratch is reset before each round.
+     - Primary: S2 configures and builds per round. Secondary: the scratch-as-real rate.
+     - If iteration does not converge, change hypothesis: either the reviewer drives the scratch itself with tools (probe,
+       then prescribe), or a second, different model checks the revision before delivery.
+     - Generic rule only, cost-capped, pre-registered.
   2. Widen slice 52's veto finding before building a fresh-context running review: more recorded running-review states
      with standing orders (slices 43/50), L vs F, outcome = a reply that forbids a route the trace shows still live.
   3. Gate grading: copy the lab's `/tmp` and every job's output before `run_lab` stops the lab, or have core keep
