@@ -11,6 +11,25 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **C slice 50 (2026-10-30/31, gate run, $0.112770 metered + ≈ $2.87 GCE): core as built (5a4b8ff) ran the full task
+  unattended and ended `unverified`/`step_cap`. The fresh finish review said not DONE 7/7 (6 proposals + cap), all correctly:
+  no false DONE, H not falsified (n=1). Gate not met: G1 G2 G4 G6 = 4/7 (slice 43: 6, 4, 4).**
+  - Setup: fresh lab, `run12/task.txt` only, pro + `--lead kimi-k3`, 240 steps. The lead's init goal list again reads goal (a) as
+    NetBSD on OP-TEE. Linux was tried once as a fallback (no kernel banner): G3 unmet. **Gate-reason rejection 0/7**: no
+    review names the missing Linux boot.
+  - New executor path: it downloaded a NetBSD 11.99.9 release image instead of using the machine's NetBSD project
+    (untouched), and patched the DTB until NetBSD booted on the secure chain (G6).
+  - Driver: built only as `optee.kmod` (no kernel rebuilt: G5 unmet). About 60 steps went on securelevel blocking `modload`.
+    Single-user `modload` then worked (step 228), but a module loaded after boot never attaches to the FDT node: no optee0,
+    no /dev/tee0 (G7 unmet). The lead's reviews kept steering through it; none produced the fix.
+  - **Grading-instrument gap (missing evidence):** the run's boot logs were in `/tmp` and were cleared when the lab restarted after
+    `run_lab`'s stop. The trace never holds OP-TEE's secure UART. G6 rests on the grader re-running the run's own step-227
+    boot command with the secure UART sent to a file (`I/TC: OP-TEE version 4.11.0` … `switching to normal world boot`, then
+    NetBSD's single-user shell).
+  - Billing: 683/683 billed calls export-matched, 197 cost-less replies unbilled. Lead reviews: 68 (per-call median 30 s,
+    max 243 s). D1 audit hits 39 (unclassified). Deleted the idle c3 lab and its disk.
+  - Evidence: `~/evidence/gate-run-2026-10-31/RESULTS.md` (`started.txt`, `grade.json`, `grade.out`, `lab-logs.tgz`,
+    `reexec/`, `reconciled.json`).
 - **C slice 49 (2026-10-30, build, $0.000136 metered + $0 GCE): the measured lead and slice 48's stop rule are in core.**
   - `conflux/core.py` gained `Lead`, `Steering` and `run_task(lead_call=…)`, plus the CLI flag `run --lead kimi-k3`.
     - The running lead is kimi-k3 low: it reviews every 300 s without blocking, in the conversation layout, with prompts
@@ -450,15 +469,15 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. Toward the gate (lead + fresh finish review are in core since slice 49): a **gate run** on a fresh lab:
-     `task.txt` only, executor `deepseek-v4-pro`, `--lead kimi-k3`, 240 steps. Its grading script must copy the run's boot
-     logs (secure and normal UART, wherever the run wrote them) off the lab before the lab is deleted, so G6/G7 can be
-     re-executed independently. Delete the c3 disk.
-  2. Gate-reason rejection is unmeasured: no review (slices 47–48, 0/16 at s1@237) names the missing Linux boot. With
-     `task.txt` alone the lead reads goal (a) as OP-TEE firmware for NetBSD (slices 42/44/45). The gate run measures it; no
-     further goal-list variant (two materially identical failures).
+  1. Correction from other models on slice 50's G7 stall (steps 197–240: `modload` works, the driver never attaches, and
+     the lead keeps steering without a fix). Offline demo on the recorded trace: does a different model reading the
+     trace (glm-5.3 low, or kimi-k3 at another effort; never pro on pro) name a correct, testable cause and fix? That is
+     generic diagnosis, not a developer recipe. A developer's diagnosis of that stall is a grading reference only. Build
+     only if the numbers support it.
+  2. Gate grading: copy the lab's `/tmp` and every job's output before `run_lab` stops the lab, or have core keep
+     each run's QEMU logs. Then G6/G7 do not rest on re-executing boots alone.
   3. History growth (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output compaction
      on the recorded traces before any core change.
   4. Missing input (founder, non-blocking): is the Linux boot required for goal (a) when `task.txt` does not name it? The
-     gate keeps G3 until it is answered. Separately measured gap: the lead's probes never locate the machine's NetBSD
-     project (0/43, slice 45; = slice 33).
+     gate keeps G3 until it is answered. No review in slices 47–48 or 50 names the missing Linux boot. The completion gate
+     also needs item E's held-out comparisons and an unmerged promotion PR to `main`.
