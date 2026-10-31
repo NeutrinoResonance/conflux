@@ -19,15 +19,29 @@ MISSION-STATUS: ACTIVE
     review names the missing Linux boot.
   - New executor path: it downloaded a NetBSD 11.99.9 release image instead of using the machine's NetBSD project
     (untouched), and patched the DTB until NetBSD booted on the secure chain (G6).
-  - Driver: built only as `optee.kmod` (no kernel rebuilt: G5 unmet). About 60 steps went on securelevel blocking `modload`.
-    Single-user `modload` then worked (step 228), but a module loaded after boot never attaches to the FDT node: no optee0,
-    no /dev/tee0 (G7 unmet). The lead's reviews kept steering through it; none produced the fix.
+  - Driver: built only as `optee.kmod` (no kernel rebuilt: G5 unmet). About 60 steps went on securelevel blocking `modload`;
+    single-user `modload` then worked (step 228), but the module never attached (no optee0, /dev/tee0): G7 unmet.
+  - **The lead diagnosed it; the repair was never executed (correction proposed ≠ repair verified):**
+    - Step 201: the lead proposed building the driver into the kernel. The executor's `nbconfig` attempts (steps 203–205)
+      failed on the include path.
+    - Step 206: the lead's next review called that kernel work "scope-violating, no further in-tree writes ever". That
+      standing order held through step 220.
+    - Steps 224/234: the lead named the cause (a module loaded after boot never attaches to the FDT node; the driver must be
+      built in). Step 224's fix kept the wrong `-s ~/netbsd-src`, and the same `nbconfig` error repeated at steps 236–238.
+    - The right argument (`-s ~/netbsd-src/sys`) first came at step 239 (running review, never delivered: cap at 240) and
+      from the cap finish review.
+    - Remaining failure: the correction arrived too late and the lead vetoed its own route mid-run. Whether the fix builds
+      and attaches is unverified.
   - **Grading-instrument gap (missing evidence):** the run's boot logs were in `/tmp` and were cleared when the lab restarted after
     `run_lab`'s stop. The trace never holds OP-TEE's secure UART. G6 rests on the grader re-running the run's own step-227
     boot command with the secure UART sent to a file (`I/TC: OP-TEE version 4.11.0` … `switching to normal world boot`, then
     NetBSD's single-user shell).
+  - D1 hits 39, classified (`d1-classified.json`): 8 real masking in the model's own commands (`build.sh … &`, then
+    `sleep; tail log` shows the failed build with exit 0). 31 false positives: 29 log reads D1 does not parse as reads
+    (`tr '\r' '\n' < log | grep`, `wc -c`, echo headers), 1 source-text grep, 1 the model's own `|| echo` text.
+    **0 harness faults.**
   - Billing: 683/683 billed calls export-matched, 197 cost-less replies unbilled. Lead reviews: 68 (per-call median 30 s,
-    max 243 s). D1 audit hits 39 (unclassified). Deleted the idle c3 lab and its disk.
+    max 243 s). Deleted the idle c3 lab and its disk.
   - Evidence: `~/evidence/gate-run-2026-10-31/RESULTS.md` (`started.txt`, `grade.json`, `grade.out`, `lab-logs.tgz`,
     `reexec/`, `reconciled.json`).
 - **C slice 49 (2026-10-30, build, $0.000136 metered + $0 GCE): the measured lead and slice 48's stop rule are in core.**
@@ -469,15 +483,18 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. Correction from other models on slice 50's G7 stall (steps 197–240: `modload` works, the driver never attaches, and
-     the lead keeps steering without a fix). Offline demo on the recorded trace: does a different model reading the
-     trace (glm-5.3 low, or kimi-k3 at another effort; never pro on pro) name a correct, testable cause and fix? That is
-     generic diagnosis, not a developer recipe. A developer's diagnosis of that stall is a grading reference only. Build
-     only if the numbers support it.
-  2. Gate grading: copy the lab's `/tmp` and every job's output before `run_lab` stops the lab, or have core keep
+  1. ($0, before paid work) D1 read parsing: `tr … < log | grep`, `wc -c` and echo-header chains are reads (29/31
+     false positives in slice 50). Fix in `core.audit` with a regression test on slice 50's hits. No harness fault found.
+  2. Correction latency and lock-in on slice 50's G7 stall: the cause was named, but the working fix came at step 239, 36 steps after the first failed `nbconfig`,
+     and the lead vetoed its own route from step 206 on. Offline demo on the recorded trace at the states after steps
+     205 and 237. Does a fresh-context reviewer (no run-long notes; slice 48 tied the false DONE to those notes) keep the
+     built-in-kernel route and give a working `nbconfig` invocation? Compare with the live lead's recorded replies at
+     206 and 239. Then validate (verification, not a guess): execute each proposed invocation harness-only on a fresh lab
+     against the run's recorded tree changes; it must configure and build a kernel. Build only if the numbers support it.
+  3. Gate grading: copy the lab's `/tmp` and every job's output before `run_lab` stops the lab, or have core keep
      each run's QEMU logs. Then G6/G7 do not rest on re-executing boots alone.
-  3. History growth (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output compaction
+  4. History growth (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output compaction
      on the recorded traces before any core change.
-  4. Missing input (founder, non-blocking): is the Linux boot required for goal (a) when `task.txt` does not name it? The
+  5. Missing input (founder, non-blocking): is the Linux boot required for goal (a) when `task.txt` does not name it? The
      gate keeps G3 until it is answered. No review in slices 47–48 or 50 names the missing Linux boot. The completion gate
      also needs item E's held-out comparisons and an unmerged promotion PR to `main`.
