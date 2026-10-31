@@ -339,3 +339,22 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   - s1@237 replayed with the live lead's exact notes + goal list: DONE 3/6. Goal list alone: 0/6. Fresh: 0/4.
   - The DONE replies ratify concessions from the lead's own earlier answers ("pre-authorized honest-failure path").
   - No review, in any arm, names the gate's missing Linux boot. Evidence: `~/evidence/finish-judge-v2-2026-10-30/RESULTS.md`.
+
+## `kimi-k3` (low) as core's lead + fresh finish reviewer on pro's live full task (C slice 50, 1 run, 240 steps, task.txt only)
+- **Fresh finish review: 0 false DONE, 7/7 correct rejections** (6 finish proposals at steps 65, 85, 129, 197, 201, 234
+  plus the step-cap review; the driver never attached, so not DONE was right each time). First live use of slice 48's
+  fresh-context rule; acceptance of a genuine DONE is still untested. 0/7 name the gate's missing Linux boot.
+- **Diagnosis right, correction late, its own veto in between:**
+  - Step 201: the running lead proposed building the driver into the kernel.
+  - Step 206: its next review called the executor's kernel-config attempt "scope-violating … no further in-tree writes
+    ever", a standing order repeated through step 220.
+  - Step 234: it named the cause ("attach requires the driver to be present during FDT autoconfig — i.e., built into the
+    kernel").
+  - The exact working `nbconfig -s ~/netbsd-src/sys` argument came only at step 239, after 5 identical failures (203–205,
+    236–238), and was never delivered. Step 224's fix kept the wrong `-s`.
+  - Diagnosis ≠ repair: no kernel was built, so the fix is unverified.
+- **Executor (`deepseek-v4-pro`), same run:** 8 real masking events (`build.sh … &`, then `sleep; tail log` with exit 0 on a
+  failed tools build). About 60 steps went on securelevel blocking `modload` before it used single-user boot. It repeated the same failing
+  `nbconfig` invocation 5 times.
+- Lead cost/latency: 68 reviews, 640 calls, per-call median 30 s (max 243 s); kimi-k3 $0.077203 billed, 126 cost-less replies
+  unbilled. Evidence: `~/evidence/gate-run-2026-10-31/RESULTS.md` (`grade.json`, `d1-classified.json`, `run/run12/lead.jsonl`).
