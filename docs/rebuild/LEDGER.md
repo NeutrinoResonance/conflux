@@ -73,6 +73,7 @@ USD comes from provider responses or documented prices — never estimated silen
 | 2026-10-30 | Surplus chat (not Conflux) | `deepseek-v4-pro` 75 | — | — | 0.007401 | — | unattributed caller on the shared key in slice 49's smoke window (no call from the smoke) |
 | 2026-10-30/31 | Surplus chat | `deepseek-v4-pro` 169, `kimi-k3` 514 (683 billed; 197 cost-less replies unbilled) | 61622128 | 612390 | 0.112770 | — | C slice 50 gate run on lab g1 (task.txt only, pro + kimi-k3 lead, 240 steps; executor $0.035567, lead $0.077203; 23:22–07:19Z); 683/683 billed calls export-matched, tokens from the export; `~/evidence/gate-run-2026-10-31/reconciled.json` |
 | 2026-10-30/31 | Surplus chat (not Conflux) | `deepseek-v4-pro` 408, `kimi-k3` 10 | — | — | 0.039957 | — | unattributed caller on the shared key in slice 50's window (23:22–07:31Z; the 10 kimi-k3 rows, $0.001682, are unmatched to any run call and may be lead replies recorded without usage), counted against the weekly cap |
+| 2026-10-31 | Surplus chat | `kimi-k3` 223 calls (all billed in-reply) | 8501962 | 186571 | 0.064569 | — | C slice 52 fresh-context vs running-lead review demo (offline, slice 50 states S1/S2, 24 reviews, 08:24–08:45Z); 223/223 export-matched, no other caller's rows in the window; `~/evidence/fresh-review-demo-2026-10-31/reconciled.json` |
 
 C slice 1 rows are reconciled with the export by `python -m conflux.core reconcile` (`~/evidence/core-runs/2026-10-27-c1*/reconciled.json`;
 export total for 2026-10-27: 83 rows, $0.001372).
@@ -85,7 +86,7 @@ charge-bound estimates) are only admission-time bounds. They are replaced by bil
 $0.0108 Jev and $0.0207 rejected-request estimates were billed $0.000006 and $0. Account credit after these runs
 is $9.369476 (`/v1/buyer/me`).
 
-**Metered total: $3.172632** (sum of the USD column, not-Conflux rows included, plus the Jev fair-test decisions at their ≈$0.00028 estimate; the earlier $2.860537 line had fallen behind the rows)
+**Metered total: $3.237201** (sum of the USD column, not-Conflux rows included, plus the Jev fair-test decisions at their ≈$0.00028 estimate; the earlier $2.860537 line had fallen behind the rows)
 
 ## GCE lab VMs (week 2026-W44 cap $60)
 
@@ -128,5 +129,6 @@ Rate: n2d-standard-8 ≈ $0.338/h running (GCE list price, us-central1) + 100 GB
 | 2026-10-30 | `conflux-dev-lab-lp1` | 17:09:50–17:25:12, 17:26:13–17:43:00, 17:43:48–17:48:06, 17:49:20–18:17:38 (up issued → deleted; 2 stockouts 17:11Z, 17:15Z) | ≤ 1.08 | ≤ 0.38 | C slice 45 lead init-probe demo (4 fresh labs from the clean snapshot, one at a time, deleted; VMs existed ≈ 0.84 h) |
 | 2026-10-27/30 | `conflux-dev-lab-c3` disk | 2026-10-27 07:35Z → 2026-10-30 23:21Z (disk existed; deleted with the instance) | 87.8 (disk) | 1.23 | 100 GB pd-balanced at ≈ $0.014/h for its whole life (running hours above are compute only) |
 | 2026-10-30/31 | `conflux-dev-lab-g1` | 23:21:10–07:19:16 (run, core stopped it), 07:19:20–07:30:50 (grading, deleted) | ≈ 8.15 | ≈ 2.87 | C slice 50 gate run (fresh lab from the clean snapshot, graded, deleted) |
+| 2026-10-31 | `conflux-dev-lab-v52` | 08:27:01–08:41:28 (up issued → deleted) | ≈ 0.24 | ≈ 0.08 | C slice 52 harness-only validation of the reviews' `nbconfig` corrections on the replayed recorded tree (fresh lab from the clean snapshot, deleted) |
 
-**GCE lab total: ≤ $26.07** (no lab disk left)
+**GCE lab total: ≤ $26.15** (no lab disk left)
