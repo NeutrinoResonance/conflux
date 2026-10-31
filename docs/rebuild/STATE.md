@@ -11,7 +11,7 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
-- **C slice 59 (2026-10-31, build, $0 metered + ≈ $0.10 GCE): verify sessions run beside the review cadence.**
+- **C slice 59 (2026-10-31, build, $0.007675 metered + ≈ $0.10 GCE): verify sessions run beside the review cadence.**
   - `Steering` has two slots. Reviews keep the cadence (one in flight). A review that returns while no session is open
     opens one on its own thread; at most one session is open until its result is taken. The reply is injected when its
     review returns, the delivery later as its own message (no new prose). `Lead.verify(convo=…)` continues its own
@@ -23,9 +23,12 @@ MISSION-STATUS: ACTIVE
     - sessions never overlapped (17 reviews skipped);
     - the delivery came as its own message;
     - close during `sleep 900` took 179 s with no delivery; no scratch was left. Lab s59 deleted.
-  - Known mismatch, left as is: `VERIFY_ASK` still says "Before your reply reaches the agent". The reply now arrives
-    first. Changing that text is a prompt change; it is unmeasured.
-  - Evidence: `~/evidence/core-session-cadence-2026-10-31/RESULTS.md`.
+  - `VERIFY_ASK` was corrected after critic round 1. It no longer says "Before your reply reaches the agent"; it now says
+    the reply was sent and the commands arrive as a later message.
+    - Demo on slice 55's 24 R1 conversations, kimi-k3 low, first call: run_shell first 48/48 both before and after, 0
+      deliver-first and 0 no-tool, $0.007675.
+    - This is a first-turn proxy only: the effect on delivered outcomes is unmeasured.
+  - Evidence: `~/evidence/core-session-cadence-2026-10-31/RESULTS.md`, `~/evidence/verify-ask-text-demo-2026-10-31/RESULTS.md`.
 - **C slice 58 (2026-10-31, cadence-review demo, offline, $0.017903 metered + $0 GCE): running reviews on selected
   prefixes of slice 57's run reject its false proof. Registered rule supported: R∧Q 6/6 (a detection result on those
   prefixes, not a runtime cadence measurement). A session wall bound is ruled out.**

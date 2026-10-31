@@ -595,3 +595,9 @@ def test_deliver_text_without_reply():
     out = {"ids": [1], "note": None, "commands": [{"command": "true", "timeout_s": 60}], "replay_ok": True}
     text = core.deliver_text(None, out)
     assert text.startswith(core.PREFIX + core.DELIVER_HEAD) and "```bash\ntrue\n```" in text
+
+
+def test_verify_ask_does_not_claim_the_reply_is_held():
+    # C slice 59: the reply reaches the agent before the session; the ask must not say otherwise (PR #68 critic;
+    # wording measured in ~/evidence/verify-ask-text-demo-2026-10-31/RESULTS.md)
+    assert "Before your reply reaches" not in core.VERIFY_ASK and "has been sent to the agent" in core.VERIFY_ASK

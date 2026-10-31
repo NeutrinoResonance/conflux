@@ -879,13 +879,14 @@ VERIFY_CMD_TIMEOUT = 1800
 VERIFY_WALL_S = 6000
 TEARDOWN_S = 600         # run_lab: scratch teardown may run this long past the task deadline
 KILL_JOIN_S = 5         # Steering._drain: kill scratch commands, wait this long, repeat while a lead thread runs
-VERIFY_ASK = ("Before your reply reaches the agent, check it in a scratch copy of the lab machine. {describe} Run "
+VERIFY_ASK = ("Your reply has been sent to the agent, which keeps working meanwhile. Now check your correction in a "
+              "scratch copy of the lab machine. {describe} Run "
               "commands in the scratch with run_shell, as the agent would; the scratch keeps its state between your "
               f"commands (files, builds, background jobs). Each result is numbered [command #N]; you have at most "
               f"{VERIFY_MAX_CMDS} commands. When your correction works, call deliver with the numbers of the commands "
               "that, run in that order on a fresh copy of the machine, carry it out, and a note for the agent. The "
-              "harness re-runs exactly those commands on a fresh copy before delivery; the agent receives those "
-              "commands verbatim and your note.")
+              "harness re-runs exactly those commands on a fresh copy before delivery; the agent then receives those "
+              "commands verbatim and your note, as a later message.")
 REPLAY_FB = ("The harness re-ran your selected commands, in order, on a fresh copy of the machine. A command failed, "
              "so nothing was delivered. Results:\n\n{results}\n\nYour scratch is unchanged. Continue there "
              f"(up to {VERIFY_EXTRA} more commands), then call deliver again.")
