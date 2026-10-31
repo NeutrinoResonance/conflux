@@ -11,11 +11,15 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
-- **C slice 58 (2026-10-31, cadence-review demo, offline, $0.017903 metered + $0 GCE): reviews on the 300 s cadence
-  would have caught slice 57's false proof. Registered rule supported: R∧Q 6/6. A session wall bound is ruled out.**
+- **C slice 58 (2026-10-31, cadence-review demo, offline, $0.017903 metered + $0 GCE): running reviews on selected
+  prefixes of slice 57's run reject its false proof. Registered rule supported: R∧Q 6/6 (a detection result on those
+  prefixes, not a runtime cadence measurement). A session wall bound is ruled out.**
   - Setup: core's `Lead.ask` (frozen 44a70f8) on slice 57's recorded run, from its recorded review-1 state.
-    - Reviews start where `Steering.turn` would have started them: steps 11, 20, 29, 41, 48, plus 55 (after `PROOF.md`).
+    - Prefixes: steps 11, 20, 29, 41, 48 are the 300 s marks on the recorded turn times, assuming each review is back
+      before the next mark. Step 55 (after `PROOF.md`) is an off-cadence extra sample: the run was cut before the next mark.
     - 3 chains; kimi-k3 low; no verify session.
+    - Scheduling limit: chain 3's step-41 review took 325.1 s, but step 48's turn comes 301.9 s after step 41's. Under
+      `Steering.turn`'s in-flight guard, that chain's successor would have started at step 49, not step 48.
     - Seam: the init request is rebuilt exactly (only one recorded review exists).
   - At the false-proof states (steps 48 and 55): 6/6 replies reject the host simulator, `PROOF.md` and "VALIDATED" as proof,
     and direct the TF-A `SPD=opteed` + OP-TEE + U-Boot build toward a `secure=on` boot. None boots in that round (0/6 strict).
