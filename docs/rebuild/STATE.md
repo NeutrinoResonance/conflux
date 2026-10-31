@@ -11,6 +11,36 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **C slice 55 (2026-10-31, executed-sequence delivery demo, lab, $0.034519 metered + ≈ $1.25 GCE): the reviewer works
+  in a persistent scratch with `run_shell`, and delivers the recorded commands it selects, replayed on a fresh copy first.
+  Registered rule supported: S2 delivered configures 11/12 and builds the kernel with `optee.o` 9/12 (slice 54: 3/12, 0).
+  S1: 7/12 and 7/12.**
+  - Setup:
+    - Slice 52's 24 R1 conversations + one generic turn: `run_shell` on a per-session overlay scratch of the run's
+      replayed tree, plus `deliver(commands, note)`.
+    - The harness replays the selection verbatim on a fresh copy. One feedback turn if a replayed command fails.
+    - Grade = slice 53's grader on the final replay.
+  - The executed sequence carries the gain, not the feedback:
+    - first replay: S2 configures 12/12, S1 7/12;
+    - the feedback turn (used 16/24) raised kernels but not configures.
+    - Arms: F 6/6 configure + kernel at S2. L 5/6 configure, 3/6 kernel.
+  - Selection loss 2/24, both from a re-selection after a failed replay; slice 54 had 5 rewrites drop working steps.
+  - Still open:
+    - Running-lead veto: 4/6 L-S1 sessions deliver the module route (image mount + `modload`). It is guarded by
+      `if [ -f … ]`, so it exits 0 in the scratch and configures nothing.
+    - All-exit-0 replays that configure nothing: 5/20.
+    - D1 on 383 reviewer commands: 16 hits = 2 real masking (`nohup` build `&`), 14 false positives (8 printed source
+      text `return error;`).
+    - Whether the kernel attaches is unverified (no image in the scratch).
+  - Fidelity:
+    - seam 24/24; $0 tool-loop selftest;
+    - the lab instrument check reproduces slice 53's F-S1-2 / F-S2-1 grades exactly;
+    - scratch isolation probes pass.
+  - Billing: 365/365 billed replies export-matched; 27 cost-less replies unbilled; other caller 3 rows, $0.000517. Lab
+    v55 deleted.
+  - L-S2-5 ran 107 min. Its selection includes its own `sleep 1700`, and replay time is outside the wall cap. Checked
+    after an operator note: no stuck connection (the CLOSE-WAIT socket was an idle pooled one).
+  - Evidence: `~/evidence/exec-deliver-demo-2026-10-31/RESULTS.md`.
 - **C slice 54 (2026-10-31, iterated verify-before-deliver demo, offline + lab, $0.012297 metered + ≈ $0.46 GCE): up to 3
   more scratch-verify rounds on slice 53's R2. The scratch is reset per run, and the feedback says so. Each reply stops when
   all its blocks exit 0. Registered rule falsified: S2 delivered configures 3/12 (R2 2/12), S1 2/12, 0 kernels delivered.**
@@ -544,15 +574,13 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. Changed hypothesis (slice 54): deliver the executed sequence, not a rewrite.
-     - The reviewer (kimi-k3 low) works on a **persistent** scratch of the S1/S2 replayed trees, with a `run_shell` tool or
-       with blocks that are not reset between rounds.
-     - The delivered correction is the harness-recorded ordered list of commands that ran there (failed ones dropped by
-       the reviewer's own final selection). That list is replayed once on a fresh scratch before delivery.
-     - Primary: S2 delivered configures, and the kernel with `optee.o`, on a fresh replay (slice 54: 3/12, 0).
-     - Secondary: D1's masking check applied to the reviewer's commands as the stop signal, against exit codes alone.
-     - Alternative if that fails: a second, different model checks the sequence before delivery.
-     - Generic rule only, cost-capped, pre-registered.
+  1. Build slice 55's mechanism into core (the demo supports it; cite its `RESULTS.md`).
+     - When the lead's review gives a correction, it gets a scratch copy of the lab task tree with `run_shell` and
+       `deliver`, under a probe cap charged to the run.
+     - The selection is replayed on a fresh copy, and the executor receives those commands verbatim plus the note.
+     - On a lab, the scratch needs a mechanism: overlay namespaces as in `lab/scratch.sh`, or a copy of the workdir.
+     - Regression tests: selection order, fresh-replay feedback once, probe cap, trace and billing rows.
+     - Then measure it live on a gate run, which covers what this demo could not show: whether the kernel attaches.
   2. Widen slice 52's veto finding before building a fresh-context running review: more recorded running-review states
      with standing orders (slices 43/50), L vs F, outcome = a reply that forbids a route the trace shows still live.
   3. Gate grading: copy the lab's `/tmp` and every job's output before `run_lab` stops the lab, or have core keep

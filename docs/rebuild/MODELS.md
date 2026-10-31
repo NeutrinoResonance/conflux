@@ -388,3 +388,15 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
 - **It masks its own build failures:** `nohup … &` or output sent to a log, so its blocks exit 0 while the build fails. 3/3
   configured replies stopped on all-pass do this.
 - Evidence: `~/evidence/verify-iter-demo-2026-10-31/RESULTS.md`.
+
+## `kimi-k3` (low) probing in a persistent scratch with `run_shell`, delivering its executed commands (C slice 55, lab, 24 sessions)
+- **With a tool on a persistent scratch, it finds and keeps a working repair.**
+  - At step 239, its selected commands, replayed verbatim on a fresh copy, configure 11/12 and build the kernel with the
+    driver 9/12. As rewritten text (slices 53–54) they reached at most 3/12 configures and 0 kernels.
+  - Median per session: 15.5 commands, 16 calls, ≈ 29 min.
+- **Its selection is mostly faithful.** Commands that worked in the scratch were lost from the delivered list in 2/24
+  sessions. Both came from re-selecting after a failed replay, and both notes still claim "VERIFIED".
+- **It still masks its own builds:** `nohup … &`, then `tail log`, exits 0 on "1 error" (2 of 383 commands).
+  - Exit 0 on every replayed command is not proof: 5/20 such deliveries configure nothing.
+  - 4 of those 5 are `if [ -f image ]`-guarded module-route steps, carried from the running lead's veto (L arm at step 206).
+- Evidence: `~/evidence/exec-deliver-demo-2026-10-31/RESULTS.md`.
