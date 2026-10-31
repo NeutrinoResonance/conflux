@@ -1664,3 +1664,55 @@ def test_inject_after_finish_is_never_sent(tmp_path):
     chat = Scripted(resp(call("run_shell", {"command": "echo yes > ok.txt"})), resp(call("finish", {})))
     res, trace = run(task, chat, tmp_path)
     assert res["status"] == "accepted" and not [e for e in trace.events if e["event"] == "inject"]
+
+
+NGINX_403 = (b"<html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>"
+             b"\r\n</body>\r\n</html>\r\n")
+
+
+def _http(conn, status: str, body: bytes, ctype: str) -> None:
+    conn.sendall(f"HTTP/1.1 {status}\r\nContent-Type: {ctype}\r\nContent-Length: {len(body)}\r\nConnection: close"
+                 f"\r\n\r\n".encode() + body)
+    conn.close()
+
+
+def test_an_edge_403_page_is_waited_out_not_the_end_of_the_task(monkeypatch):
+    # C slice 57: one nginx `403 Forbidden` HTML page (0.28 s) ended the gate run `unverified provider_403` at step
+    # 55; the same request resent minutes later got 200 twice. A non-JSON 403 takes the availability backoff.
+    seen = []
+
+    def edge_then_ok(conn):
+        seen.append(1)
+        if len(seen) == 1:
+            _http(conn, "403 Forbidden", NGINX_403, "text/html")
+        else:
+            _http(conn, "200 OK", json.dumps({"choices": [{"message": {"role": "assistant", "content": "ok"}}]}).encode(),
+                  "application/json")
+    srv, url = _serve_once(edge_then_ok)
+    monkeypatch.setattr(core, "SURPLUS", url)
+    monkeypatch.setattr(core, "AVAILABILITY_BACKOFF_S", (0.1,))
+    try:
+        status, body, _ = core.surplus_post(httpx.Client(), "k", {"model": "m"}, timeout=10)
+    finally:
+        srv.close()
+    assert (status, len(seen)) == (200, 2), body
+    assert body["choices"][0]["message"]["content"] == "ok"
+
+
+def test_a_json_403_from_the_api_is_still_final(monkeypatch):
+    seen = []
+
+    def forbidden(conn):
+        seen.append(1)
+        _http(conn, "403 Forbidden", json.dumps({"error": {"code": "forbidden", "message": "key"}}).encode(),
+              "application/json")
+    srv, url = _serve_once(forbidden)
+    monkeypatch.setattr(core, "SURPLUS", url)
+    monkeypatch.setattr(core, "AVAILABILITY_BACKOFF_S", (0.1,))
+    try:
+        status, body, _ = core.surplus_post(httpx.Client(), "k", {"model": "m"}, timeout=10)
+    finally:
+        srv.close()
+    assert (status, len(seen)) == (403, 1)
+    assert not core._unavailable(status, body)
+    assert not core._unavailable(403, {"error": "forbidden"})  # a JSON string error is the API's answer too

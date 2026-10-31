@@ -146,6 +146,9 @@ gcloud compute instances stop  conflux-dev-worker-1 --zone us-central1-a
   per read) takes `surplus_post`'s availability backoff. Earlier lost attempts, which may be billed, come back in the
   body's `conflux_lost` and are settled from the export. A 2026-10-30 "hang" with sockets in CLOSE-WAIT was a demo
   deadlock: no thread was reading those idle keep-alive connections.
+- **Edge 403 (C slice 57):** Surplus's edge can return an nginx `403 Forbidden` HTML page (no JSON) for a request that
+  succeeds when resent minutes later. `surplus_post` waits it out like an outage; a JSON 403 stays final. On 2026-10-31
+  it came with a billing gap: no usage was recorded after 17:47:45Z, and replies after that carried no `buyer_cost_micro`.
 - **Holds:** Surplus holds each in-flight request's worst case (max output × price) in `credit_balance_usdc`; see
   `GET /v1/payments/balance` (`fiat_available_usdc`, `fiat_held_usdc`). A ~$0.45 `fiat_held_usdc` persisted with nothing
   in flight on 2026-10-29, and on 2026-10-30 `fiat_held` grew $1.87 → $4.10 with no request of ours in flight while
