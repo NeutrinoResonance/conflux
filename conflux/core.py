@@ -878,7 +878,7 @@ VERIFY_MAX_CALLS = 90
 VERIFY_CMD_TIMEOUT = 1800
 VERIFY_WALL_S = 6000
 TEARDOWN_S = 600         # run_lab: scratch teardown may run this long past the task deadline
-KILL_JOIN_S = 5         # Steering.close: kill scratch commands, wait this long, repeat while the review runs
+KILL_JOIN_S = 5         # Steering._drain: kill scratch commands, wait this long, repeat while a lead thread runs
 VERIFY_ASK = ("Before your reply reaches the agent, check it in a scratch copy of the lab machine. {describe} Run "
               "commands in the scratch with run_shell, as the agent would; the scratch keeps its state between your "
               f"commands (files, builds, background jobs). Each result is numbered [command #N]; you have at most "
@@ -908,18 +908,19 @@ DELIVER_TOOL = {"type": "function", "function": {
                    "required": ["commands"], "additionalProperties": False}}}
 
 
-def deliver_text(reply: str, delivery: dict | None) -> str:
+def deliver_text(reply: str | None, delivery: dict | None) -> str:
     """The message the executor receives: the review reply, then (when a selection was delivered) the note and the
-    replayed commands verbatim, in the selected order."""
+    replayed commands verbatim, in the selected order. Since C slice 59 a delivery arrives on its own (reply None):
+    the reply was injected when its review returned."""
     if not delivery:
-        return PREFIX + reply
-    parts = [PREFIX + reply]
+        return PREFIX + (reply or "")
+    parts = [reply] if reply else []
     if delivery.get("note"):
         parts.append(f"Note from your supervisor:\n{delivery['note']}")
     parts.append(DELIVER_HEAD)
     parts += [f"{j}. (timeout_s {c['timeout_s']})\n```bash\n{c['command']}\n```"
               for j, c in enumerate(delivery["commands"], 1)]
-    return "\n\n".join(parts)
+    return PREFIX + "\n\n".join(parts)
 
 
 def _clip_head(s: str, n: int) -> str:
@@ -1046,6 +1047,7 @@ class Lead:
         self.notes, self.goals, self.seen, self.calls = "", [], 0, 0
         self.convo: list = []
         self.cancel_verify = False  # set while a finish review supersedes the running review (Steering)
+        self.calls_lock = threading.Lock()
 
     def _settled(self, step: int, turn: str, usd: float, kind: str, request_id: str | None) -> None:
         self.trace.write("lead_cost_resolved", role=self.role, step=step, turn=turn, cost_usd=usd, cost_kind=kind,
@@ -1070,7 +1072,8 @@ class Lead:
             self.budget.observe({"model": self.model, "ts": time.time(), "usage": usage})
         self.budget.settle(0.0, c)
         self.on_cost(c)
-        self.calls += 1
+        with self.calls_lock:  # review and verify-session threads charge concurrently (C slice 59)
+            self.calls += 1
         return c, kind, usage
 
     def _turn(self, convo: list, step: int, turn: str, finish: bool) -> str | None:
@@ -1128,14 +1131,15 @@ class Lead:
         self.convo = convo  # the review conversation, final answer included (`verify` continues it)
         return text
 
-    def verify(self, step: int, scratch, wall_s: float = VERIFY_WALL_S) -> dict | None:
+    def verify(self, step: int, scratch, wall_s: float = VERIFY_WALL_S, convo: list | None = None) -> dict | None:
         """Continue the last review in a verify session (C slice 55): `run_shell` on a persistent scratch, then
         `deliver`; the selection is replayed on a fresh scratch. Returns {ids, note, commands, replay_ok} or None (no
         delivery: no deliver call, empty selection, stopped, budget, deadline, provider or scratch error). Every call
         is admitted, accounted and traced like a review turn; every scratch is removed on exit."""
         t_start = time.monotonic()
         tag = f"v{step}-{time.time_ns() % 16 ** 8:08x}"
-        msgs = list(self.convo) + [{"role": "user", "content": VERIFY_ASK.format(describe=scratch.describe)}]
+        msgs = list(self.convo if convo is None else convo) + [
+            {"role": "user", "content": VERIFY_ASK.format(describe=scratch.describe)}]
         cmds: list[dict] = []
         made: list[str] = []
         limit, forced, nudged, fb_used = VERIFY_MAX_CMDS, False, False, False
@@ -1294,8 +1298,10 @@ class _Stopped(Exception):
 
 class Steering:
     """The running lead, never blocking the executor (MISSION a594bbc). At each executor turn (`turn`) a finished
-    review's reply is appended to the messages first; then, if no review is in flight and CADENCE_S has passed since
-    the last one started (or none has), a review starts in a thread on a snapshot of the messages."""
+    review's reply, then a finished verify session's delivery, is appended to the messages; then, if no review is in
+    flight and CADENCE_S has passed since the last one started (or none has), a review starts in a thread on a snapshot
+    of the messages. A review that returns while no verify session is open opens one on its own thread (C slice 59:
+    a session no longer holds the review slot, slice 57/58); at most one session is open, until its result is taken."""
 
     def __init__(self, lead: Lead, cadence_s: float = CADENCE_S, scratch=None):
         self.lead, self.cadence_s, self.scratch = lead, cadence_s, scratch
@@ -1305,6 +1311,9 @@ class Steering:
         self.inflight = False  # a review started and its reply not yet taken
         self.started: float | None = None
         self.n = 0
+        self.session: threading.Thread | None = None
+        self.result: tuple | None = None  # (review, reviewed step, session wall s, delivery or None)
+        self.session_open = False  # a session started and its result not yet taken
 
     def _review(self, snapshot: list, step: int, n: int, t0: float) -> None:
         try:
@@ -1312,22 +1321,37 @@ class Steering:
         except Exception as e:  # a review thread must never take the run down; the executor goes on without it
             self.lead.trace.write("lead_error", step=step, review=n, error=repr(e)[:500])
             text = None
-        delivery = None
-        if text and self.scratch is not None and not self.lead.stopped and not self.lead.cancel_verify:
-            try:  # the review's correction is checked in a scratch before it reaches the executor (C slice 55)
-                delivery = self.lead.verify(step, self.scratch)
-            except Exception as e:
-                self.lead.trace.write("lead_error", step=step, review=n, error=repr(e)[:500])
+        convo = list(self.lead.convo)  # this review's conversation: only this thread writes it until it returns
         with self.lock:
-            self.reply = (text, n, step, time.monotonic() - t0, delivery)
+            self.reply = (text, n, step, time.monotonic() - t0)
+            verify = bool(text) and self.scratch is not None and not self.lead.stopped and not self.lead.cancel_verify
+            skipped = verify and self.session_open
+            if verify and not skipped:
+                self.session_open = True
+                self.session = threading.Thread(target=self._verify, args=(convo, step, n), daemon=True)
+                self.session.start()
+        if skipped:
+            self.lead.trace.write("lead_session_skipped", step=step, review=n)
+
+    def _verify(self, convo: list, step: int, n: int) -> None:
+        t0, delivery = time.monotonic(), None
+        try:  # the review's correction is checked in a scratch before it reaches the executor (C slice 55)
+            delivery = self.lead.verify(step, self.scratch, convo=convo)
+        except Exception as e:
+            self.lead.trace.write("lead_error", step=step, review=n, error=repr(e)[:500])
+        with self.lock:
+            self.result = (n, step, time.monotonic() - t0, delivery)
 
     def turn(self, messages: list, step: int) -> None:
-        # One critical section: a review is "in flight" until its reply is taken here, so a review finishing during
-        # this turn can never let a successor start (and overwrite its reply) before that reply is injected.
+        # One critical section: a review (session) is in flight (open) until its reply (result) is taken here, so one
+        # finishing during this turn can never let a successor start (and overwrite it) before it is injected.
         with self.lock:
             done, self.reply = self.reply, None
             if done is not None:
                 self.inflight = False
+            res, self.result = self.result, None
+            if res is not None:
+                self.session_open = False
             start = not self.inflight and not self.lead.stopped and (
                 self.started is None or time.monotonic() - self.started >= self.cadence_s)
             if start:
@@ -1335,44 +1359,57 @@ class Steering:
                 self.n += 1
                 self.started = time.monotonic()
         if done and done[0]:
-            content = deliver_text(done[0], done[4])
+            content = deliver_text(done[0], None)
             self.lead.hide.add(content)
             messages.append({"role": "user", "content": content})
-            self.lead.trace.write("lead_inject", step=step, review=done[1], reviewed_step=done[2],
-                                  review_s=round(done[3], 1), chars=len(done[0]),
-                                  delivered=done[4]["ids"] if done[4] else None)
+            self.lead.trace.write("lead_inject", step=step, kind="review", review=done[1], reviewed_step=done[2],
+                                  review_s=round(done[3], 1), chars=len(done[0]), delivered=None)
+        if res and res[3]:
+            content = deliver_text(None, res[3])
+            self.lead.hide.add(content)
+            messages.append({"role": "user", "content": content})
+            self.lead.trace.write("lead_inject", step=step, kind="delivery", review=res[0], reviewed_step=res[1],
+                                  session_s=round(res[2], 1), chars=len(content), delivered=res[3]["ids"])
         if start:
             snap = json.loads(json.dumps(messages))
             self.thread = threading.Thread(target=self._review, args=(snap, step, self.n, self.started), daemon=True)
             self.lead.trace.write("lead_start", step=step, review=self.n)
             self.thread.start()
 
+    def _alive(self) -> bool:
+        return any(t is not None and t.is_alive() for t in (self.thread, self.session))
+
     def _drain(self, step: int, event: str) -> None:
-        """Wait for an in-flight review (its call is accounted when it returns) and drop its reply."""
-        if self.thread is not None:
-            self.thread.join()
+        """While the review or session thread runs: kill the session's scratch commands (again, if one started after
+        the last kill) so it reaches a cancellation check promptly; an in-flight model call completes and is accounted.
+        Then drop an untaken reply and delivery. The caller has set `cancel_verify` or `stopped` first, so no new
+        session opens once the review thread has returned."""
+        while self._alive():
+            if self.scratch is not None and self.session is not None and self.session.is_alive():
+                try:
+                    self.scratch.kill_all()
+                except Exception as e:
+                    self.lead.trace.write("lead_error", step=step, error=f"scratch kill_all: {e!r}"[:500])
+                    for t in (self.thread, self.session):
+                        if t is not None:
+                            t.join()
+                    break
+            for t in (self.thread, self.session):
+                if t is not None:
+                    t.join(KILL_JOIN_S)
         with self.lock:
             if self.reply is not None:
                 self.lead.trace.write(event, step=step, review=self.reply[1])
-            self.reply, self.inflight = None, False
-
-    def _cancel_scratch(self, step: int) -> None:
-        """While the review thread runs: kill its scratch commands (again, if one started after the last kill) so it
-        reaches a cancellation check promptly; an in-flight model call completes and is accounted."""
-        while self.scratch is not None and self.thread is not None and self.thread.is_alive():
-            try:
-                self.scratch.kill_all()
-            except Exception as e:
-                self.lead.trace.write("lead_error", step=step, error=f"scratch kill_all: {e!r}"[:500])
-                break
-            self.thread.join(KILL_JOIN_S)
+            if self.result is not None:  # an open session, cancelled or finished, whose result is dropped
+                self.lead.trace.write(event, step=step, review=self.result[0], kind="session",
+                                      delivered=self.result[3]["ids"] if self.result[3] else None)
+            self.reply, self.inflight, self.result, self.session_open = None, False, None, False
 
     def settle_for_finish(self, step: int) -> None:
-        """Before a finish review: the finish review supersedes an in-flight review's reply, and its verify session is
-        cancelled (no delivery)."""
+        """Before a finish review: the finish review supersedes an in-flight review's reply, and an open verify
+        session is cancelled (no delivery)."""
         self.lead.cancel_verify = True
         try:
-            self._cancel_scratch(step)
             self._drain(step, "lead_superseded")
         finally:
             self.lead.cancel_verify = False
@@ -1381,7 +1418,6 @@ class Steering:
         """At the task's end, on every exit path: no new review or call starts; an in-flight call completes and is
         accounted before the task's results are written."""
         self.lead.stopped = True
-        self._cancel_scratch(step)
         self._drain(step, "lead_dropped")
         if self.scratch is not None and self.n:
             try:  # backstop: no scratch outlives its task (each session already removes its own)

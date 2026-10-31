@@ -275,10 +275,11 @@ def test_executor_receives_replayed_commands_and_is_never_blocked(tmp_path):
     res, seen, gaps, lead_rows = go(tmp_path, lead_call, n_shell=60)
     assert res["status"] == "accepted"
     injected = [m["content"] for m in seen[-1] if m["role"] == "user" and m["content"].startswith(core.PREFIX)]
-    assert len(injected) == 1 and "REVIEW-REPLY" in injected[0] and "echo FIX-1 > fix.txt" in injected[0]
-    assert "apply this" in injected[0]
-    inj = [r for r in lead_rows if r["event"] == "lead_inject"][0]
-    assert inj["delivered"] == [1]
+    # C slice 59: the reply arrives when its review returns; the delivery follows as its own message
+    assert len(injected) == 2 and "REVIEW-REPLY" in injected[0] and "echo FIX-1" not in injected[0]
+    assert "REVIEW-REPLY" not in injected[1] and "echo FIX-1 > fix.txt" in injected[1] and "apply this" in injected[1]
+    inj = [r for r in lead_rows if r["event"] == "lead_inject"]
+    assert [(r["kind"], r["delivered"]) for r in inj] == [("review", None), ("delivery", [1])]
     assert max(gaps) < 1.0  # the executor kept working during the 3 s of scratch commands (session + replay)
     assert res["lead_cost_usd"] > 0
     assert not any((tmp_path / "scr").iterdir())
@@ -293,7 +294,8 @@ def test_close_kills_a_running_scratch_command(tmp_path):
     assert res["status"] == "accepted"
     d = [r for r in lead_rows if r["event"] == "lead_deliver"][0]
     assert d["why"] == "stopped" and d["ids"] is None
-    assert not [r for r in lead_rows if r["event"] == "lead_inject"]
+    assert [r["kind"] for r in lead_rows if r["event"] == "lead_inject"] == ["review"]  # no delivery
+    assert [(r.get("kind"), r.get("delivered")) for r in lead_rows if r["event"] == "lead_dropped"] == [("session", None)]
     assert not any((tmp_path / "scr").iterdir())
 
 
@@ -400,8 +402,9 @@ def test_finish_review_cancels_a_running_verify_session(tmp_path):
     assert res["reason"] == "finish_review_done"
     d = [r for r in lead_rows if r["event"] == "lead_deliver"]
     assert len(d) == 1 and d[0]["why"] == "stopped"
-    assert [r["event"] for r in lead_rows].count("lead_superseded") == 1
-    assert not [r for r in lead_rows if r["event"] == "lead_inject"]
+    assert [(r.get("kind"), r.get("delivered")) for r in lead_rows if r["event"] == "lead_superseded"] \
+        == [("session", None)]
+    assert [r["kind"] for r in lead_rows if r["event"] == "lead_inject"] == ["review"]  # no delivery
     assert [c["cost_kind"] for c in (r for r in lead_rows if r["event"] == "lead_call" and r["turn"] == "verify1")] \
         == ["billed"]  # the in-flight verify call was accounted
     assert not any((tmp_path / "scr").iterdir())
@@ -417,7 +420,10 @@ def test_local_scratch_kills_background_jobs_of_finished_commands(tmp_path):
         assert r["exit"] == 0 and Path(f"/proc/{pid}").exists()  # the launching shell has exited; the job runs on
         getattr(sc, how)(*(["s"] if how == "rm" else []))
         for _ in range(50):
-            if not Path(f"/proc/{pid}").exists() or "Z" in Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1][:3]:
+            try:  # the job may be reaped between any two reads of /proc
+                if "Z" in Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1][:3]:
+                    break
+            except FileNotFoundError:
                 break
             time.sleep(0.1)
         else:
@@ -460,3 +466,132 @@ def test_lab_scratch_teardown_runs_after_the_task_deadline(tmp_path, monkeypatch
     sc.kill_all()
     sc.purge()
     assert not root.exists()
+
+
+# ---------------------------------------------------------------- C slice 59: sessions beside the review cadence
+
+class GatedLead:
+    """Reviews answer at once (their final turn with `review k`); verify calls run one scratch command, then deliver it. The verify
+    session of review k blocks on `gates[k]` (set to release it) before its first call."""
+
+    def __init__(self):
+        self.reviews, self.gates, self.verify_seen = 0, {}, []
+        self.lock = threading.Lock()
+        self.open_all = False
+
+    def release(self):
+        """Release every session, including those of later reviews (so `close` does not wait on a gate)."""
+        with self.lock:
+            self.open_all = True
+            for g in self.gates.values():
+                g.set()
+
+    def __call__(self, convo, timeout=None, tools=None):
+        if tools is None:
+            if not convo[-1]["content"].endswith((core.INIT_ASK, core.FINAL_ASK)):
+                return body(content="goal answer")
+            with self.lock:
+                self.reviews += 1
+                k = self.reviews
+                self.gates[k] = threading.Event()
+                if self.open_all:
+                    self.gates[k].set()
+            return body(content=f"GOAL: g1\nreview {k}")
+        last_review = next(m["content"] for m in reversed(convo) if m["role"] == "assistant"
+                           and m["content"].startswith("GOAL"))
+        k = int(last_review.split()[-1])
+        has_cmd = any(m["role"] == "tool" for m in convo)
+        if not has_cmd:
+            self.verify_seen.append(k)
+            assert self.gates[k].wait(20)
+            return body([tc(f"{k}a", "run_shell", command=f"echo FIX-{k} > fix{k}.txt")])
+        return body([tc(f"{k}b", "deliver", commands=[1], note=f"note {k}")])
+
+
+def steer(tmp_path, lead_call):
+    lead = Lead(lead_call, "kimi-k3", Budget(10.0), Trace(tmp_path / "lead.jsonl"), TASK, set())
+    return core.Steering(lead, cadence_s=0.0, scratch=scratch_for(tmp_path)), lead
+
+
+def turn_until(st, msgs, step, cond, timeout=20):
+    t0 = time.monotonic()
+    while not cond():
+        assert time.monotonic() - t0 < timeout
+        step += 1
+        st.turn(msgs, step)
+        time.sleep(0.02)
+    return step
+
+
+def injected(msgs):
+    return [m["content"] for m in msgs if m["role"] == "user" and m["content"].startswith(core.PREFIX)]
+
+
+def test_open_session_does_not_stop_reviews_and_never_two_sessions(tmp_path):
+    lead_call = GatedLead()
+    st, lead = steer(tmp_path, lead_call)
+    msgs = [{"role": "system", "content": "s"}, {"role": "user", "content": TASK}]
+    step = turn_until(st, msgs, 0, lambda: lead_call.verify_seen == [1])  # session 1 open, held at its gate
+    # reviews 2 and 3 return and are injected while session 1 is open; neither opens a session
+    step = turn_until(st, msgs, step, lambda: sum("review 3" in c for c in injected(msgs)) == 1)
+    assert st.session_open and lead_call.verify_seen == [1]
+    assert [c.split("\n")[-1] for c in injected(msgs)] == ["review 1", "review 2", "review 3"]
+    skipped = [e["review"] for e in lead.trace.events if e["event"] == "lead_session_skipped"]
+    assert 2 in skipped and 3 in skipped
+    lead_call.gates[1].set()  # session 1 delivers; its delivery arrives as its own message
+    step = turn_until(st, msgs, step, lambda: any("FIX-1" in c for c in injected(msgs)))
+    d1 = [c for c in injected(msgs) if "FIX-1" in c][0]
+    assert "note 1" in d1 and "review 1" not in d1
+    # a later review opens the next session (only one at a time ever)
+    step = turn_until(st, msgs, step, lambda: len(lead_call.verify_seen) == 2)
+    k = lead_call.verify_seen[1]
+    assert k > 3
+    lead_call.gates[k].set()
+    step = turn_until(st, msgs, step, lambda: any(f"FIX-{k}" in c for c in injected(msgs)))
+    lead_call.release()
+    st.close(step)
+    ends = [e["why"] for e in lead.trace.events if e["event"] == "lead_deliver"]
+    assert ends in (["delivered", "delivered"], ["delivered", "delivered", "stopped"])  # a 3rd may open before close
+    inj = [e for e in lead.trace.events if e["event"] == "lead_inject" and e["kind"] == "delivery"]
+    assert [e["review"] for e in inj] == [1, k]
+
+
+def test_session_continues_its_own_reviews_conversation(tmp_path):
+    # The session thread gets its review's conversation; a later review replaces `lead.convo` while it runs.
+    lead_call = ScriptedLead(run([("deliver", {"commands": []})]))
+    lead, _ = lead_for(tmp_path, lead_call)
+    own = [{"role": "system", "content": core.LEAD_SYSTEM}, {"role": "user", "content": "data"},
+           {"role": "assistant", "content": "REVIEW-1"}]
+    lead.verify(1, scratch_for(tmp_path), convo=own)
+    assert lead_call.verify_convos[0][:3] == own and "R1" not in json.dumps(lead_call.verify_convos[0])
+
+
+def test_finish_and_close_drop_an_open_session_and_a_review(tmp_path):
+    for how in ("finish", "close"):
+        d = tmp_path / how
+        d.mkdir()
+        lead_call = GatedLead()
+        st, lead = steer(d, lead_call)
+        msgs = [{"role": "system", "content": "s"}, {"role": "user", "content": TASK}]
+        turn_until(st, msgs, 0, lambda: lead_call.verify_seen == [1])
+        t0 = time.monotonic()
+        threading.Timer(0.5, lead_call.gates[1].set).start()  # the session's call returns; it must not deliver
+        (st.settle_for_finish if how == "finish" else st.close)(99)
+        assert time.monotonic() - t0 < 15 and not st._alive()
+        assert not st.session_open and not st.inflight and st.result is None and st.reply is None
+        rows_ = [e for e in lead.trace.events if e["event"] == "lead_deliver"]
+        assert [e["why"] for e in rows_] == ["stopped"]
+        assert not any(e["event"] == "lead_inject" and e.get("kind") == "delivery" for e in lead.trace.events)
+        if how == "finish":
+            assert not lead.cancel_verify
+            n = lead_call.reviews
+            st.turn(msgs, 100)  # after the finish review the running lead goes on
+            turn_until(st, msgs, 100, lambda: lead_call.reviews > n)
+            lead_call.release()
+            st.close(200)
+
+
+def test_deliver_text_without_reply():
+    out = {"ids": [1], "note": None, "commands": [{"command": "true", "timeout_s": 60}], "replay_ok": True}
+    text = core.deliver_text(None, out)
+    assert text.startswith(core.PREFIX + core.DELIVER_HEAD) and "```bash\ntrue\n```" in text

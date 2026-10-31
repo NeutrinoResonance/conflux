@@ -35,8 +35,9 @@
 - `--lead kimi-k3` (C slice 49) adds the lead: it reviews every 300 s without blocking the executor (`lead.jsonl` next to
   `trace.jsonl`). On a task with no checks, finish and the step cap go to a fresh lead's finish review, and DONE ends the run
   `unverified`/`finish_review_done`. Grade that outcome outside the run.
-- With a lead, each running review is followed by a verify session (C slice 56, `core.Lead.verify`; off with
-  `--no-scratch`):
+- With a lead, a running review that returns while no verify session is open opens one (C slice 56, `core.Lead.verify`;
+  off with `--no-scratch`). Since C slice 59 the session runs on its own thread beside the review cadence: the reply is
+  injected when its review returns, the delivery later as its own message; at most one session is open at a time.
   - The lead runs commands in a scratch: a private mount namespace held by `sleep infinity`, with an overlay of the live
     `/home`. Upper dirs are under `/var/tmp/conflux-scratch/` (root-owned).
   - The scratch's `/tmp` is private and empty, and `~/.conflux-jobs` is hidden.

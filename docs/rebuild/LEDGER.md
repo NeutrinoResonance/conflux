@@ -144,5 +144,6 @@ Rate: n2d-standard-8 ≈ $0.338/h running (GCE list price, us-central1) + 100 GB
 | 2026-10-31 | `conflux-dev-lab-v55` | 11:43:15–15:16:59 (up issued → delete issued) | ≈ 3.56 | ≈ 1.25 | C slice 55 executed-sequence delivery demo: base layers + instrument check + 24 reviewer sessions with replays and grader builds (fresh lab from the clean snapshot, deleted) |
 | 2026-10-31 | `conflux-dev-lab-s56` ×3 | 15:47:45–15:49:55, 15:52:24–16:13:13, 16:24:02–16:36:11 (up issued → delete issued) | ≈ 0.60 | ≈ 0.21 | C slice 56 lab smoke of core's scratch-verified delivery, scripted models ($0 metered): try 1 harness fault (fixed), tries 2–3 pass (fresh labs from the clean snapshot, deleted) |
 | 2026-10-31 | `conflux-dev-lab-g2` | ≈ 17:21:35–18:00:11 (up issued → deleted; core stopped it 17:56:58) | ≈ 0.64 | ≈ 0.23 | C slice 57 gate run (fresh lab from the clean snapshot; ended at step 55 on a provider 403; deleted) |
+| 2026-10-31 | `conflux-dev-lab-s59` | 19:51:55–20:08:56 (up issued → delete issued) | ≈ 0.29 | ≈ 0.10 | C slice 59 lab smoke of sessions beside the review cadence, scripted models ($0 metered; fresh lab from the clean snapshot, deleted) |
 
-**GCE lab total: ≤ $28.47** (no lab disk left)
+**GCE lab total: ≤ $28.57** (no lab disk left)
