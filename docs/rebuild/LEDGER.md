@@ -80,8 +80,9 @@ USD comes from provider responses or documented prices — never estimated silen
 | 2026-10-31 | Surplus chat (not Conflux) | `kimi-k3` 6 | — | — | 0.000390 | — | unattributed caller on the shared key in slice 54's window (09:52–11:10Z; input 3,982–35,132 tokens, every demo call ≥ 36,993), counted against the weekly cap |
 | 2026-10-31 | Surplus chat | `kimi-k3` 392 calls (365 billed in-reply, 27 cost-less and unbilled) | 18351289 | 115815 | 0.034519 | — | C slice 55 executed-sequence delivery demo (lab; 24 reviewer sessions with `run_shell` on a persistent scratch + `deliver`, 11:57–14:45Z); 365/365 export-matched, 27 without an export row (unbilled, $0); `~/evidence/exec-deliver-demo-2026-10-31/rec/reconciled.json` |
 | 2026-10-31 | Surplus chat (not Conflux) | `deepseek-v4-pro` 1, `kimi-k3` 2 | — | — | 0.000517 | — | unattributed caller on the shared key in slice 55's window (11:55–14:50Z; input 322, 519 and 35,620 tokens (the last is deepseek-v4-pro); no demo call matches), counted against the weekly cap |
-| 2026-10-31 | Surplus chat | `deepseek-v4-pro` 41, `kimi-k3` 37 (export-matched) | — | — | 0.005915 | — | C slice 57 gate run, ended `provider_403` at step 55; 78/78 export-matched (`~/evidence/gate-run-s57-2026-10-31/run/reconciled.json`). **Pending, unsettled:** 13 cost-less pro replies (steps 18, 43–54) + 5 diagnosis calls (2 probes 17:57Z, 3 step-54/55 replays 17:59Z); Surplus shows no usage after 17:47:45Z (export and `recent_usage`) |
+| 2026-10-31 | Surplus chat | `deepseek-v4-pro` 41, `kimi-k3` 37 (export-matched) | — | — | 0.005915 | — | C slice 57 gate run, ended `provider_403` at step 55; 78/78 export-matched (`~/evidence/gate-run-s57-2026-10-31/run/reconciled.json`). **Settled in slice 58:** the 13 cost-less pro replies (steps 18, 43–54) and the 5 diagnosis calls (2 probes 17:57Z, 3 step-54/55 replays 17:59Z) are unbilled, $0. The export resumed (rows to 18:58:38Z) but has no row in 17:47:46–18:20Z (`~/evidence/cadence-review-demo-2026-10-31/settle57.json`) |
 | 2026-10-31 | Surplus chat (not Conflux) | `kimi-k3` 2 | — | — | 0.000192 | — | unmatched rows in slice 57's window (17:20–18:20Z); probably the run's 2 lead replies without usage, recorded as in slice 50 |
+| 2026-10-31 | Surplus chat | `kimi-k3` 120 calls (47 billed in-reply, 73 cost-less and unbilled) | 1887925 | 114236 | 0.017903 | — | C slice 58 cadence-review demo (offline: 3 chains × 6 running reviews on slice 57's recorded run, 18:39–19:00Z); 47/47 export-matched; available + held Δ $0.017903 (18:39:44Z → 19:15:30Z); no other caller's rows in 18:38:52–19:20Z; `~/evidence/cadence-review-demo-2026-10-31/reconciled.json` |
 
 C slice 1 rows are reconciled with the export by `python -m conflux.core reconcile` (`~/evidence/core-runs/2026-10-27-c1*/reconciled.json`;
 export total for 2026-10-27: 83 rows, $0.001372).
@@ -94,7 +95,7 @@ charge-bound estimates) are only admission-time bounds. They are replaced by bil
 $0.0108 Jev and $0.0207 rejected-request estimates were billed $0.000006 and $0. Account credit after these runs
 is $9.369476 (`/v1/buyer/me`).
 
-**Metered total: $3.297252** (sum of the USD column, not-Conflux rows included, plus the Jev fair-test decisions at their ≈$0.00028 estimate; the earlier $2.860537 line had fallen behind the rows; slice 55 adds $0.035036, slice 57 $0.006107 + pending)
+**Metered total: $3.315155** (sum of the USD column, not-Conflux rows included, plus the Jev fair-test decisions at their ≈$0.00028 estimate; the earlier $2.860537 line had fallen behind the rows; slice 55 adds $0.035036, slice 57 $0.006107 (its pending replies settled unbilled, $0), slice 58 $0.017903)
 
 ## GCE lab VMs (week 2026-W44 cap $60)
 

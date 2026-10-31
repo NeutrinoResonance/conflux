@@ -400,3 +400,13 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   - Exit 0 on every replayed command is not proof: 5/20 such deliveries configure nothing.
   - 4 of those 5 are `if [ -f image ]`-guarded module-route steps, carried from the running lead's veto (L arm at step 206).
 - Evidence: `~/evidence/exec-deliver-demo-2026-10-31/RESULTS.md`.
+
+## `kimi-k3` (low) as the running lead on the 300 s cadence over a false-proof run (C slice 58, offline, 3 chains × 6 reviews)
+- **It rejects a fabricated proof:** at slice 57's false-proof states (host `optee_simulator` "11 passed", `PROOF.md`,
+  "VALIDATED"), 6/6 replies say it is not proof and direct the real TF-A `SPD=opteed` + OP-TEE + U-Boot firmware build toward a
+  `secure=on` boot. None boots in the same round: the boot comes after the builds.
+- **Its spec is wrong, 18/18:** every reply claims NetBSD has an in-tree `sys/dev/tee/` OP-TEE driver to enable. Neither the machine's
+  tree nor upstream trunk has one (GitHub `NetBSD/src` `sys/dev/tee`: 404 on 2026-10-31). 0/18 look for the machine's own NetBSD project; they direct a GitHub clone and image downloads.
+- Review wall median 192 s, max 325 s (2/18 over 300 s, as its goal list grows to 8–9 goals).
+- Evidence: `~/evidence/cadence-review-demo-2026-10-31/RESULTS.md`.
+
