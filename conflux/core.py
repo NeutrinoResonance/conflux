@@ -961,7 +961,11 @@ class Steering:
 FAIL_TEXT = re.compile(r"(?im)^.*\b(error|failed|fatal|cannot|can't|no such file|not found|denied|"
                        r"undefined reference|traceback|exception|\*\*\*)\b.*$")
 BENIGN_TEXT = re.compile(r"(?i)^\s*MAKECONF file:.*\(File not found\)\s*$")  # NetBSD build.sh banner, every run
-READ_ONLY = re.compile(r"^(cat|head|tail|sed -n|less|grep|rg|ls|find|wc|stat|file|readlink|du|df|echo|pwd|which|"
+# awk is a read only when its whole program is inline and cannot run commands: no system(), no `|` (command pipes;
+# _scan already split the unquoted ones off, so a `|` left in the segment is inside the program), and no program
+# source D1 cannot see (`-f`/`--file`, gawk `-E`/`--exec`, `-i`/`--include`, `@include`).
+READ_ONLY = re.compile(r"^(cat|head|tail|sed -n|less|grep|rg|ls|find|wc|stat|file|readlink|du|df|echo|pwd|which|ps|tr|tac|"
+                       r"awk(?![^|]*(\bsystem\s*\(|\||\s-[a-zA-Z]*[fEi]|\s--(file|exec|include)|@include))|"
                        r"type|command -v|git( -[cC] \S+)* (log|show|diff|status|branch|remote|rev-parse|ls-files)|"
                        r"apt(-cache)? (search|show|list|policy)|dpkg (-l|-s|-L)|od|xxd|hexdump|"
                        r"(\S*/)?([\w.]+-)*(objdump|readelf|nm|strings)|(\S*/)?[\w.-]*make( \S+)* -n|sleep)\b")

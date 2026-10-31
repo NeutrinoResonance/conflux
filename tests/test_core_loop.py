@@ -1173,6 +1173,36 @@ def test_d1_flags_exactly_the_masked_failures_of_the_demo_traces(case):
     assert [f["step"] for f in findings] == ([case["step"]] if case["expect"] == "hit" else [])
 
 
+D1_SLICE50 = json.loads((FIXTURES / "audit_d1_slice50.json").read_text())["cases"]
+
+
+@pytest.mark.parametrize("case", D1_SLICE50, ids=lambda c: f"s50:{c['step']}:{c['class']}")
+def test_d1_slice50_log_reads_are_not_flagged_and_real_masking_is(case):
+    """Slice 50: 29 of 31 false positives were `tr '\\r' '\\n' < log`, `ps aux` and `tac | awk` reads."""
+    assert [f["step"] for f in core.audit([case["row"]])] == ([case["step"]] if case["expect"] == "hit" else [])
+
+
+def test_d1_keeps_stderr_diagnostics_of_filter_reads():
+    row = {"event": "exec", "source": "model", "step": 1, "command": "tr '\\r' '\\n' < /missing.log | grep -a x",
+           "exit": 0, "stdout": "", "stderr": "bash: /missing.log: No such file or directory\n"}
+    assert [f["evidence"] for f in core.audit([row])] == ["bash: /missing.log: No such file or directory"]
+    assert core.audit([{**row, "stdout": "fatal error: in the log\n", "stderr": ""}]) == []
+
+
+@pytest.mark.parametrize("cmd", ["awk 'BEGIN{system(\"make 2>&1\"); exit 0}'",
+                                 "awk 'BEGIN{while ((\"make 2>&1\" | getline l) > 0) print l}'",
+                                 "awk '{print | \"sh\"}' cmds.txt",
+                                 "awk -f build.awk", "awk -v x=1 -f build.awk log", "awk --file=build.awk",
+                                 "gawk -E build.awk", "awk -i lib.awk '{print}' log", "awk '@include \"b.awk\"'"])
+def test_d1_scans_stdout_of_awk_programs_that_run_commands(cmd):
+    """An awk program that runs (or may run, from a file D1 cannot see) a failing subprocess and exits 0 hides its
+    status; its stdout must stay scanned."""
+    row = {"event": "exec", "source": "model", "step": 1, "command": cmd, "exit": 0, "failed_cmds": 0,
+           "stdout": "make: *** [all] Error 2\n", "stderr": ""}
+    assert [f["evidence"] for f in core.audit([row])] == ["make: *** [all] Error 2"]
+    assert core.audit([{**row, "command": "awk '/BUILD ABORTED/{c++} c>=1' log"}]) == []
+
+
 def test_d1_ignores_failed_exits_harness_rows_and_reads():
     out = "make: *** [all] Error 2"
     rows = [{"event": "exec", "source": "model", "step": 1, "command": "make", "exit": 2, "stdout": out},

@@ -11,6 +11,11 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **C slice 51 (2026-10-31, D1 read parsing, offline, $0): D1 now counts `tr`, `ps`, `tac`, `awk` segments as reads;
+  slice 50's hits go 39 → 10 with all 8 real masking hits kept (supported).** The 2 remaining false positives are mixed
+  read/write commands (step 54 `sed -i`, step 62 `cp` + `make`). Corpus check over 64 recorded traces: hits 119 → 88,
+  0 added, 31 dropped, all hand-checked pure log reads. Regression fixture `audit_d1_slice50.json` (30 tests fail on
+  d7ffe24). Evidence: `~/evidence/d1-reads-2026-10-31/RESULTS.md`.
 - **C slice 50 (2026-10-30/31, gate run, $0.112770 metered + ≈ $2.87 GCE): core as built (5a4b8ff) ran the full task
   unattended and ended `unverified`/`step_cap`. The fresh finish review said not DONE 7/7 (6 proposals + cap), all correctly:
   no false DONE, H not falsified (n=1). Gate not met: G1 G2 G4 G6 = 4/7 (slice 43: 6, 4, 4).**
@@ -483,18 +488,16 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. ($0, before paid work) D1 read parsing: `tr … < log | grep`, `wc -c` and echo-header chains are reads (29/31
-     false positives in slice 50). Fix in `core.audit` with a regression test on slice 50's hits. No harness fault found.
-  2. Correction latency and lock-in on slice 50's G7 stall: the cause was named, but the working fix came at step 239, 36 steps after the first failed `nbconfig`,
+  1. Correction latency and lock-in on slice 50's G7 stall: the cause was named, but the working fix came at step 239, 36 steps after the first failed `nbconfig`,
      and the lead vetoed its own route from step 206 on. Offline demo on the recorded trace at the states after steps
      205 and 237. Does a fresh-context reviewer (no run-long notes; slice 48 tied the false DONE to those notes) keep the
      built-in-kernel route and give a working `nbconfig` invocation? Compare with the live lead's recorded replies at
      206 and 239. Then validate (verification, not a guess): execute each proposed invocation harness-only on a fresh lab
      against the run's recorded tree changes; it must configure and build a kernel. Build only if the numbers support it.
-  3. Gate grading: copy the lab's `/tmp` and every job's output before `run_lab` stops the lab, or have core keep
+  2. Gate grading: copy the lab's `/tmp` and every job's output before `run_lab` stops the lab, or have core keep
      each run's QEMU logs. Then G6/G7 do not rest on re-executing boots alone.
-  4. History growth (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output compaction
+  3. History growth (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output compaction
      on the recorded traces before any core change.
-  5. Missing input (founder, non-blocking): is the Linux boot required for goal (a) when `task.txt` does not name it? The
+  4. Missing input (founder, non-blocking): is the Linux boot required for goal (a) when `task.txt` does not name it? The
      gate keeps G3 until it is answered. No review in slices 47–48 or 50 names the missing Linux boot. The completion gate
      also needs item E's held-out comparisons and an unmerged promotion PR to `main`.
