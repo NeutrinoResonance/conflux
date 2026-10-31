@@ -540,6 +540,183 @@ def lab_shell(remote: Callable[[str], list[str]], workdir: str, deadline: float 
     return shell
 
 
+# ---------------------------------------------------------------- scratch (C slices 55-56)
+# A lead's correction is checked in a scratch copy of the task machine before delivery
+# (`~/evidence/exec-deliver-demo-2026-10-31/RESULTS.md`). On a lab a scratch is a private mount namespace held by one
+# `sleep infinity`: an overlay of the live /home (upper dir under /var/tmp/conflux-scratch) and a private, empty /tmp; job dirs are
+# hidden. Writes outside /home and /tmp are not isolated. `kill` only kills a namespace that is not the root one.
+
+SCRATCH_SH = r"""set -u
+R=${CONFLUX_SCRATCH_ROOT:-/var/tmp/conflux-scratch}; op=$1; ID=$2; S=$R/$ID
+case $ID in ''|*[!A-Za-z0-9_-]*) echo "bad scratch id" >&2; exit 2;; esac
+kill_ns() {  # every process in the scratch's mount namespace; fails closed: never the root namespace's
+  [ -s "$1/pid" ] || return 0
+  sudo -n bash -c 'ns=$(readlink /proc/$1/ns/mnt) || exit 0; root=$(readlink /proc/1/ns/mnt) || exit 0
+    [ -n "$ns" ] && [ -n "$root" ] && [ "$ns" != "$root" ] || exit 0
+    for d in /proc/[0-9]*; do [ "$(readlink $d/ns/mnt 2>/dev/null)" = "$ns" ] && kill -9 ${d#/proc/} 2>/dev/null; done
+    true' _ "$(cat "$1/pid")"
+  sleep 1; sudo -n rm -f "$1/pid"
+}
+case $op in
+  kill) kill_ns "$S" ;;
+  killall) for d in "$R"/*/; do [ -d "$d" ] && kill_ns "${d%/}"; done; true ;;
+  rm) kill_ns "$S"; sudo -n rm -rf "$S" "$S.holder.log"; [ ! -e "$S" ] ;;
+  purge) for d in "$R"/*/; do [ -d "$d" ] && kill_ns "${d%/}"; done; sudo -n rm -rf "$R"; [ ! -e "$R" ] ;;
+  new)
+    [ -f /etc/sudoers.d/zz-conflux-nopty ] || { echo 'Defaults !use_pty' > /tmp/zz-conflux-nopty &&
+      sudo -n install -m 0440 /tmp/zz-conflux-nopty /etc/sudoers.d/zz-conflux-nopty &&
+      { sudo -n visudo -cf /etc/sudoers.d/zz-conflux-nopty >/dev/null || sudo -n rm -f /etc/sudoers.d/zz-conflux-nopty; }; }
+    kill_ns "$S"; sudo -n rm -rf "$S"; sudo -n mkdir -p "$S/up" "$S/wk" "$S/tmp"; sudo -n chmod 1777 "$S/tmp"
+    holder='
+      set -e
+      mount -t overlay overlay -o "lowerdir=/home,upperdir=$1/up,workdir=$1/wk" /home
+      mount --bind "$1/tmp" /tmp
+      for d in /home/*/.conflux-jobs; do [ -d "$d" ] && mount -t tmpfs none "$d"; done
+      echo $$ > "$1/pid.tmp"; mv "$1/pid.tmp" "$1/pid"
+      exec sleep infinity'
+    # $R is root's: the holder's log is opened by root too (sudo), never by the calling user
+    sudo -n bash -c 'exec setsid nohup unshare -m --propagation private bash -c "$1" _ "$2" </dev/null \
+      >"$2.holder.log" 2>&1' _ "$holder" "$S" </dev/null >/dev/null 2>&1 &
+    for i in $(seq 100); do [ -s "$S/pid" ] && break; sleep 0.1; done
+    [ -s "$S/pid" ] || { echo NEW_FAIL; sudo -n cat "$S.holder.log"; exit 1; }
+    sudo -n rm -f "$S.holder.log"; echo "PID=$(cat "$S/pid")" ;;
+  run)  # run ID B64 WORKDIR: the decoded script as the calling user inside the scratch, cwd WORKDIR (~/ expanded)
+    p=$(cat "$S/pid" 2>/dev/null) || { echo "no scratch $ID" >&2; exit 98; }
+    exec sudo -n -E nsenter -t "$p" -m -- sudo -n -E -u "$(id -un)" bash -c '
+      w=$1; case $w in "~/"*) w=$HOME/${w#"~/"};; esac
+      mkdir -p "$w" && cd "$w" || exit 97; exec bash -c "$2"' _ "$4" "$(echo "$3" | base64 -d)" </dev/null ;;
+  *) echo "usage: new|run|rm|kill|killall|purge ID" >&2; exit 2 ;;
+esac
+"""
+
+
+class ScratchError(RuntimeError):
+    pass
+
+
+class LabScratch:
+    """Scratches on the lab behind `shell` (`lab_shell`); scratch commands run in the task `workdir`. Teardown (`rm`,
+    `kill_all`, `purge`) goes through `teardown`, a shell whose deadline outlasts the task's (`run_lab`: + TEARDOWN_S),
+    so it still runs when the task ended on its deadline; a teardown that did not complete raises ScratchError."""
+
+    describe = ("The scratch is a copy-on-write view of the machine as it is now: your writes under /home and /tmp stay "
+                "in the scratch (its /tmp starts empty); writes elsewhere (packages, /etc, mounts) also reach the "
+                "agent's machine.")
+
+    def __init__(self, shell: Shell, workdir: str, teardown: Shell | None = None):
+        self.shell, self.workdir, self.teardown = shell, workdir, teardown or shell
+
+    def _op(self, *args: str, timeout: float = 300, shell: Shell | None = None) -> dict:
+        return (shell or self.shell)("exec bash -c " + shlex.quote(SCRATCH_SH) + " _ "
+                                     + " ".join(map(shlex.quote, args)), timeout)
+
+    def _down(self, *args: str) -> None:
+        r = self._op(*args, shell=self.teardown)
+        if r["exit"] != 0:
+            raise ScratchError(f"scratch {' '.join(args)}: exit={r['exit']} timed_out={r['timed_out']} "
+                               f"{(r['stdout'] + r['stderr'])[-300:]}")
+
+    def new(self, sid: str) -> None:
+        r = self._op("new", sid, timeout=120)
+        if r["exit"] != 0 or "PID=" not in r["stdout"]:
+            raise ScratchError(f"scratch {sid}: exit={r['exit']} {(r['stdout'] + r['stderr'])[-300:]}")
+
+    def run(self, sid: str, command: str, timeout: float) -> dict:
+        b64 = base64.b64encode(_wrap(command).encode()).decode()
+        return self._op("run", sid, b64, self.workdir, timeout=timeout)
+
+    def rm(self, sid: str) -> None:
+        self._down("rm", sid)
+
+    def kill_all(self) -> None:
+        self._down("killall", "-")
+
+    def purge(self) -> None:
+        self._down("purge", "-")
+
+
+class LocalScratch:
+    """A scratch is a `cp -a` copy of the workdir (offline tests, local runs). Every command starts its own process
+    group, kept per scratch until `rm` (background jobs outlive the command): `rm` and `kill_all` kill the groups."""
+
+    describe = ("The scratch is a copy of the agent's workspace as it is now; paths outside the workspace are the "
+                "agent's machine.")
+
+    def __init__(self, workdir: Path, root: Path):
+        self.workdir, self.root = workdir, root
+        self.groups: dict[str, set[int]] = {}
+        self.lock = threading.Lock()
+
+    def new(self, sid: str) -> None:
+        d = self.root / sid
+        subprocess.run(["rm", "-rf", str(d)], check=True)
+        self.root.mkdir(parents=True, exist_ok=True)
+        if self.workdir.exists():
+            subprocess.run(["cp", "-a", str(self.workdir), str(d)], check=True)
+        else:
+            d.mkdir()
+
+    def run(self, sid: str, command: str, timeout: float) -> dict:
+        t0 = time.monotonic()
+        p = subprocess.Popen(["bash", "-c", _wrap(command)], cwd=self.root / sid, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE, stdin=subprocess.DEVNULL, text=True, errors="replace",
+                             start_new_session=True, env={**os.environ, "CONFLUX_SCRATCH": self._mark(sid)})
+        with self.lock:
+            self.groups.setdefault(sid, set()).add(p.pid)
+        timed_out = False
+        try:
+            out, err = p.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            self._kill(p.pid)
+            out, err = p.communicate()
+        stderr, ps, nf = _split_pipestatus(err)
+        killed = p.returncode is not None and p.returncode < 0
+        return {"exit": None if timed_out or killed else p.returncode, "stdout": _clip(out), "stderr": _clip(stderr),
+                "pipestatus": ps, "failed_cmds": nf, "timed_out": timed_out or killed,
+                "duration_s": round(time.monotonic() - t0, 3)}
+
+    def _mark(self, sid: str) -> str:
+        return f"{self.root.resolve()}/{sid}"
+
+    @staticmethod
+    def _kill(pgid: int) -> None:
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+    def _kill_groups(self, sid: str, groups: set[int]) -> None:
+        """Kill the processes still in `groups` that carry this scratch's CONFLUX_SCRATCH marker (a group id may have
+        been reused by an unrelated process once all of its members ended)."""
+        mark = f"CONFLUX_SCRATCH={self._mark(sid)}".encode()
+        for proc in Path("/proc").glob("[0-9]*"):
+            try:
+                pgid = int((proc / "stat").read_text().rsplit(")", 1)[1].split()[2])
+                if pgid in groups and mark in (proc / "environ").read_bytes().split(b"\0"):
+                    os.kill(int(proc.name), signal.SIGKILL)
+            except (OSError, ValueError, IndexError):
+                continue
+
+    def rm(self, sid: str) -> None:
+        with self.lock:
+            groups = self.groups.pop(sid, set())
+        self._kill_groups(sid, groups)
+        subprocess.run(["rm", "-rf", str(self.root / sid)], check=True)
+
+    def kill_all(self) -> None:
+        with self.lock:
+            items = [(sid, set(gs)) for sid, gs in self.groups.items()]
+        for sid, gs in items:
+            self._kill_groups(sid, gs)
+
+    def purge(self) -> None:
+        with self.lock:
+            sids = list(self.groups)
+        for sid in sids:
+            self.rm(sid)
+
+
 def run_checks(checks: list[Check], shell: Shell) -> tuple[str | None, list[dict]]:
     """("pass" | "fail" | None, results). A check that ran and failed beats a timeout."""
     results = []
@@ -691,6 +868,59 @@ GOAL_RE = re.compile(r"(?m)^[ \t]*(?:[-*][ \t]*)?\**GOAL\**[ \t]*:\**[ \t]*(.+?)
 PREFIX = "Message from your supervisor (a different model reviewing your work):\n\n"
 CAP_SUMMARY = "(no finish: the step limit was reached)"
 
+# Verify session (C slice 55's measured mechanism; texts and limits are the demo's, `demo.py` ASK/REPLAY_FB/FORCE/NUDGE):
+# after a running review the lead gets `run_shell` on a persistent scratch and `deliver(commands, note)`; the harness
+# replays the selection on a fresh scratch; one feedback turn if a replayed command fails; after it, the next selection
+# is delivered whatever its replay. The scratch's own `describe` replaces the demo's sentence about how it was built.
+VERIFY_MAX_CMDS = 40
+VERIFY_EXTRA = 10
+VERIFY_MAX_CALLS = 90
+VERIFY_CMD_TIMEOUT = 1800
+VERIFY_WALL_S = 6000
+TEARDOWN_S = 600         # run_lab: scratch teardown may run this long past the task deadline
+KILL_JOIN_S = 5         # Steering.close: kill scratch commands, wait this long, repeat while the review runs
+VERIFY_ASK = ("Before your reply reaches the agent, check it in a scratch copy of the lab machine. {describe} Run "
+              "commands in the scratch with run_shell, as the agent would; the scratch keeps its state between your "
+              f"commands (files, builds, background jobs). Each result is numbered [command #N]; you have at most "
+              f"{VERIFY_MAX_CMDS} commands. When your correction works, call deliver with the numbers of the commands "
+              "that, run in that order on a fresh copy of the machine, carry it out, and a note for the agent. The "
+              "harness re-runs exactly those commands on a fresh copy before delivery; the agent receives those "
+              "commands verbatim and your note.")
+REPLAY_FB = ("The harness re-ran your selected commands, in order, on a fresh copy of the machine. A command failed, "
+             "so nothing was delivered. Results:\n\n{results}\n\nYour scratch is unchanged. Continue there "
+             f"(up to {VERIFY_EXTRA} more commands), then call deliver again.")
+VERIFY_FORCE = "Command limit reached: call deliver now."
+VERIFY_NUDGE = "Call deliver to hand your correction to the agent."
+DELIVER_HEAD = ("Your supervisor ran these commands in a scratch copy of the machine, and the harness re-ran them on a "
+                "fresh copy. Run them in this order:")
+SCRATCH_RUN_TOOL = {"type": "function", "function": {
+    "name": "run_shell",
+    "description": "Run one bash command in the scratch copy and return exit code, stdout and stderr (each up to 4 KB; "
+                   "longer output keeps its first 1 KB and last 3 KB around a '[... N bytes omitted ...]' line). "
+                   f"timeout_s defaults to 60; use up to {VERIFY_CMD_TIMEOUT} for long jobs.",
+    "parameters": {"type": "object", "properties": {"command": {"type": "string"}, "timeout_s": {"type": "integer"}},
+                   "required": ["command"], "additionalProperties": False}}}
+DELIVER_TOOL = {"type": "function", "function": {
+    "name": "deliver",
+    "description": "Hand the correction to the agent: the numbers of your scratch commands to run, in order, and a note.",
+    "parameters": {"type": "object", "properties": {"commands": {"type": "array", "items": {"type": "integer"}},
+                                                    "note": {"type": "string"}},
+                   "required": ["commands"], "additionalProperties": False}}}
+
+
+def deliver_text(reply: str, delivery: dict | None) -> str:
+    """The message the executor receives: the review reply, then (when a selection was delivered) the note and the
+    replayed commands verbatim, in the selected order."""
+    if not delivery:
+        return PREFIX + reply
+    parts = [PREFIX + reply]
+    if delivery.get("note"):
+        parts.append(f"Note from your supervisor:\n{delivery['note']}")
+    parts.append(DELIVER_HEAD)
+    parts += [f"{j}. (timeout_s {c['timeout_s']})\n```bash\n{c['command']}\n```"
+              for j, c in enumerate(delivery["commands"], 1)]
+    return "\n\n".join(parts)
+
 
 def _clip_head(s: str, n: int) -> str:
     return s if len(s) <= n else s[:n] + f"\n[... {len(s) - n} chars clipped]"
@@ -788,12 +1018,14 @@ def reply_text(status: int, body: object) -> str | None:
 
 def surplus_lead(key: str, model: str = LEAD, effort: str | None = LEAD_EFFORT,
                  http: httpx.Client | None = None) -> Callable[..., tuple[int, object, float]]:
-    """Lead requests (no tools) through `surplus_post`: the discount floor and the model's own maximum output."""
+    """Lead requests through `surplus_post`: the discount floor and the model's own maximum output; `tools` only in
+    a verify session."""
     http = http or httpx.Client(timeout=LEAD_TIMEOUT)
 
-    def call(messages: list, timeout: float | None = None) -> tuple[int, object, float]:
-        n = max_output(model, messages)
-        return surplus_post(http, key, {"model": model, "messages": messages, **({"max_tokens": n} if n else {}),
+    def call(messages: list, timeout: float | None = None, tools: list | None = None) -> tuple[int, object, float]:
+        n = max_output(model, messages, tools)
+        return surplus_post(http, key, {"model": model, "messages": messages, **({"tools": tools} if tools else {}),
+                                        **({"max_tokens": n} if n else {}),
                                         **({"reasoning_effort": effort} if effort else {})}, timeout, LEAD_TIMEOUT)
     return call
 
@@ -812,11 +1044,34 @@ class Lead:
         self.may_spend = may_spend or (lambda: True)  # the task's own cap (executor + lead spend)
         self.stopped = False  # set when the task ends: no further call starts
         self.notes, self.goals, self.seen, self.calls = "", [], 0, 0
+        self.convo: list = []
+        self.cancel_verify = False  # set while a finish review supersedes the running review (Steering)
 
     def _settled(self, step: int, turn: str, usd: float, kind: str, request_id: str | None) -> None:
         self.trace.write("lead_cost_resolved", role=self.role, step=step, turn=turn, cost_usd=usd, cost_kind=kind,
                          request_id=request_id)
         self.on_cost(usd)
+
+    def _charge(self, status: int, body: object, step: int, turn: str) -> tuple[float, str, dict | None]:
+        """Account one reply on the run's Budget: billed, no_usage, or pending until Surplus's billing data resolves
+        it (MISSION a58a30e). (cost, kind, usage)."""
+        settle = functools.partial(self._settled, step, turn)
+        c, kind = billed_cost(body), "billed"
+        usage = body.get("usage") if isinstance(body, dict) else None
+        usage = usage if isinstance(usage, dict) else None
+        for ts in (body.get("conflux_lost") or []) if isinstance(body, dict) else []:
+            self.budget.defer({"model": self.model, "ts": ts, "usage": None}, settle)
+        if c is None and status != 0 and not (isinstance(body, dict) and body.get("choices")) and not usage:
+            c, kind = 0.0, "no_usage"
+        if c is None:
+            c, kind = 0.0, "pending"
+            self.budget.defer({"model": self.model, "ts": time.time(), "usage": usage}, settle)
+        elif kind == "billed" and usage:
+            self.budget.observe({"model": self.model, "ts": time.time(), "usage": usage})
+        self.budget.settle(0.0, c)
+        self.on_cost(c)
+        self.calls += 1
+        return c, kind, usage
 
     def _turn(self, convo: list, step: int, turn: str, finish: bool) -> str | None:
         for attempt in (1, 2):
@@ -831,22 +1086,7 @@ class Lead:
                 self.trace.write("lead_deadline", role=self.role, step=step, turn=turn)
                 return None
             status, body, lat = self.call(convo, left)
-            settle = functools.partial(self._settled, step, turn)
-            c, kind = billed_cost(body), "billed"
-            usage = body.get("usage") if isinstance(body, dict) else None
-            usage = usage if isinstance(usage, dict) else None
-            for ts in (body.get("conflux_lost") or []) if isinstance(body, dict) else []:
-                self.budget.defer({"model": self.model, "ts": ts, "usage": None}, settle)
-            if c is None and status != 0 and not (isinstance(body, dict) and body.get("choices")) and not usage:
-                c, kind = 0.0, "no_usage"
-            if c is None:  # ambiguous: Surplus's billing data resolves it (MISSION a58a30e)
-                c, kind = 0.0, "pending"
-                self.budget.defer({"model": self.model, "ts": time.time(), "usage": usage}, settle)
-            elif kind == "billed" and usage:
-                self.budget.observe({"model": self.model, "ts": time.time(), "usage": usage})
-            self.budget.settle(0.0, c)
-            self.on_cost(c)
-            self.calls += 1
+            c, kind, usage = self._charge(status, body, step, turn)
             text = reply_text(status, body)
             ch = (body.get("choices") or [{}])[0] if isinstance(body, dict) else {}
             msg = ch.get("message") or {}
@@ -885,7 +1125,171 @@ class Lead:
         self.goals = new or goals
         self.notes = "\n\n".join(answers + [f"Your final answer last time:\n{text}"])
         self.seen = len(messages)
+        self.convo = convo  # the review conversation, final answer included (`verify` continues it)
         return text
+
+    def verify(self, step: int, scratch, wall_s: float = VERIFY_WALL_S) -> dict | None:
+        """Continue the last review in a verify session (C slice 55): `run_shell` on a persistent scratch, then
+        `deliver`; the selection is replayed on a fresh scratch. Returns {ids, note, commands, replay_ok} or None (no
+        delivery: no deliver call, empty selection, stopped, budget, deadline, provider or scratch error). Every call
+        is admitted, accounted and traced like a review turn; every scratch is removed on exit."""
+        t_start = time.monotonic()
+        tag = f"v{step}-{time.time_ns() % 16 ** 8:08x}"
+        msgs = list(self.convo) + [{"role": "user", "content": VERIFY_ASK.format(describe=scratch.describe)}]
+        cmds: list[dict] = []
+        made: list[str] = []
+        limit, forced, nudged, fb_used = VERIFY_MAX_CMDS, False, False, False
+        calls, replays, why, out = 0, 0, None, None
+
+        def new(sid: str) -> None:
+            made.append(sid)
+            scratch.new(sid)
+
+        def replay(ids: list[int]) -> tuple[bool, str]:
+            nonlocal replays
+            replays += 1
+            sid = f"{tag}-r{replays}"
+            new(sid)
+            res = []
+            for k, i in enumerate(ids, 1):
+                if self.stopped or self.cancel_verify:
+                    raise _Stopped
+                c = cmds[i - 1]
+                r = scratch.run(sid, c["command"], c["timeout_s"])
+                res.append((k, i, r, c["timeout_s"]))
+            scratch.rm(sid)
+            ok = all(r["exit"] == 0 and not r["timed_out"] for _, _, r, _ in res)
+            self.trace.write("scratch_replay", role=self.role, step=step, k=replays, ids=ids, ok=ok,
+                             exits=[r["exit"] for _, _, r, _ in res])
+            report = "\n\n".join(f"[replay {k} of {len(res)}: your command #{i}]\n{_tool_result(r, t)}"
+                                 for k, i, r, t in res) or "(no commands selected)"
+            return ok, report
+
+        try:
+            new(f"{tag}-s")
+            while True:
+                if calls >= VERIFY_MAX_CALLS:
+                    why = "max_calls"
+                    break
+                if self.stopped or self.cancel_verify:
+                    raise _Stopped
+                if not self.budget.admit(0.0) or not self.may_spend():
+                    why = "budget"
+                    break
+                left = max(60.0, wall_s - (time.monotonic() - t_start) + 1800)
+                if self.deadline is not None:
+                    left = min(left, self.deadline - time.monotonic())
+                    if left <= 0:
+                        why = "deadline"
+                        break
+                tools = [DELIVER_TOOL] if forced else [SCRATCH_RUN_TOOL, DELIVER_TOOL]
+                status, body, lat = self.call(msgs, left, tools=tools)
+                calls += 1
+                turn = f"verify{calls}"
+                c, kind, usage = self._charge(status, body, step, turn)
+                ch = (body.get("choices") or [{}])[0] if isinstance(body, dict) and body.get("choices") else {}
+                msg = ch.get("message") or {}
+                reasoning = msg.get("reasoning_content") or msg.get("reasoning")
+                tcs = msg.get("tool_calls") or []
+                self.trace.write("lead_call", role=self.role, step=step, turn=turn, attempt=1, model=self.model,
+                                 status=status, id=body.get("id") if isinstance(body, dict) else None,
+                                 latency_s=round(lat, 3), usage=usage, cost_usd=c, cost_kind=kind, finish=False,
+                                 tools=[t["function"]["name"] for t in tools], n_tool_calls=len(tcs),
+                                 finish_reason=ch.get("finish_reason"), reasoning_chars=len(reasoning or ""),
+                                 reply=msg.get("content"), error=None if ch else str(body)[:500])
+                if status != 200 or not ch or ch.get("finish_reason") == "length":
+                    why = f"provider_{status}" if status != 200 or not ch else "truncated"
+                    break
+                a = {"role": "assistant", "content": msg.get("content") or ""}
+                if tcs:
+                    a["tool_calls"] = tcs
+                if reasoning:
+                    a["reasoning_content"] = reasoning
+                msgs.append(a)
+                if not tcs:
+                    if nudged:
+                        why = "no_deliver"
+                        break
+                    msgs.append({"role": "user", "content": VERIFY_NUDGE})
+                    nudged = True
+                    continue
+                delivered, note, pending = None, None, None
+                for tc in tcs:
+                    fn = tc.get("function") or {}
+                    name = fn.get("name")
+                    try:
+                        args = json.loads(fn.get("arguments") or "{}")
+                    except json.JSONDecodeError:
+                        args = None
+                    tm = {"role": "tool", "tool_call_id": tc.get("id", ""), "content": ""}
+                    if not isinstance(args, dict):
+                        tm["content"] = "invalid arguments: expected a JSON object"
+                    elif name == "run_shell" and not forced:
+                        cmd, t = args.get("command"), args.get("timeout_s", EXEC_TIMEOUT)
+                        if not isinstance(cmd, str) or not cmd.strip():
+                            tm["content"] = "invalid arguments: empty command"
+                        elif len(cmd) > MAX_COMMAND:
+                            tm["content"] = f"invalid arguments: command longer than {MAX_COMMAND} bytes"
+                        elif not isinstance(t, int) or isinstance(t, bool) or t < 1:
+                            tm["content"] = "invalid arguments: timeout_s must be a positive integer"
+                        elif len(cmds) >= limit:
+                            tm["content"] = "command limit reached; command not run"
+                        else:
+                            if self.stopped or self.cancel_verify:
+                                raise _Stopped
+                            t = min(t, VERIFY_CMD_TIMEOUT)
+                            r = scratch.run(f"{tag}-s", cmd, t)
+                            cmds.append({"command": cmd, "timeout_s": t})
+                            self.trace.write("scratch_exec", role=self.role, step=step, n=len(cmds), command=cmd,
+                                             timeout_s=t, **r)
+                            tm["content"] = f"[command #{len(cmds)}]\n" + _tool_result(r, t)
+                    elif name == "deliver" and delivered is None:
+                        ids = args.get("commands")
+                        if not isinstance(ids, list) or not all(isinstance(i, int) and not isinstance(i, bool)
+                                                                for i in ids):
+                            tm["content"] = "invalid arguments: commands must be a list of command numbers"
+                        elif bad := [i for i in ids if not 1 <= i <= len(cmds)]:
+                            tm["content"] = f"invalid command numbers {bad}; run so far: 1..{len(cmds)}"
+                        else:
+                            delivered, note, pending = ids, args.get("note"), tm
+                    else:
+                        tm["content"] = f"tool {name} is not available now"
+                    msgs.append(tm)
+                if delivered is not None:
+                    ok, report = replay(delivered)
+                    if ok or fb_used:
+                        pending["content"] = "delivered"
+                        why = "delivered" if delivered else "empty_selection"
+                        if delivered:
+                            out = {"ids": delivered, "note": note if isinstance(note, str) else None,
+                                   "commands": [cmds[i - 1] for i in delivered], "replay_ok": ok}
+                        break
+                    pending["content"] = REPLAY_FB.format(results=report)
+                    fb_used, forced = True, False
+                    limit = len(cmds) + VERIFY_EXTRA
+                    continue
+                if not forced and (len(cmds) >= limit or time.monotonic() - t_start >= wall_s):
+                    forced = True
+                    msgs.append({"role": "user", "content": VERIFY_FORCE})
+        except _Stopped:
+            why, out = "stopped", None
+        except ScratchError as e:
+            why, out = "scratch_error", None
+            self.trace.write("lead_error", role=self.role, step=step, error=str(e)[:500])
+        finally:
+            for sid in made:
+                try:
+                    scratch.rm(sid)
+                except Exception as e:  # cleanup must not hide the session's result
+                    self.trace.write("lead_error", role=self.role, step=step, error=f"scratch rm {sid}: {e!r}"[:500])
+        self.trace.write("lead_deliver", role=self.role, step=step, why=why, ids=out and out["ids"],
+                         note=out and out["note"], replay_ok=out and out["replay_ok"], n_cmds=len(cmds), calls=calls,
+                         replays=replays, feedback=fb_used, wall_s=round(time.monotonic() - t_start, 1))
+        return out
+
+
+class _Stopped(Exception):
+    """The task ended, or a finish review superseded the review, during a verify session: no delivery."""
 
 
 class Steering:
@@ -893,8 +1297,8 @@ class Steering:
     review's reply is appended to the messages first; then, if no review is in flight and CADENCE_S has passed since
     the last one started (or none has), a review starts in a thread on a snapshot of the messages."""
 
-    def __init__(self, lead: Lead, cadence_s: float = CADENCE_S):
-        self.lead, self.cadence_s = lead, cadence_s
+    def __init__(self, lead: Lead, cadence_s: float = CADENCE_S, scratch=None):
+        self.lead, self.cadence_s, self.scratch = lead, cadence_s, scratch
         self.lock = threading.Lock()
         self.thread: threading.Thread | None = None
         self.reply: tuple | None = None
@@ -908,8 +1312,14 @@ class Steering:
         except Exception as e:  # a review thread must never take the run down; the executor goes on without it
             self.lead.trace.write("lead_error", step=step, review=n, error=repr(e)[:500])
             text = None
+        delivery = None
+        if text and self.scratch is not None and not self.lead.stopped and not self.lead.cancel_verify:
+            try:  # the review's correction is checked in a scratch before it reaches the executor (C slice 55)
+                delivery = self.lead.verify(step, self.scratch)
+            except Exception as e:
+                self.lead.trace.write("lead_error", step=step, review=n, error=repr(e)[:500])
         with self.lock:
-            self.reply = (text, n, step, time.monotonic() - t0)
+            self.reply = (text, n, step, time.monotonic() - t0, delivery)
 
     def turn(self, messages: list, step: int) -> None:
         # One critical section: a review is "in flight" until its reply is taken here, so a review finishing during
@@ -925,11 +1335,12 @@ class Steering:
                 self.n += 1
                 self.started = time.monotonic()
         if done and done[0]:
-            content = PREFIX + done[0]
+            content = deliver_text(done[0], done[4])
             self.lead.hide.add(content)
             messages.append({"role": "user", "content": content})
             self.lead.trace.write("lead_inject", step=step, review=done[1], reviewed_step=done[2],
-                                  review_s=round(done[3], 1), chars=len(done[0]))
+                                  review_s=round(done[3], 1), chars=len(done[0]),
+                                  delivered=done[4]["ids"] if done[4] else None)
         if start:
             snap = json.loads(json.dumps(messages))
             self.thread = threading.Thread(target=self._review, args=(snap, step, self.n, self.started), daemon=True)
@@ -945,15 +1356,38 @@ class Steering:
                 self.lead.trace.write(event, step=step, review=self.reply[1])
             self.reply, self.inflight = None, False
 
+    def _cancel_scratch(self, step: int) -> None:
+        """While the review thread runs: kill its scratch commands (again, if one started after the last kill) so it
+        reaches a cancellation check promptly; an in-flight model call completes and is accounted."""
+        while self.scratch is not None and self.thread is not None and self.thread.is_alive():
+            try:
+                self.scratch.kill_all()
+            except Exception as e:
+                self.lead.trace.write("lead_error", step=step, error=f"scratch kill_all: {e!r}"[:500])
+                break
+            self.thread.join(KILL_JOIN_S)
+
     def settle_for_finish(self, step: int) -> None:
-        """Before a finish review: the finish review supersedes an in-flight review's reply."""
-        self._drain(step, "lead_superseded")
+        """Before a finish review: the finish review supersedes an in-flight review's reply, and its verify session is
+        cancelled (no delivery)."""
+        self.lead.cancel_verify = True
+        try:
+            self._cancel_scratch(step)
+            self._drain(step, "lead_superseded")
+        finally:
+            self.lead.cancel_verify = False
 
     def close(self, step: int) -> None:
         """At the task's end, on every exit path: no new review or call starts; an in-flight call completes and is
         accounted before the task's results are written."""
         self.lead.stopped = True
+        self._cancel_scratch(step)
         self._drain(step, "lead_dropped")
+        if self.scratch is not None and self.n:
+            try:  # backstop: no scratch outlives its task (each session already removes its own)
+                self.scratch.purge()
+            except Exception as e:
+                self.lead.trace.write("lead_error", step=step, error=f"scratch purge: {e!r}"[:500])
 
 
 # ---------------------------------------------------------------- self-audit (work item F, D1)
@@ -1027,14 +1461,16 @@ def audit(rows: list[dict]) -> list[dict]:
 def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
              model: str = MODEL, deadline: float | None = None,
              lead_call: Callable[..., tuple[int, object, float]] | None = None, lead_model: str = LEAD,
-             cadence_s: float = CADENCE_S) -> dict:
+             cadence_s: float = CADENCE_S, scratch=None) -> dict:
     """With `lead_call`, a running lead steers (`Steering`); on a task with no checks a fresh lead's finish review
     is the stop rule: DONE ends the run `unverified` (`finish_review_done`; acceptance needs executed checks),
     otherwise its reply goes to the executor and the run goes on. Executor and lead spend count against
-    `task.max_usd` together. The lead is closed on every exit, an exception included."""
+    `task.max_usd` together. The lead is closed on every exit, an exception included. With `scratch`
+    (`LabScratch` / `LocalScratch`), each running review is followed by a verify session (`Lead.verify`)."""
     held: dict = {}
     try:
-        return _run_task(task, chat, shell, trace, budget, model, deadline, lead_call, lead_model, cadence_s, held)
+        return _run_task(task, chat, shell, trace, budget, model, deadline, lead_call, lead_model, cadence_s, held,
+                         scratch)
     except BaseException:
         if held.get("steering"):
             held["steering"].close(-1)
@@ -1043,7 +1479,7 @@ def run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget,
 
 def _run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget, model: str,
               deadline: float | None, lead_call: Callable[..., tuple[int, object, float]] | None, lead_model: str,
-              cadence_s: float, held: dict) -> dict:
+              cadence_s: float, held: dict, scratch=None) -> dict:
     t0 = time.monotonic()
     steps = retries = 0
     cost = lead_cost = 0.0
@@ -1092,7 +1528,7 @@ def _run_task(task: Task, chat: Chat, shell: Shell, trace: Trace, budget: Budget
     if lead_call is not None:
         lead_trace = Trace(trace.path.with_name("lead.jsonl") if trace.path else None)
         steering = held["steering"] = Steering(Lead(lead_call, lead_model, budget, lead_trace, task.goal, set(),
-                                                    "running", deadline, lead_charged, may_spend), cadence_s)
+                                                    "running", deadline, lead_charged, may_spend), cadence_s, scratch)
 
     def finish_review(summary: str) -> tuple[str | None, str | None]:
         """A fresh lead (no notes, goal list or injected messages of the running lead): init review through step
@@ -1428,7 +1864,8 @@ def _utc() -> str:
 def run_lab(tasks: list[Task], chat: Chat, budget: Budget, out: Path, name: str, workdir: str,
             hours: float, model: str = MODEL, remote: Callable[[str], list[str]] | None = None,
             tunnel: Callable[[int], list[str]] | None = None,
-            lead_call: Callable[..., tuple[int, object, float]] | None = None, lead_model: str = LEAD) -> dict:
+            lead_call: Callable[..., tuple[int, object, float]] | None = None, lead_model: str = LEAD,
+            scratch: bool = True) -> dict:
     """Own one lab's lifecycle: up, egress tunnel, smoke, setup + egress check, tasks in order (stop at
     the first non-accepted one), stop.
 
@@ -1444,6 +1881,7 @@ def run_lab(tasks: list[Task], chat: Chat, budget: Budget, out: Path, name: str,
     try:
         subprocess.run(["devbox-lab", "up", name], check=True, capture_output=True, text=True, timeout=600)
         shell = lab_shell(remote or gcloud_remote(name), workdir, deadline, env=PROXY_ENV)
+        teardown = lab_shell(remote or gcloud_remote(name), workdir, deadline + TEARDOWN_S, env=PROXY_ENV)
         for _ in range(SSH_WAIT_TRIES):  # a fresh VM takes a while to accept ssh
             if shell("true", 60)["exit"] == 0 or time.monotonic() >= deadline:
                 break
@@ -1465,7 +1903,8 @@ def run_lab(tasks: list[Task], chat: Chat, budget: Budget, out: Path, name: str,
                 d = out / task.id
                 d.mkdir(parents=True, exist_ok=False)
                 res = run_task(task, chat, shell, Trace(d / "trace.jsonl"), budget, model, deadline,
-                               lead_call, lead_model)
+                               lead_call, lead_model, scratch=LabScratch(shell, workdir, teardown) if lead_call and scratch
+                               else None)
                 results.append(res)
                 print(json.dumps(res), flush=True)
                 if res["status"] != "accepted":
@@ -1516,6 +1955,7 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--lab-hours", type=float, default=4.0, help="lab wall-time deadline (with --lab)")
     run.add_argument("--lead", default="", help="lead model (e.g. kimi-k3): steers; judges finish on tasks without checks")
     run.add_argument("--lead-effort", default=LEAD_EFFORT)
+    run.add_argument("--no-scratch", action="store_true", help="lead reviews without a verify session (baselines)")
     rec = sub.add_parser("reconcile")
     rec.add_argument("--out", type=Path, required=True)
     rec.add_argument("--day", default=datetime.now(timezone.utc).strftime("%Y-%m-%d"))
@@ -1548,7 +1988,7 @@ def main(argv: list[str] | None = None) -> int:
     lead = surplus_lead(key, a.lead, a.lead_effort or None) if a.lead else None
     if a.lab:
         run_lab(tasks, chat, budget, a.out, a.lab, a.workdir, a.lab_hours, a.model, lead_call=lead,
-                lead_model=a.lead or LEAD)
+                lead_model=a.lead or LEAD, scratch=not a.no_scratch)
         return 0
     a.out.mkdir(parents=True, exist_ok=True)
     results = []
@@ -1557,7 +1997,8 @@ def main(argv: list[str] | None = None) -> int:
             d = a.out / f"{task.id}-{n}"
             d.mkdir(parents=True, exist_ok=False)
             res = run_task(task, chat, local_shell(d / "work"), Trace(d / "trace.jsonl"), budget, a.model,
-                           lead_call=lead, lead_model=a.lead or LEAD)
+                           lead_call=lead, lead_model=a.lead or LEAD,
+                           scratch=LocalScratch(d / "work", d / "scratch") if lead and not a.no_scratch else None)
             results.append(res)
             print(json.dumps(res))
     budget.resolve(force=True)  # late settlements refresh the task results summed below

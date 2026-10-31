@@ -11,6 +11,34 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **C slice 56 (2026-10-31, build, $0 metered + ≈ $0.21 GCE): slice 55's mechanism is in core.** After each
+  running review, the lead gets a verify session: `run_shell` on a scratch, then `deliver(commands, note)`. The harness
+  replays the selection on a fresh scratch, with one feedback turn on failure. The executor receives the reply, the note
+  and the replayed commands verbatim. With no delivery, the plain reply goes through as before.
+  - Code:
+    - `core.Lead.verify`, `LabScratch`, `LocalScratch`, `deliver_text`, `Steering(scratch=…)`;
+    - demo texts and limits (40 commands, +10 after feedback, 90 calls, 1800 s/command, 6000 s wall);
+    - on by default with `--lead`, off with `--no-scratch`.
+  - A review plus its verify session is one in-flight unit. The executor is never blocked; reviews per hour drop.
+  - Lab scratch:
+    - a private mount namespace with an overlay of the **live** `/home` and a private `/tmp`;
+    - writes elsewhere are not isolated, and the lead's ASK says so;
+    - the overlay over a changing lower dir is undefined in the kernel docs (no crash); its effect is unmeasured.
+  - Lab smoke (scripted models, real `lab_shell`):
+    - try 1 found a **harness fault**: every `new` failed. The holder log was opened by `dev` in root's scratch dir. It
+      was fixed, and a regression test reproduces the lab error on the pre-fix script.
+    - The kill guard was made fail-closed.
+    - Tries 2–3 pass every check. They cover isolation, a fresh replay → feedback → delivery, injection, cleanup,
+      `kill_all`, close during a 900 s scratch command (161.8 s task), and the proxy.
+  - Critic round 1 (offline fixes, regression tests fail on the round-0 code):
+    - a finish review now cancels the running verify session;
+    - scratch teardown runs on its own shell, `deadline + TEARDOWN_S`, and its results are checked;
+    - `LocalScratch` kills a scratch's background jobs on `rm`, marker-checked;
+    - task end purges every lab scratch.
+    - The lab smoke ran before round 1; the teardown shell and `purge` are offline-tested only.
+  - Tests: `tests/test_core_scratch.py` (21); full suite passes.
+  - Not measured: the live effect (gate run). Each scratch command is a lab job, about 13 s round trip.
+  - Evidence: `~/evidence/core-scratch-2026-10-31/RESULTS.md`.
 - **C slice 55 (2026-10-31, executed-sequence delivery demo, lab, $0.034519 metered + ≈ $1.25 GCE): the reviewer works
   in a persistent scratch with `run_shell`, and delivers the recorded commands it selects, replayed on a fresh copy first.
   Registered rule supported: S2 delivered configures 11/12 and builds the kernel with `optee.o` 9/12 (slice 54: 3/12, 0).
@@ -574,13 +602,13 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. Build slice 55's mechanism into core (the demo supports it; cite its `RESULTS.md`).
-     - When the lead's review gives a correction, it gets a scratch copy of the lab task tree with `run_shell` and
-       `deliver`, under a probe cap charged to the run.
-     - The selection is replayed on a fresh copy, and the executor receives those commands verbatim plus the note.
-     - On a lab, the scratch needs a mechanism: overlay namespaces as in `lab/scratch.sh`, or a copy of the workdir.
-     - Regression tests: selection order, fresh-replay feedback once, probe cap, trace and billing rows.
-     - Then measure it live on a gate run, which covers what this demo could not show: whether the kernel attaches.
+  1. Gate run with core as of slice 56 (`--lead kimi-k3`, scratch on), measuring:
+     - G1–G7 as in slice 50;
+     - verify sessions: delivered / replay ok / no delivery;
+     - whether delivered commands are run by the executor, and whether they move milestones (G5/G7: the kernel built
+       and attached);
+     - review count and latency versus slice 50 (68 reviews).
+     - Copy the lab's `/tmp` and job outputs before stop (item 3), so G6/G7 do not rest on re-execution.
   2. Widen slice 52's veto finding before building a fresh-context running review: more recorded running-review states
      with standing orders (slices 43/50), L vs F, outcome = a reply that forbids a route the trace shows still live.
   3. Gate grading: copy the lab's `/tmp` and every job's output before `run_lab` stops the lab, or have core keep
