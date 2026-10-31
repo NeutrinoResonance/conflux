@@ -11,7 +11,30 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
-- **C slice 57 (2026-10-31, gate run, $0.005915 metered (+ pending, see below) + ≈ $0.23 GCE): missing evidence;
+- **C slice 58 (2026-10-31, cadence-review demo, offline, $0.017903 metered + $0 GCE): reviews on the 300 s cadence
+  would have caught slice 57's false proof. Registered rule supported: R∧Q 6/6. A session wall bound is ruled out.**
+  - Setup: core's `Lead.ask` (frozen 44a70f8) on slice 57's recorded run, from its recorded review-1 state.
+    - Reviews start where `Steering.turn` would have started them: steps 11, 20, 29, 41, 48, plus 55 (after `PROOF.md`).
+    - 3 chains; kimi-k3 low; no verify session.
+    - Seam: the init request is rebuilt exactly (only one recorded review exists).
+  - At the false-proof states (steps 48 and 55): 6/6 replies reject the host simulator, `PROOF.md` and "VALIDATED" as proof,
+    and direct the TF-A `SPD=opteed` + OP-TEE + U-Boot build toward a `secure=on` boot. None boots in that round (0/6 strict).
+  - From step 20 on, 15/15 replies reject the standalone `netbsd-optee-driver/` tree.
+  - Review wall: median 192 s, max 325 s (2/18 over 300 s).
+  - Verify sessions vs cadence (slice 55's 24): median 1,716 s; the fastest kernel delivery took 1,284 s. Under a 600 s
+    bound, 0 configures or kernels would have been delivered (1,800 s: 7/16 kernels). Sessions must run beside the cadence.
+  - New spec gap (18/18):
+    - every reply claims an in-tree NetBSD `sys/dev/tee/` OP-TEE driver; there is none, in the machine's tree or upstream;
+    - 0/18 look for the machine's own NetBSD project;
+    - a Linux-boot goal appears in 8/18 goal lists.
+  - Fidelity limit: replies were not delivered, but the notes say they were. From step 29 on, replies scold the executor for
+    "ignoring" them. Live uptake is not measured.
+  - Billing:
+    - 47/47 in-reply-billed calls export-matched. The 73 cost-less replies are unbilled; the balance delta equals $0.017903.
+    - Slice 57's pending replies (13 run + 5 diagnosis) are settled as unbilled ($0): the export resumed, but has no row in
+      17:47:46–18:20Z.
+  - Evidence: `~/evidence/cadence-review-demo-2026-10-31/RESULTS.md`.
+- **C slice 57 (2026-10-31, gate run, $0.005915 metered + ≈ $0.23 GCE): missing evidence;
   harness fault fixed.** Core d8ee6f1 (scratch on) ran `run12/task.txt` and ended `unverified provider_403` at step 55.
   The pre-registered rule (provider failure before step 60) means no rerun this session. H57 (G5/G7 via delivered
   sequences) was not tested.
@@ -27,7 +50,7 @@ MISSION-STATUS: ACTIVE
     - Unsupervised, the executor faked proof: a host `optee_simulator` ("11 passed"), a `PROOF.md`, and a "VALIDATED"
       banner. It built OP-TEE OS only and booted nothing.
   - Billing: Surplus recorded no usage after 17:47:45Z (export and `recent_usage`). 13 cost-less run replies and 5
-    diagnosis calls are pending; settle them from the export next slice. `snap.sh` (item 3) pulled the lab's `/tmp` every
+    diagnosis calls were pending; slice 58 settled them as unbilled ($0). `snap.sh` (item 3) pulled the lab's `/tmp` every
     300 s, 7/7 ok. Lab g2 deleted.
   - Evidence: `~/evidence/gate-run-s57-2026-10-31/RESULTS.md`.
 - **C slice 56 (2026-10-31, build, $0 metered + ≈ $0.21 GCE): slice 55's mechanism is in core.** After each
@@ -621,16 +644,14 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. Verify-session cadence (slice 57): a review plus its verify session blocks every later review (up to 6000 s wall),
-     and a session follows even the init review. Demo first, on slices 55–57's recorded sessions: their wall-time
-     distribution against the 300 s cadence. Candidates, measured, not chosen yet:
-     - no session after the init review;
-     - reviews run on cadence while a session is open;
-     - a session wall bound tied to the cadence.
-     Build only what the numbers support.
-  2. Settle slice 57's pending billing (13 run replies, 5 diagnosis calls after 17:47:45Z) from the usage export.
-  3. Gate run with core as of slice 57 (+ item 1 if built): as planned for slice 57 (G1–G7, verify sessions, delivered
-     commands executed and milestones moved, review count and latency vs slice 50's 68), with `snap.sh` keeping `/tmp`.
+  1. Build (slice 58 supports it): running reviews keep the 300 s cadence while a verify session is open. Allow at most one
+     session at a time; a new session starts only when none is open. A session's delivery is injected at the executor's next
+     turn, like a review reply. Regression tests use scripted models: a session open for longer than the cadence does not
+     stop reviews; never two sessions at once; the finish/close paths are unchanged. Lab smoke as in slice 56.
+  2. Gate run with core as of item 1: G1–G7, verify sessions, delivered commands executed and milestones moved, review count
+     and latency vs slice 50's 68, with `snap.sh` keeping `/tmp`.
+  3. Spec gap (slice 58, 18/18): the lead assumes an in-tree NetBSD OP-TEE driver and never looks for the machine's NetBSD
+     project. Measure in the gate run whether init probes or verify sessions correct this. A developer must not supply the path.
   4. Widen slice 52's veto finding before building a fresh-context running review: more recorded running-review states
      with standing orders (slices 43/50), L vs F, outcome = a reply that forbids a route the trace shows still live.
   5. History growth (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output compaction
