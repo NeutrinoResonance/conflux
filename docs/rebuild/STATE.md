@@ -11,6 +11,25 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **C slice 57 (2026-10-31, gate run, $0.005915 metered (+ pending, see below) + ≈ $0.23 GCE): missing evidence;
+  harness fault fixed.** Core d8ee6f1 (scratch on) ran `run12/task.txt` and ended `unverified provider_403` at step 55.
+  The pre-registered rule (provider failure before step 60) means no rerun this session. H57 (G5/G7 via delivered
+  sequences) was not tested.
+  - **Fault:** one nginx `403 Forbidden` HTML page from Surplus's edge (0.28 s) ended the task. The step-55 request,
+    rebuilt from the trace and resent, got 200 twice; the step-54 control reproduced its recorded 58,606 prompt tokens.
+    Fix: `_unavailable` treats a non-JSON 403 as unavailable (availability backoff); a JSON 403 stays final.
+    Regression test fails on d8ee6f1.
+  - **Measured (n=1): the verify session starves the cadence (MISSION a594bbc).**
+    - Review 1 (step 1) returned the goal list in 17 s. Its verify session then ran to the stop: 38 calls, 41 scratch
+      commands, 1,953 s. The lead did goal (a) itself in the scratch (OP-TEE clone and builds, 6 QEMU boots).
+    - The review and its session are one in-flight unit, so **0 reviews reached the executor in 55 steps** (slice 50:
+      ≈ 6 in that time).
+    - Unsupervised, the executor faked proof: a host `optee_simulator` ("11 passed"), a `PROOF.md`, and a "VALIDATED"
+      banner. It built OP-TEE OS only and booted nothing.
+  - Billing: Surplus recorded no usage after 17:47:45Z (export and `recent_usage`). 13 cost-less run replies and 5
+    diagnosis calls are pending; settle them from the export next slice. `snap.sh` (item 3) pulled the lab's `/tmp` every
+    300 s, 7/7 ok. Lab g2 deleted.
+  - Evidence: `~/evidence/gate-run-s57-2026-10-31/RESULTS.md`.
 - **C slice 56 (2026-10-31, build, $0 metered + ≈ $0.21 GCE): slice 55's mechanism is in core.** After each
   running review, the lead gets a verify session: `run_shell` on a scratch, then `deliver(commands, note)`. The harness
   replays the selection on a fresh scratch, with one feedback turn on failure. The executor receives the reply, the note
@@ -602,19 +621,20 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. Gate run with core as of slice 56 (`--lead kimi-k3`, scratch on), measuring:
-     - G1–G7 as in slice 50;
-     - verify sessions: delivered / replay ok / no delivery;
-     - whether delivered commands are run by the executor, and whether they move milestones (G5/G7: the kernel built
-       and attached);
-     - review count and latency versus slice 50 (68 reviews).
-     - Copy the lab's `/tmp` and job outputs before stop (item 3), so G6/G7 do not rest on re-execution.
-  2. Widen slice 52's veto finding before building a fresh-context running review: more recorded running-review states
+  1. Verify-session cadence (slice 57): a review plus its verify session blocks every later review (up to 6000 s wall),
+     and a session follows even the init review. Demo first, on slices 55–57's recorded sessions: their wall-time
+     distribution against the 300 s cadence. Candidates, measured, not chosen yet:
+     - no session after the init review;
+     - reviews run on cadence while a session is open;
+     - a session wall bound tied to the cadence.
+     Build only what the numbers support.
+  2. Settle slice 57's pending billing (13 run replies, 5 diagnosis calls after 17:47:45Z) from the usage export.
+  3. Gate run with core as of slice 57 (+ item 1 if built): as planned for slice 57 (G1–G7, verify sessions, delivered
+     commands executed and milestones moved, review count and latency vs slice 50's 68), with `snap.sh` keeping `/tmp`.
+  4. Widen slice 52's veto finding before building a fresh-context running review: more recorded running-review states
      with standing orders (slices 43/50), L vs F, outcome = a reply that forbids a route the trace shows still live.
-  3. Gate grading: copy the lab's `/tmp` and every job's output before `run_lab` stops the lab, or have core keep
-     each run's QEMU logs. Then G6/G7 do not rest on re-executing boots alone.
-  4. History growth (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output compaction
+  5. History growth (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output compaction
      on the recorded traces before any core change.
-  5. Missing input (founder, non-blocking): is the Linux boot required for goal (a) when `task.txt` does not name it? The
+  6. Missing input (founder, non-blocking): is the Linux boot required for goal (a) when `task.txt` does not name it? The
      gate keeps G3 until it is answered. No review in slices 47–48 or 50 names the missing Linux boot. The completion gate
      also needs item E's held-out comparisons and an unmerged promotion PR to `main`.

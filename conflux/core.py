@@ -1695,10 +1695,14 @@ def load_key(name: str) -> str:
 
 def _unavailable(status: int, body: object) -> bool:
     """No seller can serve the call right now: `404 minimum_discount_not_met` (MISSION 5ee7a8b), any 429/5xx, or
-    an error body without choices (slice 39: HTTP 200 `no_healthy_sellers` for pro ended a run at step 107)."""
+    an error body without choices (slice 39: HTTP 200 `no_healthy_sellers` for pro ended a run at step 107), or a
+    403 whose body is not JSON (slice 57: the edge's nginx `403 Forbidden` page ended a gate run at step 55; the
+    same request resent minutes later got 200 twice). A JSON 403 from the API itself stays final."""
     if status in (429, 500, 502, 503, 504):
         return True
     err = body.get("error") if isinstance(body, dict) else None
+    if status == 403 and isinstance(err, str) and err.lstrip().startswith("<"):  # a non-JSON body: {"error": <text>}
+        return True
     if not isinstance(err, dict) or body.get("choices"):
         return False
     return (status == 404 and err.get("code") == "minimum_discount_not_met") or status == 200
