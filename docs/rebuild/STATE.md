@@ -11,6 +11,24 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections.
+- **C slice 59 (2026-10-31, build, $0.007675 metered + ≈ $0.10 GCE): verify sessions run beside the review cadence.**
+  - `Steering` has two slots. Reviews keep the cadence (one in flight). A review that returns while no session is open
+    opens one on its own thread; at most one session is open until its result is taken. The reply is injected when its
+    review returns, the delivery later as its own message (no new prose). `Lead.verify(convo=…)` continues its own
+    review. finish/close semantics unchanged, over both threads.
+  - Tests: 4 new regression tests, all fail on be8895e; full suite passes. A `/proc` TOCTOU flake in an existing
+    scratch test was fixed.
+  - Lab smoke (scripted models, real `LabScratch`, cadence 20 s), 8/8:
+    - session 1 was open 339.8 s, and 11 reviews were injected meanwhile;
+    - sessions never overlapped (17 reviews skipped);
+    - the delivery came as its own message;
+    - close during `sleep 900` took 179 s with no delivery; no scratch was left. Lab s59 deleted.
+  - `VERIFY_ASK` was corrected after critic round 1. It no longer says "Before your reply reaches the agent"; it now says
+    the reply was sent and the commands arrive as a later message.
+    - Demo on slice 55's 24 R1 conversations, kimi-k3 low, first call: run_shell first 48/48 both before and after, 0
+      deliver-first and 0 no-tool, $0.007675.
+    - This is a first-turn proxy only: the effect on delivered outcomes is unmeasured.
+  - Evidence: `~/evidence/core-session-cadence-2026-10-31/RESULTS.md`, `~/evidence/verify-prompt-demo-2026-10-31/RESULTS.md`.
 - **C slice 58 (2026-10-31, cadence-review demo, offline, $0.017903 metered + $0 GCE): running reviews on selected
   prefixes of slice 57's run reject its false proof. Registered rule supported: R∧Q 6/6 (a detection result on those
   prefixes, not a runtime cadence measurement). A session wall bound is ruled out.**
@@ -648,18 +666,15 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. Build (slice 58 supports it): running reviews keep the 300 s cadence while a verify session is open. Allow at most one
-     session at a time; a new session starts only when none is open. A session's delivery is injected at the executor's next
-     turn, like a review reply. Regression tests use scripted models: a session open for longer than the cadence does not
-     stop reviews; never two sessions at once; the finish/close paths are unchanged. Lab smoke as in slice 56.
-  2. Gate run with core as of item 1: G1–G7, verify sessions, delivered commands executed and milestones moved, review count
-     and latency vs slice 50's 68, with `snap.sh` keeping `/tmp`.
-  3. Spec gap (slice 58, 18/18): the lead assumes an in-tree NetBSD OP-TEE driver and never looks for the machine's NetBSD
+  1. Gate run with core as of slice 59: G1–G7, verify sessions, delivered commands executed and milestones moved, review
+     count and latency vs slice 50's 68, with `snap.sh` keeping `/tmp`. Also measure late/stale deliveries: a delivery
+     injected after later reviews changed direction, and whether the executor runs it.
+  2. Spec gap (slice 58, 18/18): the lead assumes an in-tree NetBSD OP-TEE driver and never looks for the machine's NetBSD
      project. Measure in the gate run whether init probes or verify sessions correct this. A developer must not supply the path.
-  4. Widen slice 52's veto finding before building a fresh-context running review: more recorded running-review states
+  3. Widen slice 52's veto finding before building a fresh-context running review: more recorded running-review states
      with standing orders (slices 43/50), L vs F, outcome = a reply that forbids a route the trace shows still live.
-  5. History growth (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output compaction
+  4. History growth (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output compaction
      on the recorded traces before any core change.
-  6. Missing input (founder, non-blocking): is the Linux boot required for goal (a) when `task.txt` does not name it? The
+  5. Missing input (founder, non-blocking): is the Linux boot required for goal (a) when `task.txt` does not name it? The
      gate keeps G3 until it is answered. No review in slices 47–48 or 50 names the missing Linux boot. The completion gate
      also needs item E's held-out comparisons and an unmerged promotion PR to `main`.
