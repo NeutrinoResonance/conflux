@@ -27,7 +27,8 @@ MISSION-STATUS: ACTIVE
     P1 grades 24/24. Pre-flight 5/5 seam, c8 evidence visible.
   - **Results:**
     - D (kimi/glm): Gl 4/3, Gh 3/1, Kl 3/1, Kh 1/1.
-    - kimi passes c8 in 19/24 lists (GK revised, slice 66: 0/6). It marks every L criterion UNMET at s61 (12/12).
+    - kimi passes c8 in 19/24 lists (GK revised, slice 66: 0/6). At s61 it marks ≥ 1 L criterion UNMET in 12/12
+      L-bearing lists (not every one: Gl4 G1, Gh2 G2, Kl2 G1 are MET).
     - Gl's 4/6 is the derivation ceiling: Gl1 and Gl6 have no Linux criterion, and kimi says DONE on Gl1 at s61.
     - glm says one more false DONE (Gl4): it counts an early-TA load as "hello_world or xtest passes".
   - **c8 rejections (13 goal-(a) verdicts):** 5 criteria over-demand as written; 3 come from c8's pre-built OP-TEE; 2
