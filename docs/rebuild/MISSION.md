@@ -22,8 +22,8 @@ Make inexpensive DeepSeek execution achieve the best **reliable work per dollar*
 ## Completion gate (founder decision 2026-10-27)
 
 The endeavor is done when **Conflux, driving DeepSeek as its normal executor, completes the full
-run-12 task unattended from the clean OP-TEE snapshot** — goal (a) OP-TEE in QEMU, shown by a QEMU boot of OP-TEE's secure world
-with NetBSD as the normal-world OS (founder decision 2026-11-01; no Linux boot required), then goal (b) the NetBSD driver work — with every goal's success
+run-12 task unattended from the clean OP-TEE snapshot** — goal (a) OP-TEE build + QEMU boot of the
+secure world and Linux, then goal (b) the NetBSD driver work — with every goal's success
 independently verified by executed checks (not model self-grades), within the weekly budgets below.
 Task text: `~/evidence/optee-ctl-runs/run12/task.txt`. Run it on a lab VM (`devbox-lab`). Held-out
 comparisons against bare DeepSeek and the baseline (item E) remain required supporting evidence.
@@ -31,16 +31,6 @@ Only then set `MISSION-STATUS: COMPLETE` and open the promotion PR to `main`.
 
 ## Founder decisions (binding; newest first)
 
-- **2026-11-01 — Goal (a) is met by booting NetBSD on OP-TEE in QEMU; no Linux boot is required.** Founder: "as long
-  as we get the thing to boot (which is NetBSD) then we're fine." `task.txt` says only "Get QEMU set up with OP-TEE";
-  the Linux reference boot came from the developer-written fixture (`optee_goal_a.json`, the official qemu_v8 build,
-  which boots Linux) and from this gate's earlier wording. G3 (Linux boot) is dropped from the completion gate and
-  from grading; it stays recorded as a descriptive fixture milestone only. How OP-TEE is obtained and built (official
-  manifest or individual repositories) is not prescribed: G1's "official qemu_v8 manifest" form is likewise a
-  fixture detail, not a gate requirement. Goal (a) = one QEMU boot that shows OP-TEE's secure world starting and
-  handing over to NetBSD as the normal-world OS. Goal (b) is unchanged: a NetBSD driver that initializes and
-  communicates with OP-TEE, with proof by executed checks. Re-state the gate's milestones accordingly and re-grade
-  recorded runs as a labelled re-grade.
 - **2026-10-30 — When cost is ambiguous, ask Surplus's billing API; keep the 90% floor.** A reply without
   `buyer_cost_micro` (or any unsettled cost) is resolved from Surplus's own billing data (`/v1/buyer/usage/export` rows
   by request id/model/tokens, `/v1/payments/balance` available + held), never by settling it at list-price ceilings.
