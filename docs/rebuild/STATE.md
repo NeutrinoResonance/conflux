@@ -10,7 +10,46 @@ MISSION-STATUS: ACTIVE
   proof criteria) were developer-written. They are grading references only (founder decision 2026-10-28, MISSION
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
-  and produces its own corrections.
+  and produces its own corrections. Slice 60 is the first run of core to reach G5 + G7 from `task.txt` alone, with no developer
+  help and no false DONE, independently re-executed (n=1). Slice 43's lead-s1 (a demo harness) reached G5 + G7 first, but ended in a false DONE.
+- **C slice 60 (2026-10-31/11-01, gate run, $0.140021 metered + ≈ $2.17 GCE): core f11d700 ended `unverified`/`step_cap`.
+  There was no false DONE: 3/3 finish reviews said not DONE, correctly. Milestones G2 G4 G5 G6 G7 = 5/7 (slice 50: 4/7).
+  G5 and G7 are met for the first time in a core gate run, with no false DONE, and verified by grader re-execution.
+  Slice 43's lead-s1 demo reached both earlier but ended in a false DONE. H60 supported (n=1).**
+  - Setup: `task.txt` only, pro + `--lead kimi-k3`, verify sessions beside the cadence, fresh lab, 240 steps (5.9 h).
+  - **Driver:** the run wrote it in-tree in the machine's `netbsd-src`; every upstream fetch returned 404.
+    - It built kernel #20 with the driver in it (G5).
+    - Grader re-execution of the run's own step-224 boot shows, in one boot:
+      - OP-TEE 4.11 "switching to normal world boot" (G6);
+      - NetBSD #20 with `optee0 at simplebus0`;
+      - real SMC answers: OP-TEE's API UID, OS revision 4.11, and GET_SHM_CONFIG with SHM `0x42000000` (G7).
+  - **Not met:** a TA session (`teectl` open_session returned EIO and was never fixed), G1 (no qemu_v8 build root) and G3
+    (no Linux boot; no goal names Linux).
+  - **Sessions beside the cadence work live:**
+    - 50 review injections (8.5/h vs slice 50's 8.3/h); lead latency median 21 s;
+    - 8 sessions, 5 delivered with replay ok;
+    - initial uptake 5/5: each delivery's first command has its best match at the injection step (token Jaccard
+      0.57–0.90).
+    - Coverage: 11/29 delivered commands near-verbatim (J ≥ 0.7), 18/29 at J ≥ 0.5. Complete sequence execution is not
+      shown.
+    - Examples: the lead's driver rewrite (steps 73–76, J 0.90–0.94 on 4/7) and its DTB + SMC-owner fix (212–214),
+      ahead of the attach at step 224 (the executor had found the owner fix itself at step 208).
+  - **Stale:** 5/5 deliveries arrived 22–55 steps after their reply, behind 4–9 newer reviews. 1/5 contradicted the newest
+    review's "no OP-TEE/TF-A rebuild" and was run anyway (steps 134–135).
+  - **Slice 58's spec gap did not recur:** the executor (step 2 `find`) and the lead's first session (`ls /home`) found the
+    machine's NetBSD project themselves.
+    - Caveat: the clean snapshot holds an earlier agent's compiled `netbsd-obj/.../optee.o`. The executor mined its
+      strings and symbols (steps 11–14), and the driver reuses those message strings. This is machine prior art, not
+      developer input.
+  - **New failure, late self-damage:** after the working boot, in-place edits for open_session broke the build at steps
+    237–240 and removed `netbsd.img`, the bootable wrapper. Kernel #20 survived as `netbsd.bin`, and the source was left unbuildable.
+    The run had also deleted its own proof logs.
+  - **Grading gaps:** `grade.sh` G5 misses `netbsd.bin`, and `snap.sh` pulls only `/tmp`. G5–G7 were graded from the trace
+    plus a reconstruction (`netbsd.img` re-made from `netbsd.bin` by the build's own `mkubootimage` rule).
+  - D1: 5 hits (1 real masking in the model's own check, 4 false positives); 0 harness faults.
+  - Billing: 984/1,017 calls export-matched, 33 cost-less unbilled; not Conflux in the window: $0.035205.
+  - W44 GCE including controller and disks: ≤ $47.90 of $60. Lab g3 deleted.
+  - Evidence: `~/evidence/gate-run-s60-2026-10-31/RESULTS.md` (`grade.json`, `reexec/`, `uptake_scan.out`).
 - **C slice 59 (2026-10-31, build, $0.007675 metered + ≈ $0.10 GCE): verify sessions run beside the review cadence.**
   - `Steering` has two slots. Reviews keep the cadence (one in flight). A review that returns while no session is open
     opens one on its own thread; at most one session is open until its result is taken. The reply is injected when its
@@ -666,15 +705,17 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. Gate run with core as of slice 59: G1–G7, verify sessions, delivered commands executed and milestones moved, review
-     count and latency vs slice 50's 68, with `snap.sh` keeping `/tmp`. Also measure late/stale deliveries: a delivery
-     injected after later reviews changed direction, and whether the executor runs it.
-  2. Spec gap (slice 58, 18/18): the lead assumes an in-tree NetBSD OP-TEE driver and never looks for the machine's NetBSD
-     project. Measure in the gate run whether init probes or verify sessions correct this. A developer must not supply the path.
-  3. Widen slice 52's veto finding before building a fresh-context running review: more recorded running-review states
-     with standing orders (slices 43/50), L vs F, outcome = a reply that forbids a route the trace shows still live.
-  4. History growth (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output compaction
-     on the recorded traces before any core change.
+  1. Replicate and attribute slice 60 (n=1). Run a second gate run of f11d700 unchanged, then a `--no-scratch` control.
+     - Outcomes: G5/G7 again, whether a TA session completes, and whether the deliveries carry the gain.
+     - Fix the grading instruments first: G5 must match `netbsd.bin`/`netbsd.img`; the snapshots must also take boot logs
+       and kernel images outside `/tmp`.
+  2. Late self-damage (slice 60, steps 237–240): before any core change, demo a generic check on the recorded trace. It
+     should flag an edit or rebuild that destroys the artefact of a command that last produced a milestone.
+  3. Stale deliveries (1/5 contradicted the newest review): count across runs before building any guard.
+  4. History growth (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output compaction on
+     the recorded traces before any core change.
   5. Missing input (founder, non-blocking): is the Linux boot required for goal (a) when `task.txt` does not name it? The
-     gate keeps G3 until it is answered. No review in slices 47–48 or 50 names the missing Linux boot. The completion gate
-     also needs item E's held-out comparisons and an unmerged promotion PR to `main`.
+     gate keeps G3 until it is answered; no slice-60 goal names Linux. Goal (b)'s proof bar is also open: the finish
+     reviews require a TA session, and an attach with OP-TEE answers is G7. The completion gate also needs item E's
+     held-out comparisons and an unmerged promotion PR to `main`.
+  6. Carried from before slice 60: widen slice 52's veto finding before building a fresh-context running review.

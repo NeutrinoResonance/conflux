@@ -68,7 +68,10 @@
   `/home/darrenhidalgo/netbsd-src` (git `7f2c5e73f`, clean, has `sys/arch/arm/arm/smccc.{c,h}`, no optee driver);
   `/home/darrenhidalgo/netbsd-obj` (built GENERIC64 `netbsd`/`netbsd.img` from 2026-10-21, tooldirs
   `tooldir.Linux-6.1.0-50/51-cloud-amd64-x86_64`); `/home/darrenhidalgo/llmsuper-netbsd-run` (earlier NetBSD-only
-  QEMU boot). Labs run kernel `6.1.0-54`, so plain `build.sh` finds no matching tooldir; pass `-T <existing tooldir>`.
+  QEMU boot).
+  - `netbsd-obj/sys/arch/evbarm/compile/GENERIC64/` also holds an earlier agent's compiled `optee.o`, with no source.
+    It carries message strings and symbols. Slice 60's executor mined it, so grading names it as machine prior art.
+  - Labs run kernel `6.1.0-54`, so plain `build.sh` finds no matching tooldir; pass `-T <existing tooldir>`.
 - The c3 disk holds a built qemu_v8 tree in `~/optee-work/optee`. `make check-only CHECK_TESTS=xtest XTEST_ARGS=1001`
   boots it and passes in ≈ 54 s. The snapshot has no `expect`; the a4 check installs it.
   Since C slice 32 its in-tree TF-A build (`optee/trusted-firmware-a/build/qemu/release`) and `netbsd-optee/qemu_fw.bios`
