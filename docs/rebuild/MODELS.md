@@ -493,3 +493,23 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   so the S ask was never sent.
 - Latency: median 32.6 s per call, max 144.8 s; a full review takes 2–12 min. Evidence:
   `~/evidence/criteria-verdict-demo-2026-11-01/RESULTS.md`.
+
+## `kimi-k3` / `glm-5.3` low judging one-shot pre-trace goal lists per criterion (C slice 67, offline)
+- **Short one-shot goal lists pass a truly finished goal (a), and kimi-k3 holds their Linux criterion at the false
+  DONE.**
+  - Lists: slice 63 D1's Gl/Gh/Kl/Kh, 6 draws each. One turn per (list, state). States: c8 (goal (a) met) and s61@132
+    (no Linux boot).
+  - kimi passes c8 in 19/24 lists (GK revised criteria, slice 66: 0/6).
+  - At s61, kimi marks at least one hand-labelled Linux/xtest criterion UNMET in each of the 12 lists that carry one
+    (not every such criterion: Gl4 G1, Gh2 G2 and Kl2 G1 are MET).
+  - glm-5.3 low: c8 passes 14/24, s61 Linux/xtest UNMET 8/12 lists.
+- **Discriminating draws (c8 pass and s61 Linux UNMET), kimi / glm:** Gl 4/3, Gh 3/1, Kl 3/1, Kh 1/1 (of 6). The Gl
+  source (glm-5.3 low as deriver) is the only one that meets the registered bar. Its kimi 4/6 is the derivation ceiling:
+  only 4/6 Gl lists name the Linux requirement.
+- **glm-5.3 softens a criterion at the false DONE once.** At Gl4 it rates "optee_example_hello_world or xtest passes"
+  MET from an early-TA load, while admitting "no xtest/optee_example_userspace run was performed". kimi: "only *loaded*
+  … never *invoked*". Per-criterion false DONE at s61: kimi 1/24 (a list with no Linux criterion), glm 1/24.
+- **Format:** glm writes `G1: MET —` (id first) in 9/48 replies even after a redraw; kimi follows the
+  `MET: <id>` form 47/48 at first try. Agreement where both parse: 261/277 verdicts.
+- Latency per call (one turn, ~20–40k tokens in): median kimi 33.2 s, glm 26.1 s. Cost: kimi $0.026637 / 49 calls, glm
+  $0.004355 / 69 calls. Evidence: `~/evidence/criteria-acceptance-demo-2026-11-01/RESULTS.md`.
