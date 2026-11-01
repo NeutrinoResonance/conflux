@@ -15,7 +15,7 @@ MISSION-STATUS: ACTIVE
   gate. Slice 62 shows that false DONE is a spec-derivation gap, not a reviewer-family one. Slice 63: proof criteria derived from
   `task.txt` before the trace stop that false DONE (0/12 vs 3/6), but for goal (b)'s TA-session bar; the derived Linux
   goal is dropped once the reviewer reads the trace. Slice 66: those criteria also reject a run that truly met goal (a)
-  (6/6, both the open and the per-criterion verdict); they over-demand. Slice 67: glm-5.3's short one-shot goal lists (Gl) pass c8 and keep the Linux criterion at s61 when judged per criterion (kimi 4/6, at the derivation ceiling); Slice 68: under core's open finish ask the same Gl lists pass c8 (0/12 false rejects) but the reviewer drops the Linux criterion at s61 in 16/16 L-list reviews (gate reason 0/16; DONE 5/24), so inserting criteria into the open review is not a capability. Slices 60 and 61 drew on a contaminated snapshot (a prior run's `optee.o`), so neither shows the driver from `task.txt` alone. Slice 69 does, on a cleaned lab: G7 by re-execution, but as a loadable module (strict G5 unmet), again with a false DONE. Slice 43's lead-s1 (a demo harness) reached G5 + G7 first, but ended in a false DONE. Slice 70: no gate run has attempted G3 (the Linux boot), because core's step-1 goal list never requires it (live 0/3). kimi-k3's goal-by-goal review of a list writes it in 4/6 draws, but the running reviews drop it again within 6–12 steps (1/4 chains keep it), so changing who writes the first list is not a capability. Slice 71: s69's TA-session stall was not lost when the finish review cancelled a verify session (0/6 continuations deliver; 1/11 dropped sessions had delivered). It comes from an unchecked claim: `0xffff0006` (BAD_PARAMETERS, from OP-TEE's open-session META check) was misdecoded as ITEM_NOT_FOUND by the executor and repeated by every review.
+  (6/6, both the open and the per-criterion verdict); they over-demand. Slice 67: glm-5.3's short one-shot goal lists (Gl) pass c8 and keep the Linux criterion at s61 when judged per criterion (kimi 4/6, at the derivation ceiling); Slice 68: under core's open finish ask the same Gl lists pass c8 (0/12 false rejects) but the reviewer drops the Linux criterion at s61 in 16/16 L-list reviews (gate reason 0/16; DONE 5/24), so inserting criteria into the open review is not a capability. Slices 60 and 61 drew on a contaminated snapshot (a prior run's `optee.o`), so neither shows the driver from `task.txt` alone. Slice 69 does, on a cleaned lab: G7 by re-execution, but as a loadable module (strict G5 unmet), again with a false DONE. Slice 43's lead-s1 (a demo harness) reached G5 + G7 first, but ended in a false DONE. Slice 70: no gate run has attempted G3 (the Linux boot), because core's step-1 goal list never requires it (live 0/3). kimi-k3's goal-by-goal review of a list writes it in 4/6 draws, but the running reviews drop it again within 6–12 steps (1/4 chains keep it), so changing who writes the first list is not a capability. Slice 71: s69's TA-session stall was not lost when the finish review cancelled a verify session (0/6 continuations deliver; 1/11 dropped sessions had delivered). It comes from an unchecked claim: `0xffff0006` (BAD_PARAMETERS, from OP-TEE's open-session META check) was misdecoded as ITEM_NOT_FOUND by the executor and repeated by every review. Slice 72: the class recurs (4 wrong, load-bearing value readings in s60/s69, 0 checked by a command). Neither a glm reviewer nor a generic claims turn gets the flag to the executor (0/48 final replies); kimi's claims answer names it in 5/12, but the final ask drops it.
   - **Gate reaffirmed (founder, 2026-11-01; 33c99f2 reverted by 82b6d68):** goal (a) includes the Linux boot, so G3 is
     required. That answers slice 60's open question.
   - **Open founder question (asked 2026-11-01 ~13:00Z, unanswered):** may the finish gate use a per-criterion verdict?
@@ -24,6 +24,22 @@ MISSION-STATUS: ACTIVE
     Slice 70 widens the question with evidence. The same revise-or-drop licence (`FINAL_ASK`) removes a Linux goal
     derived before the trace from the *running* reviews too (3/4 chains by step 12). So the founder's answer decides
     whether any derived goal can be held against the lead's own rewrites.
+- **C slice 72 (2026-11-01, unchecked-claims demo, offline, $0.029260 metered + $0 GCE): no tested change puts s69's
+  misdecode in front of the executor. H72 is falsified. Build nothing.**
+  - **A ($0):** the class recurs. There are 4 wrong, load-bearing readings of machine values, and none was checked
+    against the headers in the run's own tree:
+    - s69: `0xffff0006` read as ITEM_NOT_FOUND (162–179); `origin=0x3` read as the TA (finish reviews); an all-zero
+      reply read as success (151/159/169);
+    - s60: `origin=3` read as TRUSTED_APP (231–240), which the reviews used as "proof" of TA routing.
+    - s61 never reached a TA session.
+  - **Seam:** reviews 1..43 replayed, 289/289 turns exact.
+  - **B (r40 = step 165, r43 = step 177; n=6 each):** final reply flags the decode and names a settling probe: K0 (core
+    as-is, kimi-k3) 0/12, G0 (glm-5.3) 0/12, KQ/GQ (+ one generic claims turn before `FINAL_ASK`) 0/12 each.
+    - KQ's claims answer flags it in 5/12, with a probe that settles it (executed on run 12's `optee_os`) in 2/12.
+      0/5 carry it into the final reply: the open final ask drops it, as with derived goals (slices 63/68/70).
+    - GQ flags it 0/12 and ranks "TA not embedded" first.
+  - Billing: 408/408 export-matched. Not Conflux in the window: $0.001209.
+  - Evidence: `~/evidence/unchecked-claims-demo-2026-11-01/RESULTS.md`.
 - **C slice 71 (2026-11-01, dropped-session demo, offline, $0.000474 metered + $0 GCE): the finish review's cancel of
   an open verify session is not what lost s69's TA session. H71 is falsified as registered. Build nothing.**
   - **Why:** s69's review-37 session read OP-TEE's `get_open_session_meta`, patched META onto both open-session
@@ -957,7 +973,8 @@ MISSION-STATUS: ACTIVE
   2. **G3 is never attempted (slice 70).** The open review's revise-or-drop licence has now removed a derived Linux
      goal at the finish review (slices 63 and 68) and in the running reviews (slice 70). Do not try another derivation
      or init-model variant: that would be the third materially identical failure. The next change of hypothesis needs
-     the founder's answer on holding derived goals (question above). Until then, take item 2c (then 3).
+     the founder's answer on holding derived goals (question above); slice 72 shows the same final-ask drop for flagged
+     claims. Until then, take item 3.
   2b. **On hold (open founder question above): no per-criterion verdict in core until MISSION records it.** **False DONE against the gate: hold derived criteria fixed (slice 68).** The open finish review drops Gl's Linux
      criterion 16/16 at s61, but keeps goal (a) correctly at c8 12/12. Per criterion as written, it holds it (slice 67).
      - Next demo: a separate acceptance check beside the open review, which keeps leading (MISSION a7322df). Pre-trace
@@ -968,13 +985,13 @@ MISSION-STATUS: ACTIVE
        no protection (Gl1 false DONE 3/4 here).
      - c8 (`criteria-verdict-demo-2026-11-01/demo.py` `rebuild_c8`) is the acceptance state. The grading reference is
        never given to a model.
-  2c. **Unchecked claims about the machine (slice 71), not blocked on the founder.** In s69 a return code misdecoded
-     at step 162 (BAD_PARAMETERS read as ITEM_NOT_FOUND) and an all-zero reply buffer read as an open session steered
-     the last 17 steps and the finish review. The decoding header was in the run's own tree. Next demo, on recorded
-     traces (s69@162–179, plus s60/s61 if they have such claims): does a model other than the executor, reading the
-     trace, flag the claim and choose a probe that settles it? Score: flags the claim, and the probe it chooses
-     decides it. Do not use a decode or zero-buffer prompt (task-specific); count the claims across runs first.
-     Rerunning the dropped-session wiring is ruled out (slice 71).
+  2c. **Unchecked claims about the machine (slices 71–72).** Done offline: a different reviewer model (glm) and a
+     generic claims turn both fail to reach the executor (0/48), and both end at the open final ask's drop. Do not
+     try another review-text or reviewer variant before the founder question is answered. What remains is executing
+     the settling command: kimi named a decisive probe in 2/12 claims answers, and the lead's verify session already
+     runs commands. Measuring whether the session picks and runs such a probe needs a lab. Count it in the scratch-on
+     arm paired with item 3's `--no-scratch` control (session commands that settle a value reading), rather than
+     running a separate demo.
   3. **Attribution:** the clean baseline exists (slice 69: G7 from `task.txt` alone). Next is a `--no-scratch` control
      gate run, to isolate the lead's verify sessions. Other gaps open in slice 69, not blocked on the founder:
      - the TA session (open_session `0xffff0006` = BAD_PARAMETERS after 5 kmod generations; see 2c): a self-correction target, once goal (b)'s
