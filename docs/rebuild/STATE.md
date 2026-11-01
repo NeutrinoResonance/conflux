@@ -10,11 +10,12 @@ MISSION-STATUS: ACTIVE
   proof criteria) were developer-written. They are grading references only (founder decision 2026-10-28, MISSION
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
-  and produces its own corrections. Slice 60 is the first run to reach G5 + G7 from `task.txt` alone, with no developer
-  help (n=1).
+  and produces its own corrections. Slice 60 is the first run of core to reach G5 + G7 from `task.txt` alone, with no developer
+  help and no false DONE, independently re-executed (n=1). Slice 43's lead-s1 (a demo harness) reached G5 + G7 first, but ended in a false DONE.
 - **C slice 60 (2026-10-31/11-01, gate run, $0.140021 metered + ≈ $2.17 GCE): core f11d700 ended `unverified`/`step_cap`.
   There was no false DONE: 3/3 finish reviews said not DONE, correctly. Milestones G2 G4 G5 G6 G7 = 5/7 (slice 50: 4/7).
-  G5 and G7 are met for the first time in any run. H60 supported (n=1).**
+  G5 and G7 are met for the first time in a core gate run, with no false DONE, and verified by grader re-execution.
+  Slice 43's lead-s1 demo reached both earlier but ended in a false DONE. H60 supported (n=1).**
   - Setup: `task.txt` only, pro + `--lead kimi-k3`, verify sessions beside the cadence, fresh lab, 240 steps (5.9 h).
   - **Driver:** the run wrote it in-tree in the machine's `netbsd-src`; every upstream fetch returned 404.
     - It built kernel #20 with the driver in it (G5).
@@ -27,10 +28,13 @@ MISSION-STATUS: ACTIVE
   - **Sessions beside the cadence work live:**
     - 50 review injections (8.5/h vs slice 50's 8.3/h); lead latency median 21 s;
     - 8 sessions, 5 delivered with replay ok;
-    - the executor ran every delivery at its injection step. Examples: the lead's driver rewrite (steps 73–76, token
-      Jaccard ≥ 0.9) and its DTB + SMC-owner fix (212–214), ahead of the attach at step 224 (the executor had found the
-      owner fix itself at step 208).
-  - **Stale:** 5/5 deliveries arrived 29–55 steps after their reply, behind 4–9 newer reviews. 1/5 contradicted the newest
+    - initial uptake 5/5: each delivery's first command has its best match at the injection step (token Jaccard
+      0.57–0.90).
+    - Coverage: 11/29 delivered commands near-verbatim (J ≥ 0.7), 18/29 at J ≥ 0.5. Complete sequence execution is not
+      shown.
+    - Examples: the lead's driver rewrite (steps 73–76, J 0.90–0.94 on 4/7) and its DTB + SMC-owner fix (212–214),
+      ahead of the attach at step 224 (the executor had found the owner fix itself at step 208).
+  - **Stale:** 5/5 deliveries arrived 22–55 steps after their reply, behind 4–9 newer reviews. 1/5 contradicted the newest
     review's "no OP-TEE/TF-A rebuild" and was run anyway (steps 134–135).
   - **Slice 58's spec gap did not recur:** the executor (step 2 `find`) and the lead's first session (`ls /home`) found the
     machine's NetBSD project themselves.
@@ -38,7 +42,8 @@ MISSION-STATUS: ACTIVE
       strings and symbols (steps 11–14), and the driver reuses those message strings. This is machine prior art, not
       developer input.
   - **New failure, late self-damage:** after the working boot, in-place edits for open_session broke the build at steps
-    237–240 and removed `netbsd.img`. The run had also deleted its own proof logs. The cap hit with no kernel image.
+    237–240 and removed `netbsd.img`, the bootable wrapper. Kernel #20 survived as `netbsd.bin`, and the source was left unbuildable.
+    The run had also deleted its own proof logs.
   - **Grading gaps:** `grade.sh` G5 misses `netbsd.bin`, and `snap.sh` pulls only `/tmp`. G5–G7 were graded from the trace
     plus a reconstruction (`netbsd.img` re-made from `netbsd.bin` by the build's own `mkubootimage` rule).
   - D1: 5 hits (1 real masking in the model's own check, 4 false positives); 0 harness faults.
