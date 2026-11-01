@@ -521,3 +521,13 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   descoped, "superseded by the NetBSD SMCCC probe", "DONE via substitution", or silently rewritten. Per criterion as
   written (slice 67) it held the same criterion 4/4. DONE at s61 5/24; every refusal asks for a TA session or ioctl.
 - Cost: 294 calls, $0.034948; median latency 28.0 s. Evidence: `~/evidence/criteria-open-ask-demo-2026-11-01/RESULTS.md`.
+
+## `deepseek-v4-pro` executor and `kimi-k3` lead: a TEE return code misdecoded and repeated (C slice 71, s69 trace)
+- At s69 step 162 the executor read OP-TEE's `0xffff0006` as `TEE_ERROR_ITEM_NOT_FOUND`. It is `BAD_PARAMETERS`;
+  ITEM_NOT_FOUND is `0xffff0008`. Neither model checked the header in the run's own `optee_os` tree, and the label
+  stayed through step 179 in executor turns and in running and finish reviews (32 mentions in `lead.jsonl`). kimi had
+  decoded both codes correctly at steps 19 and 36 of the same run.
+- Both models also read an all-zero reply (`ret=0x0 origin=0x0 session=0`) as an opened session (s69 verify sessions
+  34 and 37; session 34 wrote "FULL PASS"). The step-164 finish review did call the same signature a zeroed buffer.
+- kimi-k3 low continuing an unfinished verify session keeps running commands rather than delivering: 6/6 at 18/40
+  commands. Evidence: `~/evidence/dropped-session-demo-2026-11-01/RESULTS.md`.
