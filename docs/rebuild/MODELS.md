@@ -533,7 +533,8 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   commands. Evidence: `~/evidence/dropped-session-demo-2026-11-01/RESULTS.md`.
 - C slice 72 (s69 r40/r43 replayed, n=6 per cell): asked one generic question ("which claims about the machine does
   the plan rest on that no command output shows; give a command to settle each"), kimi-k3 low names the
-  `0xffff0006` decode as unverified in 5/12 answers (2/12 with a probe that settles it on the real tree; the rest
-  point at absent header paths). glm-5.3 low does so in 0/12 and ranks other unverified claims first. Neither model
-  keeps the flag in the final reply under `FINAL_ASK` (0/5), and neither flags it in core's unchanged review (0/24).
-  Both read `origin=3` as the TA in some reviews (s60, s69). Evidence: `~/evidence/unchecked-claims-demo-2026-11-01/RESULTS.md`.
+  `0xffff0006` decode as unverified in 4/12 answers (2/12 with a probe that settles it on the real tree; the other
+  two grep an absent header path or a truncated `core/include` search). glm-5.3 low does so in 0/12 and ranks other unverified claims first. Neither model
+  keeps the flag in the final reply under `FINAL_ASK` (0/4), and neither flags it in core's unchanged review (0/24).
+  In the recorded runs, deepseek-v4-pro (executor, s60) and kimi-k3 (lead, s60 and s69 finish reviews) read
+  `origin=3` as the TA. Evidence: `~/evidence/unchecked-claims-demo-2026-11-01/RESULTS.md`.
