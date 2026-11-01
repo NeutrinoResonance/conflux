@@ -35,7 +35,7 @@ MISSION-STATUS: ACTIVE
   - **Hand audit of the s61 refusals:**
     - Gate reason (Linux/xtest, or the revision/UUID contradiction, as a finish blocker): D1 1/9, D2 3/8.
     - Refusals for a TA session only: D1 6/9, D2 3/8.
-    - Linux/xtest named at all: D1 7/16, D2 6/14 (slice 62: 0/28).
+    - Linux/xtest named at all: D1 8/16 (incl. s60@240 d2, which drops the Linux-guest xtest baseline), D2 6/14 (slice 62: 0/28).
     - After reading the trace, the reviewer makes the derived Linux goal optional or a "documented deviation", or drops
       it. `FINAL_ASK` allows "revise … or drop goals".
   - Unmeasured: the false-reject cost on a true-DONE state (none exists) and goal (b)'s bar (item 6). So no core build.
