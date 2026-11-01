@@ -77,10 +77,13 @@
   - **Snapshot contamination** (operator, 2026-11-01): `netbsd-obj/sys/arch/evbarm/compile/GENERIC64/optee.{o,d,su}`
     is an earlier agent's compiled driver (2026-07-19; its source `sys/dev/optee/optee.c` is gone). Slice 60 mined it;
     slice 61 reconstructed its driver from the disassembly, so G4 provenance is affected for both.
-  - **Since C slice 65, core removes it on every lab** (`core.LAB_CLEAN`, after setup and before the egress check;
-    failure ends the run `clean_failed` with no model call). The clean job's script deletes itself, so the path list
-    never reaches `~/.conflux-jobs`. The snapshot itself is unchanged: the controller identity cannot create snapshots
-    (`testIamPermissions`: only `compute.snapshots.get`).
+  - **Since C slice 65, gate runs remove it before the first model call:** pass
+    `--lab-clean tests/fixtures/core_loop/optee_lab_residue.txt` to `conflux.core run --lab`. The path list is a lab
+    fixture; core's clean step is generic and fail-closed.
+    - It runs after setup and before the egress check. A failure ends the run `clean_failed` with no model call.
+    - The clean job's script deletes itself, so the path list never reaches `~/.conflux-jobs`.
+    - The snapshot itself is unchanged: the controller identity cannot create snapshots (`testIamPermissions`: only
+      `compute.snapshots.get`). A clean snapshot is the better fix and needs the founder.
   - Slice 65's inventory found no other residue: those three files are the only `*optee*` names on the disk, and
     `optee.o` is GENERIC64's only object without a `.depend` target. The prebuilt kernels have no optee symbols. There
     are no shell histories, and the 07-19/10-21 rebuilds are stock. A stock `build.sh -u kernel=GENERIC64` passes after

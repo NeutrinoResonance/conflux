@@ -1,0 +1,7 @@
+# Lab fixture for the OP-TEE/NetBSD gate runs (`python -m conflux.core run --lab ... --lab-clean <this file>`).
+# Prior-run residue on snapshot conflux-optee-baseline-clean-20261021: an earlier agent's compiled driver, whose
+# source is gone (C slice 65 inventory, ~/evidence/snapshot-clean-2026-11-01/RESULTS.md). Removed before the first
+# model call; never given to a model. A clean snapshot would make this file unnecessary (needs the founder).
+/home/darrenhidalgo/netbsd-obj/sys/arch/evbarm/compile/GENERIC64/optee.o
+/home/darrenhidalgo/netbsd-obj/sys/arch/evbarm/compile/GENERIC64/optee.d
+/home/darrenhidalgo/netbsd-obj/sys/arch/evbarm/compile/GENERIC64/optee.su

@@ -160,9 +160,10 @@ Rate: n2d-standard-8 ≈ $0.338/h running (GCE list price, us-central1) + 100 GB
 | 2026-10-31/11-01 | `conflux-dev-lab-g3` | ≈ 20:55:00–02:52:14 (up issued → core stopped it), 02:52:25–03:04:49 (grading, deleted) | ≈ 6.16 | ≈ 2.17 | C slice 60 gate run (fresh lab from the clean snapshot, graded incl. re-execution, deleted) |
 | 2026-11-01 | `conflux-dev-lab-g4` | 03:39:36–07:31:55 (up issued → core stopped it), 07:32:23–07:40:59 (grading, deleted) | ≈ 4.02 | ≈ 1.41 | C slice 61 gate run (fresh lab from the clean snapshot, graded incl. re-execution, deleted) |
 | 2026-11-01 | `conflux-dev-lab-s65` | 10:20:45–10:28:04 (up issued → delete issued) | ≈ 0.12 | ≈ 0.04 | C slice 65 snapshot inventory, residue clean and stock kernel build ($0 metered; fresh lab from the clean snapshot, deleted) |
-| 2026-11-01 | `conflux-dev-lab-s65b` | 10:36:41–10:40:04 (up issued → delete issued) | ≈ 0.06 | ≈ 0.02 | C slice 65 check of core's `LAB_CLEAN` through `lab_shell` ($0 metered; fresh lab from the clean snapshot, deleted) |
+| 2026-11-01 | `conflux-dev-lab-s65b` | 10:36:41–10:40:04 (up issued → delete issued) | ≈ 0.06 | ≈ 0.02 | C slice 65 check of core's first `LAB_CLEAN` through `lab_shell` ($0 metered; fresh lab from the clean snapshot, deleted) |
+| 2026-11-01 | `conflux-dev-lab-s65c` | 10:50:37–10:54:16 (up issued → delete issued) | ≈ 0.06 | ≈ 0.02 | C slice 65 check of the fixture-driven fail-closed clean after PR #74 review ($0 metered; fresh lab from the clean snapshot, deleted) |
 
-**GCE lab total: ≤ $32.21** (no lab disk left)
+**GCE lab total: ≤ $32.23** (no lab disk left)
 
 ## GCE outside the labs (week 2026-W44, list price, projected to Mon 2026-11-02T00:00Z)
 
@@ -178,4 +179,4 @@ controller identity cannot read logging, so worker compute is bounded from insta
 | Other project disks (preserved `llmsuper-*`, `routeros-*`) | 168 h | 4.79 |
 | Snapshots (≈ 20 GB) | 168 h | 0.24 |
 
-**W44 GCE total (labs + the above): ≤ $49.37 of $60.**
+**W44 GCE total (labs + the above): ≤ $49.39 of $60.**
