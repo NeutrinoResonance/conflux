@@ -99,6 +99,8 @@ USD comes from provider responses or documented prices — never estimated silen
 | 2026-11-01 | Surplus chat (not Conflux) | `deepseek-v4-pro` 20, `kimi-k3` 7 | — | — | 0.006646 | — | unattributed caller on the shared key in slice 66's window (11:05Z–11:37Z; unmatched rows), counted against the weekly cap |
 | 2026-11-01 | Surplus chat | `kimi-k3` 49, `glm-5.3` 69 | 3888691 | 131310 | 0.030992 | — | C slice 67 criteria-acceptance demo (offline; 96 per-criterion judgements of 24 one-shot goal lists at c8 and s61@132 + 22 redraws, 11:56Z–12:04Z; kimi-k3 $0.026637, glm-5.3 $0.004355): 118/118 calls billed in-reply and export-matched; `~/evidence/criteria-acceptance-demo-2026-11-01/reconciled.json` |
 | 2026-11-01 | Surplus chat (not Conflux) | `glm-5.3` 1, `kimi-k3` 1, `deepseek-v4-pro` 1 | — | — | 0.000295 | — | unattributed caller on the shared key in slice 67's window (11:49Z–12:05Z; unmatched rows), counted against the weekly cap |
+| 2026-11-01 | Surplus chat | `kimi-k3` 294 | 8929789 | 241947 | 0.034948 | — | C slice 68 criteria-under-open-ask demo (offline; 36 finish reviews with Gl lists in the data at c8, s61@132, s61@127, 12:23Z–12:48Z): 294/294 calls billed in-reply and export-matched; `~/evidence/criteria-open-ask-demo-2026-11-01/reconciled.json` |
+| 2026-11-01 | Surplus chat (not Conflux) | `deepseek-v4-pro` 7 | — | — | 0.001488 | — | unattributed caller on the shared key in slice 68's window (12:17Z–12:49Z; unmatched rows), counted against the weekly cap |
 
 C slice 1 rows are reconciled with the export by `python -m conflux.core reconcile` (`~/evidence/core-runs/2026-10-27-c1*/reconciled.json`;
 export total for 2026-10-27: 83 rows, $0.001372).
@@ -111,7 +113,7 @@ charge-bound estimates) are only admission-time bounds. They are replaced by bil
 $0.0108 Jev and $0.0207 rejected-request estimates were billed $0.000006 and $0. Account credit after these runs
 is $9.369476 (`/v1/buyer/me`).
 
-**Metered total: $3.856547** (sum of the USD column, not-Conflux rows included, plus the Jev fair-test decisions at their ≈$0.00028 estimate; the earlier $2.860537 line had fallen behind the rows; slice 55 adds $0.035036, slice 57 $0.006107 (its pending replies settled unbilled, $0), slice 58 $0.017903, slice 59 $0.008424 incl. $0.000749 not Conflux, slice 60 $0.175229 incl. $0.035205 not Conflux, slice 61 $0.120908 incl. $0.028182 not Conflux, slice 62 $0.023262 incl. $0.010370 not Conflux, slice 63 $0.070931 incl. $0.030296 not Conflux, slice 66 $0.111351 incl. $0.006646 not Conflux, slice 67 $0.031287 incl. $0.000295 not Conflux)
+**Metered total: $3.892983** (sum of the USD column, not-Conflux rows included, plus the Jev fair-test decisions at their ≈$0.00028 estimate; the earlier $2.860537 line had fallen behind the rows; slice 55 adds $0.035036, slice 57 $0.006107 (its pending replies settled unbilled, $0), slice 58 $0.017903, slice 59 $0.008424 incl. $0.000749 not Conflux, slice 60 $0.175229 incl. $0.035205 not Conflux, slice 61 $0.120908 incl. $0.028182 not Conflux, slice 62 $0.023262 incl. $0.010370 not Conflux, slice 63 $0.070931 incl. $0.030296 not Conflux, slice 66 $0.111351 incl. $0.006646 not Conflux, slice 67 $0.031287 incl. $0.000295 not Conflux, slice 68 $0.036436 incl. $0.001488 not Conflux)
 
 ## GCE lab VMs (week 2026-W44 cap $60)
 

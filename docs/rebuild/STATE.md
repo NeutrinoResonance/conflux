@@ -15,9 +15,23 @@ MISSION-STATUS: ACTIVE
   gate. Slice 62 shows that false DONE is a spec-derivation gap, not a reviewer-family one. Slice 63: proof criteria derived from
   `task.txt` before the trace stop that false DONE (0/12 vs 3/6), but for goal (b)'s TA-session bar; the derived Linux
   goal is dropped once the reviewer reads the trace. Slice 66: those criteria also reject a run that truly met goal (a)
-  (6/6, both the open and the per-criterion verdict); they over-demand. Slice 67: glm-5.3's short one-shot goal lists (Gl) pass c8 and keep the Linux criterion at s61 when judged per criterion (kimi 4/6, at the derivation ceiling); not yet shown under core's open finish ask. Slices 60 and 61 drew on a contaminated snapshot (a prior run's `optee.o`), so neither shows the driver from `task.txt` alone. Slice 43's lead-s1 (a demo harness) reached G5 + G7 first, but ended in a false DONE.
+  (6/6, both the open and the per-criterion verdict); they over-demand. Slice 67: glm-5.3's short one-shot goal lists (Gl) pass c8 and keep the Linux criterion at s61 when judged per criterion (kimi 4/6, at the derivation ceiling); Slice 68: under core's open finish ask the same Gl lists pass c8 (0/12 false rejects) but the reviewer drops the Linux criterion at s61 in 16/16 L-list reviews (gate reason 0/16; DONE 5/24), so inserting criteria into the open review is not a capability. Slices 60 and 61 drew on a contaminated snapshot (a prior run's `optee.o`), so neither shows the driver from `task.txt` alone. Slice 43's lead-s1 (a demo harness) reached G5 + G7 first, but ended in a false DONE.
   - **Gate reaffirmed (founder, 2026-11-01; 33c99f2 reverted by 82b6d68):** goal (a) includes the Linux boot, so G3 is
     required. That answers slice 60's open question.
+- **C slice 68 (2026-11-01, criteria under the open ask, offline, $0.034948 metered + $0 GCE): the open finish review
+  drops pre-trace criteria it was given. Gl lists sit in core's finish-review data, with `FINAL_ASK` unchanged (kimi-k3
+  low; 6 lists × 2 repeats at c8, s61@132 and s61@127). c8 goal-(a) false rejects 0/12 (A holds). s61 DONE 5/24
+  (bar ≤ 2). Gate-reason refusals on the L lists 0/16 strict (falsifier ≤ 4/16). H68 falsified. Build nothing.**
+  - **What happens to the Linux criterion in the 16 L-list reviews at s61:**
+    - 8/8 Gl2/Gl3 reviews mark it waived, descoped, "superseded" or "DONE via substitution";
+    - 4/4 Gl5 reviews rewrite it out silently;
+    - 4/4 Gl4 reviews keep it, but as a NetBSD-side TA invocation (its text allows "hello_world or xtest").
+  - Every refusal (19/19) is for a userspace ioctl or a TA session. None names the revision 0.4 vs 4.2.0 contradiction.
+  - False DONE: Gl1 (no L criterion) 3/4; Gl3 2/4, both "superseded/substituted".
+  - Same lists, same reviewer, judged per criterion as written (slice 67): the Linux criterion held at s61 4/4. The drop
+    comes from the open ask's licence to revise or drop goals, not from the derivation or the reviewer's family.
+  - Billing: 294/294 export-matched. Not Conflux in the window: $0.001488.
+  - Evidence: `~/evidence/criteria-open-ask-demo-2026-11-01/RESULTS.md` (`audit.json`, `reviews.jsonl`).
 - **C slice 67 (2026-11-01, criteria-acceptance demo, offline, $0.030992 metered + $0 GCE): one existing derivation
   passes the true goal (a) and still refuses s61's false DONE. H67 supported for Gl (one-shot glm-5.3 low goal lists from
   `task.txt`): discriminating draws (c8 all goal-(a) criteria MET, and s61@132 a Linux/xtest criterion UNMET) kimi-k3 4/6,
@@ -881,16 +895,16 @@ MISSION-STATUS: ACTIVE
      A clean snapshot replacing the fixture needs the founder (no `compute.snapshots.create`).
   1. ~~Scratch side channel~~: fixed in slice 64 (regression test; slice 60 had it too). The next gate run is its first
      lab exercise: check the trace for `conflux-scratch` paths in executor commands.
-  2. **False DONE against the gate: Gl criteria under core's open finish ask (slice 67).** Gl (one-shot glm-5.3 low
-     lists) passes c8 and refuses s61 per criterion: kimi 4/6, glm 3/6.
-     - Next demo: core's finish review, unchanged `FINAL_ASK`, with Gl lists inserted in its data (slice 66's insert),
-       at c8 and s61@132/127. Does c8 pass, and does s61 refuse for the Linux/xtest reason, or does the reviewer drop it
-       (slice 63 D1)?
-     - A per-criterion verdict with code-computed DONE stays a demo arm (MISSION a7322df).
-     - Gl derives Linux in only 4/6 draws. Derivation reliability is the next limit, after the review question.
-     - c8 (`criteria-verdict-demo-2026-11-01/demo.py` `rebuild_c8`) is the acceptance state.
-     - The legacy `optee-ctl-runs/lab/` false DONE is a held-out negative once a seam exists.
-     - The grading reference is never given to a model.
+  2. **False DONE against the gate: hold derived criteria fixed (slice 68).** The open finish review drops Gl's Linux
+     criterion 16/16 at s61, but keeps goal (a) correctly at c8 12/12. Per criterion as written, it holds it (slice 67).
+     - Next demo: a separate acceptance check beside the open review, which keeps leading (MISSION a7322df). Pre-trace
+       criteria are judged as written, by a model other than the lead, and code computes DONE = open DONE ∧ every
+       criterion MET. States: c8 (goal-(a) criteria only), s61@132/127, and the legacy `optee-ctl-runs/lab/` false DONE
+       once a seam exists. Registered falsifier: c8 goal-(a) rejects ≥ 3/6, or s61 DONE ≥ 2/12.
+     - Derivation reliability is the limit after that: Gl derives Linux in only 4/6 draws, and a list without it gives
+       no protection (Gl1 false DONE 3/4 here).
+     - c8 (`criteria-verdict-demo-2026-11-01/demo.py` `rebuild_c8`) is the acceptance state. The grading reference is
+       never given to a model.
   3. **Attribution:** a `--no-scratch` control gate run of the fixed core, after item 1.
   4. **Stale deliveries:** s60 5/5 and s61 3/3 arrived 22–55 steps late. Count contradictions across runs before
      building any guard.

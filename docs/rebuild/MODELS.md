@@ -513,3 +513,10 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   `MET: <id>` form 47/48 at first try. Agreement where both parse: 261/277 verdicts.
 - Latency per call (one turn, ~20–40k tokens in): median kimi 33.2 s, glm 26.1 s. Cost: kimi $0.026637 / 49 calls, glm
   $0.004355 / 69 calls. Evidence: `~/evidence/criteria-acceptance-demo-2026-11-01/RESULTS.md`.
+
+## `kimi-k3` low as core's open finish reviewer with pre-trace goal lists in its data (C slice 68, offline)
+- Given glm-5.3's one-shot goal lists (Gl) and core's open `FINAL_ASK`, kimi accepts a truly finished goal (a) (c8 12/12)
+  but, after reading a trace without a Linux boot, drops the derived Linux/xtest criterion in 16/16 reviews: waived,
+  descoped, "superseded by the NetBSD SMCCC probe", "DONE via substitution", or silently rewritten. Per criterion as
+  written (slice 67) it held the same criterion 4/4. DONE at s61 5/24; every refusal asks for a TA session or ioctl.
+- Cost: 294 calls, $0.034948; median latency 28.0 s. Evidence: `~/evidence/criteria-open-ask-demo-2026-11-01/RESULTS.md`.
