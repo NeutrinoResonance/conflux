@@ -377,6 +377,11 @@ def test_lab_scratch_contents_unreachable_from_root_namespace(tmp_path, monkeypa
     """C slice 64 regression (slices 60-61: the executor read and copied a live scratch's upper dir from the root
     namespace). The scratch root must not be under /tmp or /home: the holder mounts over both before it publishes
     its pid."""
+    def sudo(*args: str) -> str:  # a probe that fails must fail the test, never read as "nothing found"
+        p = subprocess.run(["sudo", "-n", *args], capture_output=True, text=True)
+        assert p.returncode == 0, f"probe {args} exit={p.returncode} stderr={p.stderr}"
+        return p.stdout.strip()
+
     root = Path(tempfile.mkdtemp(prefix="conflux-scratch-test-", dir="/var/tmp"))
     monkeypatch.setenv("CONFLUX_SCRATCH_ROOT", str(root))
     m = f"m-{uuid.uuid4().hex}"
@@ -389,12 +394,23 @@ def test_lab_scratch_contents_unreachable_from_root_namespace(tmp_path, monkeypa
         assert r["exit"] == 0 and r["stdout"].split() == ["t", "h"], r  # (a) the scratch keeps its writes
         assert not (Path("/tmp") / m).exists() and not (Path.home() / m).exists()  # (b)
         assert not (Path.home() / f"{m}-w").exists()
-        found = subprocess.run(["sudo", "-n", "find", str(root), "-name", f"{m}*"], capture_output=True, text=True)
-        assert found.stdout.strip() == "", f"scratch contents visible from the root namespace: {found.stdout}"  # (c)
+        found = sudo("find", str(root), "-name", f"{m}*")
+        assert found == "", f"scratch contents visible from the root namespace: {found}"  # (c)
+        img = root / "iso" / "img"  # (e) a delete inside the scratch frees host disk before teardown
+        r = sc.run("iso", "dd if=/dev/zero of=big bs=1M count=64 status=none && sync", 120)
+        assert r["exit"] == 0, r
+        full = int(sudo("stat", "-c", "%b", str(img)))
+        assert sc.run("iso", "rm big && sync", 60)["exit"] == 0
+        for _ in range(20):
+            freed = full - int(sudo("stat", "-c", "%b", str(img)))
+            if freed * 512 >= 48 << 20:
+                break
+            time.sleep(0.5)
+        assert freed * 512 >= 48 << 20, f"only {freed * 512} bytes of the image freed after an in-scratch rm"
         sc.rm("iso")
         assert not (root / "iso").exists()
         for _ in range(20):  # (d) the loop device is released once the namespace is gone
-            loops = subprocess.run(["sudo", "-n", "losetup", "-a"], capture_output=True, text=True).stdout
+            loops = sudo("losetup", "-a")
             if str(root) not in loops:
                 break
             time.sleep(0.5)

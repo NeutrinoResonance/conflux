@@ -19,8 +19,8 @@ MISSION-STATUS: ACTIVE
     required. That answers slice 60's open question.
 - **C slice 64 (2026-11-01, harness fault, $0 metered + ≈ $0.001 GCE worker): the scratch side channel is closed.**
   - Upper/work dirs and the private `/tmp` now sit on a sparse ext4 image, loop-mounted only inside the scratch's
-    namespace (`SCRATCH_SH new`). The image has no journal and is mounted `noinit_itable`, so its disk use is only
-    what the scratch writes.
+    namespace (`SCRATCH_SH new`). The image has no journal and is mounted `noinit_itable,discard`, so its disk use
+    is what the scratch holds now: an in-scratch delete of 2 GB frees host disk at once.
   - Regression test `test_lab_scratch_contents_unreachable_from_root_namespace` (real namespaces, needs sudo):
     - on worker-1 (the labs' kernel), f11d700 passes setup and fails only on the root-namespace `find`;
     - the fix passes; 1 GB scratch write: disk released after `rm`.

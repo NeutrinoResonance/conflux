@@ -575,7 +575,7 @@ case $op in
       { echo NEW_FAIL image; exit 1; }
     holder='
       set -e
-      mount -o loop,noinit_itable "$1/img" "$1/m"  # throwaway fs: no journal, no background zeroing
+      mount -o loop,noinit_itable,discard "$1/img" "$1/m"  # throwaway: no journal or zeroing; deletes free host disk
       mkdir -p "$1/m/up" "$1/m/wk" "$1/m/tmp"; chmod 1777 "$1/m/tmp"
       mount -t overlay overlay -o "lowerdir=/home,upperdir=$1/m/up,workdir=$1/m/wk" /home
       mount --bind "$1/m/tmp" /tmp
