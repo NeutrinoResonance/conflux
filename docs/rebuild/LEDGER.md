@@ -171,7 +171,7 @@ controller identity cannot read logging, so worker compute is bounded from insta
 |---|---|---|
 | Controller `conflux-dev-ctl` e2-standard-2 | running since 2026-10-26 23:05Z, 144.9 h | 9.71 |
 | Controller disk 60 GB pd-balanced | 144.9 h | 1.19 |
-| Workers ×2 e2-medium Spot | ≤ 4.94 h total (stopped since 2026-10-27) | ≤ 0.05 |
+| Workers ×2 e2-medium Spot | ≤ 5.05 h total: stopped since 2026-10-27, except C slice 64's isolation tests on `conflux-dev-worker-1` 2026-11-01 09:56:22–09:58:47Z, 10:00:03–10:02:25Z and 10:10:16–10:12:10Z (start → stop issued, 0.11 h ≈ $0.001) | ≤ 0.05 |
 | Worker disks 2 × 30 GB pd-balanced | 144.9 h | 1.18 |
 | Other project disks (preserved `llmsuper-*`, `routeros-*`) | 168 h | 4.79 |
 | Snapshots (≈ 20 GB) | 168 h | 0.24 |

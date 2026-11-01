@@ -6,9 +6,12 @@ receives the replayed commands verbatim."""
 import base64
 import json
 from pathlib import Path
+import shutil
 import subprocess
+import tempfile
 import threading
 import time
+import uuid
 
 import pytest
 
@@ -331,6 +334,7 @@ chmod u+w "$CONFLUX_SCRATCH_ROOT" 2>/dev/null; "$@"; rc=$?; chmod a-w "$CONFLUX_
     "nsenter": """while [ $# -gt 0 ]; do case $1 in -t) shift 2;; -m) shift;; --) shift; break;; *) break;; esac; done
 exec "$@" """,
     "mount": "exit 0",
+    "mkfs.ext4": "exit 0",
 }
 
 
@@ -358,6 +362,64 @@ def test_scratch_script_writes_under_root_owned_dir_only_via_sudo(tmp_path, monk
         subprocess.run(["chmod", "-R", "u+w", str(root)])
     sc.rm("t1")
     assert not (root / "t1").exists()
+
+
+def _real_sudo() -> bool:
+    try:
+        return shutil.which("unshare") is not None and subprocess.run(["sudo", "-n", "true"],
+                                                                      capture_output=True).returncode == 0
+    except OSError:
+        return False
+
+
+@pytest.mark.skipif(not _real_sudo(), reason="needs passwordless sudo and unshare (real mount namespaces)")
+def test_lab_scratch_contents_unreachable_from_root_namespace(tmp_path, monkeypatch):
+    """C slice 64 regression (slices 60-61: the executor read and copied a live scratch's upper dir from the root
+    namespace). The scratch root must not be under /tmp or /home: the holder mounts over both before it publishes
+    its pid."""
+    def sudo(*args: str) -> str:  # a probe that fails must fail the test, never read as "nothing found"
+        p = subprocess.run(["sudo", "-n", *args], capture_output=True, text=True)
+        assert p.returncode == 0, f"probe {args} exit={p.returncode} stderr={p.stderr}"
+        return p.stdout.strip()
+
+    root = Path(tempfile.mkdtemp(prefix="conflux-scratch-test-", dir="/var/tmp"))
+    monkeypatch.setenv("CONFLUX_SCRATCH_ROOT", str(root))
+    m = f"m-{uuid.uuid4().hex}"
+    sc = core.LabScratch(core.local_shell(tmp_path / "jobs"), f"~/{m}-w")
+    try:
+        sc.new("iso")
+        r = sc.run("iso", f"echo t > /tmp/{m}; echo h > ~/{m}", 60)
+        assert r["exit"] == 0, r
+        r = sc.run("iso", f"cat /tmp/{m} ~/{m}", 60)
+        assert r["exit"] == 0 and r["stdout"].split() == ["t", "h"], r  # (a) the scratch keeps its writes
+        assert not (Path("/tmp") / m).exists() and not (Path.home() / m).exists()  # (b)
+        assert not (Path.home() / f"{m}-w").exists()
+        found = sudo("find", str(root), "-name", f"{m}*")
+        assert found == "", f"scratch contents visible from the root namespace: {found}"  # (c)
+        img = root / "iso" / "img"  # (e) a delete inside the scratch frees host disk before teardown
+        r = sc.run("iso", "dd if=/dev/zero of=big bs=1M count=64 status=none && sync", 120)
+        assert r["exit"] == 0, r
+        full = int(sudo("stat", "-c", "%b", str(img)))
+        assert sc.run("iso", "rm big && sync", 60)["exit"] == 0
+        for _ in range(20):
+            freed = full - int(sudo("stat", "-c", "%b", str(img)))
+            if freed * 512 >= 48 << 20:
+                break
+            time.sleep(0.5)
+        assert freed * 512 >= 48 << 20, f"only {freed * 512} bytes of the image freed after an in-scratch rm"
+        sc.rm("iso")
+        assert not (root / "iso").exists()
+        for _ in range(20):  # (d) the loop device is released once the namespace is gone
+            loops = sudo("losetup", "-a")
+            if str(root) not in loops:
+                break
+            time.sleep(0.5)
+        assert str(root) not in loops, loops
+    finally:
+        try:
+            sc.rm("iso")
+        finally:
+            subprocess.run(["sudo", "-n", "rm", "-rf", str(root)])
 
 
 def test_kill_never_targets_the_root_namespace(tmp_path, monkeypatch):
