@@ -90,6 +90,8 @@ USD comes from provider responses or documented prices — never estimated silen
 | 2026-10-31/11-01 | Surplus chat (not Conflux) | `deepseek-v4-pro` 104, `glm-5.3` 64, `kimi-k3` 76 | — | — | 0.035205 | — | unattributed caller on the shared key in slice 60's window (20:54Z–03:10Z; glm-5.3 is not used by the run; floor-check rows excluded), counted against the weekly cap |
 | 2026-11-01 | Surplus chat | `deepseek-v4-pro` 131, `kimi-k3` 440 | 38283283 | 570667 | 0.092726 | — | C slice 61 gate run (core f11d700 unchanged, ended at step 132 on finish_review_done, 03:41Z–07:31Z): 571/577 calls export-matched (executor $0.031318, lead $0.061408); 6 cost-less replies have no export row and were unbilled; `~/evidence/gate-run-s61-2026-11-01/reconciled.json` |
 | 2026-11-01 | Surplus chat (not Conflux) | `deepseek-v4-pro` 88, `glm-5.3` 28, `kimi-k3` 103 | — | — | 0.028182 | — | unattributed caller on the shared key in slice 61's window (03:39Z–07:45Z; unmatched rows; glm-5.3 is not used by the run), counted against the weekly cap |
+| 2026-11-01 | Surplus chat | `kimi-k3` 78, `glm-5.3` 88 | 5859721 | 140454 | 0.012892 | — | C slice 62 finish-gate demo (offline, 28 recorded-state finish reviews, 08:09Z–08:19Z): 166/166 calls billed in-reply and export-matched (kimi-k3 $0.009668, glm-5.3 $0.003224); `~/evidence/finish-gate-demo-2026-11-01/reconciled.json` |
+| 2026-11-01 | Surplus chat (not Conflux) | `deepseek-v4-pro` 76, `kimi-k3` 5 | — | — | 0.010370 | — | unattributed caller on the shared key in slice 62's window (08:03Z–08:19Z; unmatched rows; no executor runs in this demo), counted against the weekly cap |
 
 C slice 1 rows are reconciled with the export by `python -m conflux.core reconcile` (`~/evidence/core-runs/2026-10-27-c1*/reconciled.json`;
 export total for 2026-10-27: 83 rows, $0.001372).
@@ -102,7 +104,7 @@ charge-bound estimates) are only admission-time bounds. They are replaced by bil
 $0.0108 Jev and $0.0207 rejected-request estimates were billed $0.000006 and $0. Account credit after these runs
 is $9.369476 (`/v1/buyer/me`).
 
-**Metered total: $3.619716** (sum of the USD column, not-Conflux rows included, plus the Jev fair-test decisions at their ≈$0.00028 estimate; the earlier $2.860537 line had fallen behind the rows; slice 55 adds $0.035036, slice 57 $0.006107 (its pending replies settled unbilled, $0), slice 58 $0.017903, slice 59 $0.008424 incl. $0.000749 not Conflux, slice 60 $0.175229 incl. $0.035205 not Conflux, slice 61 $0.120908 incl. $0.028182 not Conflux)
+**Metered total: $3.642978** (sum of the USD column, not-Conflux rows included, plus the Jev fair-test decisions at their ≈$0.00028 estimate; the earlier $2.860537 line had fallen behind the rows; slice 55 adds $0.035036, slice 57 $0.006107 (its pending replies settled unbilled, $0), slice 58 $0.017903, slice 59 $0.008424 incl. $0.000749 not Conflux, slice 60 $0.175229 incl. $0.035205 not Conflux, slice 61 $0.120908 incl. $0.028182 not Conflux, slice 62 $0.023262 incl. $0.010370 not Conflux)
 
 ## GCE lab VMs (week 2026-W44 cap $60)
 

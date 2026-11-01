@@ -444,3 +444,19 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   - Review 16's delivery ran at injection: 8 commands, J 0.62–0.85.
   - Review cadence was 7.8/h, median lead latency 31.7 s.
 - Evidence: `~/evidence/gate-run-s61-2026-11-01/RESULTS.md`.
+
+## `kimi-k3` / `glm-5.3` (low) as core's fresh finish reviewer on recorded gate-run finish states (C slice 62, offline)
+- **Both accept a false DONE at s61@132 (gate G1/G3 unmet):** kimi 3/6, glm-5.3 **5/6**. Kimi also accepted s61@127 2/2,
+  where the live review had said not DONE. Both rejected slice 60's visibly broken states 12/12.
+- **Neither derives a Linux boot from `task.txt`:** 0/28 replies ask for it ("Get QEMU set up with OP-TEE" is read as
+  firmware + NetBSD boot).
+- **The revision contradiction blocks a finish in 1/28 replies.** 5 replies note OP-TEE 4.2.0 against the driver's
+  "OS revision 0.4":
+  - glm-5.3 s61@127 d1 makes it a blocking goal: verify the returned revision is 4.2.0, else fix the SMC decoding and
+    rebuild before finishing;
+  - glm-5.3 s61@127 d2 asks to "fix or document" it (not a finish condition);
+  - kimi-k3's 3 claim-check turns call it a "decode quirk … not faked data" and keep DONE (2/3).
+  - No glm-5.3 reply at s61@132 names it (5/6 DONE there).
+- **A generic claim-check turn (same model) withdraws 1/5 DONEs,** and that one for a missing PASS line, not for the
+  contradiction.
+- Latency (init + finish review): median 136 s (kimi), 133 s (glm). Evidence: `~/evidence/finish-gate-demo-2026-11-01/RESULTS.md`.
