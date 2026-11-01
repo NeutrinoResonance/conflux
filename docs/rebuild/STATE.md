@@ -35,7 +35,8 @@ MISSION-STATUS: ACTIVE
     - S: 1 of 23 goal-(a) criterion verdicts is MET.
   - **s61:**
     - DONE: O 0/10, S 0/10.
-    - Gate reason: O 2/10 (H66-O falsified). S 9/10 (+1 lenient), but each S reply has 9–14 UNMET blockers, and S says DONE
+    - Gate reason: O 2/10 (H66-O falsified). S 9/10 (+1 lenient). But each of the 9 complete S replies has 8–14 UNMET blockers (the incomplete init-only
+      reply, s61@127 d1, has no verdict lines), and S says DONE
       in 0/18 reviews, c8 included. S's numeric edge is refuse-everything behaviour, not discrimination.
     - S incompletes: 2/18. One is core's own path: an init review with no goal lines turns the finish review into a
       second init turn (s61@127 d1, 2 calls).
