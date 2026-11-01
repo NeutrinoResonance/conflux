@@ -543,8 +543,9 @@ def lab_shell(remote: Callable[[str], list[str]], workdir: str, deadline: float 
 # ---------------------------------------------------------------- scratch (C slices 55-56)
 # A lead's correction is checked in a scratch copy of the task machine before delivery
 # (`~/evidence/exec-deliver-demo-2026-10-31/RESULTS.md`). On a lab a scratch is a private mount namespace held by one
-# `sleep infinity`: an overlay of the live /home (upper dir under /var/tmp/conflux-scratch) and a private, empty /tmp; job dirs are
-# hidden. Writes outside /home and /tmp are not isolated. `kill` only kills a namespace that is not the root one.
+# `sleep infinity`: an overlay of the live /home and a private, empty /tmp, whose upper dirs are on an image under
+# /var/tmp/conflux-scratch mounted only inside that namespace (C slice 64); job dirs are hidden. Writes outside /home and
+# /tmp are not isolated. `kill` only kills a namespace that is not the root one.
 
 SCRATCH_SH = r"""set -u
 R=${CONFLUX_SCRATCH_ROOT:-/var/tmp/conflux-scratch}; op=$1; ID=$2; S=$R/$ID
@@ -566,11 +567,18 @@ case $op in
     [ -f /etc/sudoers.d/zz-conflux-nopty ] || { echo 'Defaults !use_pty' > /tmp/zz-conflux-nopty &&
       sudo -n install -m 0440 /tmp/zz-conflux-nopty /etc/sudoers.d/zz-conflux-nopty &&
       { sudo -n visudo -cf /etc/sudoers.d/zz-conflux-nopty >/dev/null || sudo -n rm -f /etc/sudoers.d/zz-conflux-nopty; }; }
-    kill_ns "$S"; sudo -n rm -rf "$S"; sudo -n mkdir -p "$S/up" "$S/wk" "$S/tmp"; sudo -n chmod 1777 "$S/tmp"
+    kill_ns "$S"; sudo -n rm -rf "$S"; sudo -n mkdir -p "$S/m"
+    # up/wk/tmp live on a sparse ext4 image mounted only inside the scratch's namespace: from the root namespace
+    # $S/m is an empty dir and $S/img opaque (C slice 64; slices 60-61 read and copied a live scratch's upper dir)
+    sudo -n truncate -s "$(df --output=avail -B1 "$R" | tail -1 | tr -d ' ')" "$S/img" &&
+      sudo -n mkfs.ext4 -q -F -m 0 -O ^has_journal -E lazy_itable_init=1 "$S/img" ||
+      { echo NEW_FAIL image; exit 1; }
     holder='
       set -e
-      mount -t overlay overlay -o "lowerdir=/home,upperdir=$1/up,workdir=$1/wk" /home
-      mount --bind "$1/tmp" /tmp
+      mount -o loop,noinit_itable "$1/img" "$1/m"  # throwaway fs: no journal, no background zeroing
+      mkdir -p "$1/m/up" "$1/m/wk" "$1/m/tmp"; chmod 1777 "$1/m/tmp"
+      mount -t overlay overlay -o "lowerdir=/home,upperdir=$1/m/up,workdir=$1/m/wk" /home
+      mount --bind "$1/m/tmp" /tmp
       for d in /home/*/.conflux-jobs; do [ -d "$d" ] && mount -t tmpfs none "$d"; done
       echo $$ > "$1/pid.tmp"; mv "$1/pid.tmp" "$1/pid"
       exec sleep infinity'

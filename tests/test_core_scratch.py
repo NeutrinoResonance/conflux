@@ -6,9 +6,12 @@ receives the replayed commands verbatim."""
 import base64
 import json
 from pathlib import Path
+import shutil
 import subprocess
+import tempfile
 import threading
 import time
+import uuid
 
 import pytest
 
@@ -331,6 +334,7 @@ chmod u+w "$CONFLUX_SCRATCH_ROOT" 2>/dev/null; "$@"; rc=$?; chmod a-w "$CONFLUX_
     "nsenter": """while [ $# -gt 0 ]; do case $1 in -t) shift 2;; -m) shift;; --) shift; break;; *) break;; esac; done
 exec "$@" """,
     "mount": "exit 0",
+    "mkfs.ext4": "exit 0",
 }
 
 
@@ -358,6 +362,48 @@ def test_scratch_script_writes_under_root_owned_dir_only_via_sudo(tmp_path, monk
         subprocess.run(["chmod", "-R", "u+w", str(root)])
     sc.rm("t1")
     assert not (root / "t1").exists()
+
+
+def _real_sudo() -> bool:
+    try:
+        return shutil.which("unshare") is not None and subprocess.run(["sudo", "-n", "true"],
+                                                                      capture_output=True).returncode == 0
+    except OSError:
+        return False
+
+
+@pytest.mark.skipif(not _real_sudo(), reason="needs passwordless sudo and unshare (real mount namespaces)")
+def test_lab_scratch_contents_unreachable_from_root_namespace(tmp_path, monkeypatch):
+    """C slice 64 regression (slices 60-61: the executor read and copied a live scratch's upper dir from the root
+    namespace). The scratch root must not be under /tmp or /home: the holder mounts over both before it publishes
+    its pid."""
+    root = Path(tempfile.mkdtemp(prefix="conflux-scratch-test-", dir="/var/tmp"))
+    monkeypatch.setenv("CONFLUX_SCRATCH_ROOT", str(root))
+    m = f"m-{uuid.uuid4().hex}"
+    sc = core.LabScratch(core.local_shell(tmp_path / "jobs"), f"~/{m}-w")
+    try:
+        sc.new("iso")
+        r = sc.run("iso", f"echo t > /tmp/{m}; echo h > ~/{m}", 60)
+        assert r["exit"] == 0, r
+        r = sc.run("iso", f"cat /tmp/{m} ~/{m}", 60)
+        assert r["exit"] == 0 and r["stdout"].split() == ["t", "h"], r  # (a) the scratch keeps its writes
+        assert not (Path("/tmp") / m).exists() and not (Path.home() / m).exists()  # (b)
+        assert not (Path.home() / f"{m}-w").exists()
+        found = subprocess.run(["sudo", "-n", "find", str(root), "-name", f"{m}*"], capture_output=True, text=True)
+        assert found.stdout.strip() == "", f"scratch contents visible from the root namespace: {found.stdout}"  # (c)
+        sc.rm("iso")
+        assert not (root / "iso").exists()
+        for _ in range(20):  # (d) the loop device is released once the namespace is gone
+            loops = subprocess.run(["sudo", "-n", "losetup", "-a"], capture_output=True, text=True).stdout
+            if str(root) not in loops:
+                break
+            time.sleep(0.5)
+        assert str(root) not in loops, loops
+    finally:
+        try:
+            sc.rm("iso")
+        finally:
+            subprocess.run(["sudo", "-n", "rm", "-rf", str(root)])
 
 
 def test_kill_never_targets_the_root_namespace(tmp_path, monkeypatch):

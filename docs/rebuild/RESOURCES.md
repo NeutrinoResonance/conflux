@@ -39,11 +39,14 @@
   off with `--no-scratch`). Since C slice 59 the session runs on its own thread beside the review cadence: the reply is
   injected when its review returns, the delivery later as its own message; at most one session is open at a time.
   - The lead runs commands in a scratch: a private mount namespace held by `sleep infinity`, with an overlay of the live
-    `/home`. Upper dirs are under `/var/tmp/conflux-scratch/` (root-owned).
+    `/home`. Since C slice 64, the upper/work dirs and the private `/tmp` are on a sparse ext4 image
+    (`/var/tmp/conflux-scratch/<id>/img`, root-owned). The image is loop-mounted only inside that namespace.
   - The scratch's `/tmp` is private and empty, and `~/.conflux-jobs` is hidden.
   - Writes outside `/home` and `/tmp` are **not** isolated.
-  - The upper dirs are visible to root-namespace commands. Slice 61's executor (sudo) read, copied and wrote a live
-    session's upper dir (steps 13–48): an isolation leak, recorded as STATE next action 1.
+  - Before slice 64, the upper dirs were visible to root-namespace commands. Slice 60's executor (steps 10–39) and slice
+    61's (steps 13–48) read and copied a live session's upper dir, and slice 61's also wrote to it. Now root-namespace
+    commands see an empty `m/` and an opaque `img`. Only a deliberate `nsenter` or loop-mount reaches the contents
+    (`~/evidence/scratch-isolation-2026-11-01/RESULTS.md`).
   - The first scratch installs `/etc/sudoers.d/zz-conflux-nopty` (`!use_pty`, as in slice 55's demo).
   - Each scratch command is one lab job: about 13 s round trip even for `true`.
   - At task end, `Steering.close` kills every scratch namespace (`killall`); the kill never targets the root namespace.

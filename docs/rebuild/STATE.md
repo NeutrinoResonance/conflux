@@ -17,6 +17,18 @@ MISSION-STATUS: ACTIVE
   goal is dropped once the reviewer reads the trace. Slices 60 and 61 drew on a contaminated snapshot (a prior run's `optee.o`), so neither shows the driver from `task.txt` alone. Slice 43's lead-s1 (a demo harness) reached G5 + G7 first, but ended in a false DONE.
   - **Gate reaffirmed (founder, 2026-11-01; 33c99f2 reverted by 82b6d68):** goal (a) includes the Linux boot, so G3 is
     required. That answers slice 60's open question.
+- **C slice 64 (2026-11-01, harness fault, $0 metered + ≈ $0.001 GCE worker): the scratch side channel is closed.**
+  - Upper/work dirs and the private `/tmp` now sit on a sparse ext4 image, loop-mounted only inside the scratch's
+    namespace (`SCRATCH_SH new`). The image has no journal and is mounted `noinit_itable`, so its disk use is only
+    what the scratch writes.
+  - Regression test `test_lab_scratch_contents_unreachable_from_root_namespace` (real namespaces, needs sudo):
+    - on worker-1 (the labs' kernel), f11d700 passes setup and fails only on the root-namespace `find`;
+    - the fix passes; 1 GB scratch write: disk released after `rm`.
+  - **Slice 60 had the channel too** ($0 trace check): steps 10–39, while session v1 was open. Steps 30–31 copied the
+    lead's built optee_os/TF-A into its own tree. So G5/G7 attribution in both slices 60 and 61 includes lead-session
+    builds reached through the leak.
+  - Not yet exercised on a lab with a live lead.
+  - Evidence: `~/evidence/scratch-isolation-2026-11-01/RESULTS.md`.
 - **C slice 63 (2026-11-01, proof-criteria demos, offline, $0.040635 metered + $0 lab GCE): proof criteria that Conflux's
   other models derive from `task.txt` before reading the trace stop slice 61's false DONE: s61@132 0/6 in each design, vs
   3/6. But they stop it for the wrong reason. The derived Linux-boot goal rarely survives the trace, and most refusals
@@ -803,12 +815,8 @@ MISSION-STATUS: ACTIVE
      - Then produce a clean snapshot without them; this may need the founder if the controller identity cannot create
        snapshots.
      - Record the inventory and the new snapshot name in `RESOURCES.md`.
-  1. **Scratch side channel (slice 61; a harness isolation fault).** The executor reads and writes the lead's scratch
-     upper dirs from the root namespace.
-     - Check slice 60's trace for the same channel ($0).
-     - Then fix it structurally, with a regression test that fails on f11d700. For example, keep upper/work dirs on a
-       mount visible only inside the scratch's namespace.
-     - Do this before the next paid gate run.
+  1. ~~Scratch side channel~~: fixed in slice 64 (regression test; slice 60 had it too). The next gate run is its first
+     lab exercise: check the trace for `conflux-scratch` paths in executor commands.
   2. **False DONE against the gate: hold the derived criteria fixed (slice 63).** Pre-trace criteria stop s61's false
      DONE, but the reviewer re-scopes them after reading the trace.
      - Next demo: the finish verdict judges each pre-trace criterion met or unmet, and may not drop or revise one.
