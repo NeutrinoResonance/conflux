@@ -15,9 +15,30 @@ MISSION-STATUS: ACTIVE
   gate. Slice 62 shows that false DONE is a spec-derivation gap, not a reviewer-family one. Slice 63: proof criteria derived from
   `task.txt` before the trace stop that false DONE (0/12 vs 3/6), but for goal (b)'s TA-session bar; the derived Linux
   goal is dropped once the reviewer reads the trace. Slice 66: those criteria also reject a run that truly met goal (a)
-  (6/6, both the open and the per-criterion verdict); they over-demand. Slice 67: glm-5.3's short one-shot goal lists (Gl) pass c8 and keep the Linux criterion at s61 when judged per criterion (kimi 4/6, at the derivation ceiling); Slice 68: under core's open finish ask the same Gl lists pass c8 (0/12 false rejects) but the reviewer drops the Linux criterion at s61 in 16/16 L-list reviews (gate reason 0/16; DONE 5/24), so inserting criteria into the open review is not a capability. Slices 60 and 61 drew on a contaminated snapshot (a prior run's `optee.o`), so neither shows the driver from `task.txt` alone. Slice 43's lead-s1 (a demo harness) reached G5 + G7 first, but ended in a false DONE.
+  (6/6, both the open and the per-criterion verdict); they over-demand. Slice 67: glm-5.3's short one-shot goal lists (Gl) pass c8 and keep the Linux criterion at s61 when judged per criterion (kimi 4/6, at the derivation ceiling); Slice 68: under core's open finish ask the same Gl lists pass c8 (0/12 false rejects) but the reviewer drops the Linux criterion at s61 in 16/16 L-list reviews (gate reason 0/16; DONE 5/24), so inserting criteria into the open review is not a capability. Slices 60 and 61 drew on a contaminated snapshot (a prior run's `optee.o`), so neither shows the driver from `task.txt` alone. Slice 69 does, on a cleaned lab: G7 by re-execution, but as a loadable module (strict G5 unmet), again with a false DONE. Slice 43's lead-s1 (a demo harness) reached G5 + G7 first, but ended in a false DONE.
   - **Gate reaffirmed (founder, 2026-11-01; 33c99f2 reverted by 82b6d68):** goal (a) includes the Linux boot, so G3 is
     required. That answers slice 60's open question.
+  - **Open founder question (asked 2026-11-01 ~13:00Z, unanswered):** may the finish gate use a per-criterion verdict?
+    Slices 67/68 put it in conflict with the open finish ask (MISSION a7322df). Until MISSION records the answer, build
+    no per-criterion verdict and no fixed answer shape into core (operator, 2026-11-01).
+- **C slice 69 (2026-11-01, attribution gate run, $0.072634 metered + ≈ $1.56 GCE): fixed core 93d0466 with
+  `--lab-clean`, `task.txt` only, slice 61's settings. Ended `unverified`/`finish_review_done` at step 179 (4.27 h).
+  G7 is met by grader re-execution with no contamination: the executor's own driver gets OP-TEE's API UID and
+  EXCHANGE_CAPABILITIES ret=0 from an OP-TEE built in the run. H69 is falsified by the letter: G5 (a kernel rebuilt with
+  the driver) is unmet, because the driver is a loadable module (`tee.kmod`) in the snapshot's stock kernel. False DONE
+  by the gate again (n=2 with s61).**
+  - Milestones G2 G4 G6 G7 = 4/7 strict; with the module as G5, 5/7 (= s60/s61's set). G1 no (no manifest tree), G3 no
+    (0/55 goal lists require a Linux boot).
+  - **Provenance (items 0/1 exercised live):** `lab.clean.exit` 0. Executor commands naming `conflux-scratch`: 0 (s61:
+    42). Naming the residue: 0. So a G6 + G7 driver outcome, as in slices 60/61, is reached without either leak.
+  - **Finish review:** steps 122–173 refused DONE: placeholder proof at 122, then the TA session (open_session →
+    `0xffff0006`, origin TEE).
+    Step 173 closed it as "a documented limitation", and step 179 passed DONE. This is the open ask's
+    drop-a-goal licence (slices 63/68), live. Held under the founder question above.
+  - Lead: 43 reviews, median 23.4 s, 12 deliveries. D1: 16 hits, 0 harness faults.
+  - Billing: 664 export-matched, 27 cost-less unbilled. Not Conflux in the window: $0.006670.
+  - W44 GCE ≤ $50.95 of $60. Lab g5 deleted.
+  - Evidence: `~/evidence/gate-run-s69-2026-11-01/RESULTS.md` (`grade.json`, `reexec/`, `provenance_scan.out`).
 - **C slice 68 (2026-11-01, criteria under the open ask, offline, $0.034948 metered + $0 GCE): the open finish review
   drops pre-trace criteria it was given. Gl lists sit in core's finish-review data, with `FINAL_ASK` unchanged (kimi-k3
   low; 6 lists × 2 repeats at c8, s61@132 and s61@127). c8 goal-(a) false rejects 0/12 (A holds). s61 DONE 5/24
@@ -893,9 +914,9 @@ MISSION-STATUS: ACTIVE
   0. ~~Snapshot contamination~~: fixed for gate runs in slice 65. Pass
      `--lab-clean tests/fixtures/core_loop/optee_lab_residue.txt`, and check the summary for `lab.clean.exit == 0`.
      A clean snapshot replacing the fixture needs the founder (no `compute.snapshots.create`).
-  1. ~~Scratch side channel~~: fixed in slice 64 (regression test; slice 60 had it too). The next gate run is its first
-     lab exercise: check the trace for `conflux-scratch` paths in executor commands.
-  2. **False DONE against the gate: hold derived criteria fixed (slice 68).** The open finish review drops Gl's Linux
+  1. ~~Scratch side channel~~: fixed in slice 64. First live exercise in slice 69: 0 executor commands touch
+     `conflux-scratch`.
+  2. **On hold (open founder question above): no per-criterion verdict in core until MISSION records it.** **False DONE against the gate: hold derived criteria fixed (slice 68).** The open finish review drops Gl's Linux
      criterion 16/16 at s61, but keeps goal (a) correctly at c8 12/12. Per criterion as written, it holds it (slice 67).
      - Next demo: a separate acceptance check beside the open review, which keeps leading (MISSION a7322df). Pre-trace
        criteria are judged as written, by a model other than the lead, and code computes DONE = open DONE ∧ every
@@ -905,7 +926,11 @@ MISSION-STATUS: ACTIVE
        no protection (Gl1 false DONE 3/4 here).
      - c8 (`criteria-verdict-demo-2026-11-01/demo.py` `rebuild_c8`) is the acceptance state. The grading reference is
        never given to a model.
-  3. **Attribution:** a `--no-scratch` control gate run of the fixed core, after item 1.
+  3. **Attribution:** the clean baseline exists (slice 69: G7 from `task.txt` alone). Next is a `--no-scratch` control
+     gate run, to isolate the lead's verify sessions. Other gaps open in slice 69, not blocked on the founder:
+     - the TA session (open_session ITEM_NOT_FOUND after 5 kmod generations): a self-correction target, once goal (b)'s
+       bar (item 6) says it is required;
+     - whether a loadable module counts as G5 (`task.txt` asks for "a NetBSD driver").
   4. **Stale deliveries:** s60 5/5 and s61 3/3 arrived 22–55 steps late. Count contradictions across runs before
      building any guard.
   5. **History growth** (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output
