@@ -74,12 +74,22 @@
   `/home/darrenhidalgo/netbsd-obj` (built GENERIC64 `netbsd`/`netbsd.img` from 2026-10-21, tooldirs
   `tooldir.Linux-6.1.0-50/51-cloud-amd64-x86_64`); `/home/darrenhidalgo/llmsuper-netbsd-run` (earlier NetBSD-only
   QEMU boot).
-  - `netbsd-obj/sys/arch/evbarm/compile/GENERIC64/` also holds an earlier agent's compiled `optee.o`, with no source.
-    It carries message strings and symbols.
-  - **This is snapshot contamination** (operator, 2026-11-01): slice 60 mined that object, and slice 61 reconstructed
-    its driver from the disassembly. G4 provenance is affected for both slices.
-  - `llmsuper-netbsd-run/arm64.img` is also a prior run's artefact: slice 61's guest disk overlays it.
-  - Verify and clean the snapshot before any further gate run (STATE next action 0).
+  - **Snapshot contamination** (operator, 2026-11-01): `netbsd-obj/sys/arch/evbarm/compile/GENERIC64/optee.{o,d,su}`
+    is an earlier agent's compiled driver (2026-07-19; its source `sys/dev/optee/optee.c` is gone). Slice 60 mined it;
+    slice 61 reconstructed its driver from the disassembly, so G4 provenance is affected for both.
+  - **Since C slice 65, gate runs remove it before the first model call:** pass
+    `--lab-clean tests/fixtures/core_loop/optee_lab_residue.txt` to `conflux.core run --lab`. The path list is a lab
+    fixture; core's clean step is generic and fail-closed.
+    - It runs after setup and before the egress check. A failure ends the run `clean_failed` with no model call.
+    - The clean job's script deletes itself, so the path list never reaches `~/.conflux-jobs`.
+    - The snapshot itself is unchanged: the controller identity cannot create snapshots (`testIamPermissions`: only
+      `compute.snapshots.get`). A clean snapshot is the better fix and needs the founder.
+  - Slice 65's inventory found no other residue: those three files are the only `*optee*` names on the disk, and
+    `optee.o` is GENERIC64's only object without a `.depend` target. The prebuilt kernels have no optee symbols. There
+    are no shell histories, and the 07-19/10-21 rebuilds are stock. A stock `build.sh -u kernel=GENERIC64` passes after
+    the clean (`~/evidence/snapshot-clean-2026-11-01/RESULTS.md`).
+  - `llmsuper-netbsd-run/` (`arm64.img`, `qemu-command.txt`, logs) is the founder's NetBSD-only QEMU boot validation:
+    stock NetBSD 10.1 + UEFI, no OP-TEE, no driver content. It is kept as environment.
   - Labs run kernel `6.1.0-54`, so plain `build.sh` finds no matching tooldir; pass `-T <existing tooldir>`.
 - The c3 disk holds a built qemu_v8 tree in `~/optee-work/optee`. `make check-only CHECK_TESTS=xtest XTEST_ARGS=1001`
   boots it and passes in ≈ 54 s. The snapshot has no `expect`; the a4 check installs it.

@@ -362,6 +362,24 @@ LAB_SETUP = (
     f"echo 'Defaults env_keep += \"{_KEEP}\"' > /tmp/conflux-proxy.sudoers && "
     "sudo -n install -m 0440 /tmp/conflux-proxy.sudoers /etc/sudoers.d/conflux-proxy && "
     "{ sudo -n visudo -cf /etc/sudoers.d/conflux-proxy || { sudo -n rm -f /etc/sudoers.d/conflux-proxy; false; }; }")
+CLEAN_SUDO = "sudo -n "
+
+
+def read_clean_paths(path: Path) -> tuple[str, ...]:
+    """A lab fixture's pre-run clean list: one absolute path per line; blank lines and `#` comments are skipped."""
+    return tuple(ln.strip() for ln in path.read_text().splitlines() if ln.strip() and not ln.lstrip().startswith("#"))
+
+
+def clean_command(paths: tuple[str, ...], sudo: str = CLEAN_SUDO) -> str:
+    """Remove `paths`, then confirm they are gone, then delete this job's own script, so the root-namespace
+    executor cannot read the removed paths from `~/.conflux-jobs`. Only a removal and a verification that both
+    exit 0 count as clean: a failed `rm`, or a verification that did not run (e.g. sudo refused), fails the job."""
+    q = " ".join(shlex.quote(p) for p in paths)
+    verify = "for p; do if [ -e \"$p\" ] || [ -L \"$p\" ]; then exit 1; fi; done"
+    return (f"{sudo}rm -f -- {q} || exit 1; {sudo}sh -c {shlex.quote(verify)} _ {q} || exit 1; "
+            "rm -f -- \"$0\"")
+
+
 EGRESS_CHECK = (  # waits for the tunnel's listener first
     f"for i in $(seq 30); do (exec 3<>/dev/tcp/127.0.0.1/{LAB_PROXY_PORT}) 2>/dev/null && break; sleep 2; done; "
     "for u in https://github.com https://pypi.org/simple/pip/; do "
@@ -1914,12 +1932,13 @@ def run_lab(tasks: list[Task], chat: Chat, budget: Budget, out: Path, name: str,
             hours: float, model: str = MODEL, remote: Callable[[str], list[str]] | None = None,
             tunnel: Callable[[int], list[str]] | None = None,
             lead_call: Callable[..., tuple[int, object, float]] | None = None, lead_model: str = LEAD,
-            scratch: bool = True) -> dict:
-    """Own one lab's lifecycle: up, egress tunnel, smoke, setup + egress check, tasks in order (stop at
-    the first non-accepted one), stop.
+            scratch: bool = True, clean_paths: tuple[str, ...] = ()) -> dict:
+    """Own one lab's lifecycle: up, egress tunnel, smoke, setup + fixture clean + egress check, tasks in
+    order (stop at the first non-accepted one), stop.
 
     The deadline starts when `devbox-lab up` is issued; the tunnel is killed and `devbox-lab stop`
-    runs on every exit path. A failed egress check ends the run before any model call.
+    runs on every exit path. A failed clean or egress check ends the run before any model call.
+    `clean_paths` (from the lab fixture, `--lab-clean`) are removed before the first model call; none: no clean step.
     """
     out.mkdir(parents=True, exist_ok=True)
     lab = {"name": name, "workdir": workdir, "hours": hours, "started": _utc()}
@@ -1939,9 +1958,14 @@ def run_lab(tasks: list[Task], chat: Chat, budget: Budget, out: Path, name: str,
                              "{ sudo -n true && echo SUDO_OK || echo SUDO_NO; }", 120)
         if lab["smoke"]["exit"] == 0:
             lab["setup"] = shell(LAB_SETUP, 120)
-            lab["egress"] = shell(EGRESS_CHECK, 300)
+            if clean_paths:
+                lab["clean"] = shell(clean_command(clean_paths, CLEAN_SUDO), 120)
+            if lab.get("clean", {"exit": 0})["exit"] == 0:
+                lab["egress"] = shell(EGRESS_CHECK, 300)
         if lab["smoke"]["exit"] != 0:
             lab["stopped_reason"] = "smoke_failed"
+        elif lab.get("clean", {"exit": 0})["exit"] != 0:
+            lab["stopped_reason"] = "clean_failed"
         elif lab["setup"]["exit"] != 0 or lab["egress"]["exit"] != 0:
             lab["stopped_reason"] = "egress_failed"
         else:
@@ -2004,6 +2028,8 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--lab-hours", type=float, default=4.0, help="lab wall-time deadline (with --lab)")
     run.add_argument("--lead", default="", help="lead model (e.g. kimi-k3): steers; judges finish on tasks without checks")
     run.add_argument("--lead-effort", default=LEAD_EFFORT)
+    run.add_argument("--lab-clean", type=Path, default=None,
+                     help="lab fixture: file of paths removed before the first model call (with --lab)")
     run.add_argument("--no-scratch", action="store_true", help="lead reviews without a verify session (baselines)")
     rec = sub.add_parser("reconcile")
     rec.add_argument("--out", type=Path, required=True)
@@ -2037,7 +2063,8 @@ def main(argv: list[str] | None = None) -> int:
     lead = surplus_lead(key, a.lead, a.lead_effort or None) if a.lead else None
     if a.lab:
         run_lab(tasks, chat, budget, a.out, a.lab, a.workdir, a.lab_hours, a.model, lead_call=lead,
-                lead_model=a.lead or LEAD, scratch=not a.no_scratch)
+                lead_model=a.lead or LEAD, scratch=not a.no_scratch,
+                clean_paths=read_clean_paths(a.lab_clean) if a.lab_clean else ())
         return 0
     a.out.mkdir(parents=True, exist_ok=True)
     results = []
