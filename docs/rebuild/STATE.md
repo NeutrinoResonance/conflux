@@ -12,10 +12,30 @@ MISSION-STATUS: ACTIVE
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections. Slice 60 is the first run of core to reach G5 + G7 from `task.txt` alone, with no developer
   help and no false DONE, independently re-executed. Slice 61 replicated G5 + G7 (n=2), but ended in a false DONE by the
-  gate. Slices 60 and 61 drew on a contaminated snapshot (a prior run's `optee.o`), so neither shows the driver from
-  `task.txt` alone. Slice 43's lead-s1 (a demo harness) reached G5 + G7 first, but ended in a false DONE.
+  gate. Slice 62 shows that false DONE is a spec-derivation gap, not a reviewer-family one. Slices 60 and 61 drew on a
+  contaminated snapshot (a prior run's `optee.o`), so neither shows the driver from `task.txt` alone. Slice 43's lead-s1 (a demo harness) reached G5 + G7 first, but ended in a false DONE.
   - **Gate reaffirmed (founder, 2026-11-01; 33c99f2 reverted by 82b6d68):** goal (a) includes the Linux boot, so G3 is
     required. That answers slice 60's open question.
+- **C slice 62 (2026-11-01, finish-gate demo, offline, $0.012892 metered + $0 lab GCE): neither a different-family
+  finish reviewer nor a generic claim-check turn refuses slice 61's false DONE. The cause is upstream of the reviewer: 0/28
+  reviews derive the gate's Linux boot from `task.txt`, and every one that saw the revision contradiction explained it
+  away.**
+  - Setup: core's own fresh finish review (core 535c2d2 = f11d700's `conflux/`) on 5 recorded states: s61@127/132 and
+    s60@154/229/240. All 5 are gate-not-met.
+    - Seam 5/5 exact: the recorded init and goal-1 requests, `prompt_chars` + `ask` tail.
+    - Arms: K kimi-k3 low; G glm-5.3 low; V = K + one generic claim-check turn where K said DONE.
+  - **s61@132 DONE:** K 3/6 (the live false DONE reproduces); G **5/6, falsified**; V 2/6, not supported.
+    - V also kept K's 2/2 false DONE on s61@127, where the live review said not DONE.
+    - s60's three states: 0 DONE in every arm.
+    - Pairing rules (two K reviews, or K and G) do not get ≤ 1/6 on both s61 states.
+  - **Audit:**
+    - No reply asks for a Linux boot or the standard OP-TEE QEMU setup (0/28; slices 47–48: 0/16).
+    - 5 replies note the OP-TEE 4.2.0 vs "OS revision 0.4" mismatch. All 5 call it a decode quirk and keep the claim.
+    - The s61@132 rejections ask for proof-bundle hygiene only.
+  - Decision: build nothing in core. The failure class is the derivation of proof criteria from `task.txt`, not the
+    reviewer's family (next action 2).
+  - Billing: 166/166 calls export-matched. Not Conflux in the window: $0.010370.
+  - Evidence: `~/evidence/finish-gate-demo-2026-11-01/RESULTS.md`.
 - **C slice 61 (2026-11-01, gate run, replication, $0.092726 metered + ≈ $1.41 GCE): core f11d700 unchanged ended
   `unverified`/`finish_review_done` at step 132 (3.83 h). Milestones G2 G4 G5 G6 G7 = 5/7, the same set as slice 60.
   **False DONE by the gate:** the finish review passed DONE with G1 (no qemu_v8 root) and G3 (no Linux boot) unmet.
@@ -759,11 +779,13 @@ MISSION-STATUS: ACTIVE
      - Then fix it structurally, with a regression test that fails on f11d700. For example, keep upper/work dirs on a
        mount visible only inside the scratch's namespace.
      - Do this before the next paid gate run.
-  2. **False DONE against the gate (slice 61, step 132).** Before any core change, demo on recorded finish-review states
-     (s61 step 132, s60's three, s43 lead-s1) whether either of these refuses DONE:
-     - a finish review by a different model or family;
-     - a generic check of claimed values against the run's own logs (here, "OS revision 0.4" vs OP-TEE 4.2.0).
-     No gate or Linux text may come from a developer: the finish review gets `task.txt` only.
+  2. **False DONE against the gate: derive proof criteria (slice 62).** A different-family reviewer and a claim-check
+     turn both fail. Before any core change, demo whether reviewers (or a planner of another family) first derive from
+     `task.txt` alone, before reading the trace, what an expert would require as proof per goal, and then judge
+     against it.
+     - Score on slice 62's states (s61@127/132 must be refused).
+     - The grading reference is whether the criteria include a normal-world boot plus test suite and treat
+       contradictory runtime values as disproof. This reference is never given to the model; no developer gate text.
   3. **Attribution:** a `--no-scratch` control gate run of the fixed core, after item 1.
   4. **Stale deliveries:** s60 5/5 and s61 3/3 arrived 22–55 steps late. Count contradictions across runs before
      building any guard.
