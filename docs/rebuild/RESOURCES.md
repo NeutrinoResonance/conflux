@@ -42,6 +42,8 @@
     `/home`. Upper dirs are under `/var/tmp/conflux-scratch/` (root-owned).
   - The scratch's `/tmp` is private and empty, and `~/.conflux-jobs` is hidden.
   - Writes outside `/home` and `/tmp` are **not** isolated.
+  - The upper dirs are visible to root-namespace commands. Slice 61's executor (sudo) read, copied and wrote a live
+    session's upper dir (steps 13–48): an isolation leak, recorded as STATE next action 1.
   - The first scratch installs `/etc/sudoers.d/zz-conflux-nopty` (`!use_pty`, as in slice 55's demo).
   - Each scratch command is one lab job: about 13 s round trip even for `true`.
   - At task end, `Steering.close` kills every scratch namespace (`killall`); the kill never targets the root namespace.
@@ -70,7 +72,11 @@
   `tooldir.Linux-6.1.0-50/51-cloud-amd64-x86_64`); `/home/darrenhidalgo/llmsuper-netbsd-run` (earlier NetBSD-only
   QEMU boot).
   - `netbsd-obj/sys/arch/evbarm/compile/GENERIC64/` also holds an earlier agent's compiled `optee.o`, with no source.
-    It carries message strings and symbols. Slice 60's executor mined it, so grading names it as machine prior art.
+    It carries message strings and symbols.
+  - **This is snapshot contamination** (operator, 2026-11-01): slice 60 mined that object, and slice 61 reconstructed
+    its driver from the disassembly. G4 provenance is affected for both slices.
+  - `llmsuper-netbsd-run/arm64.img` is also a prior run's artefact: slice 61's guest disk overlays it.
+  - Verify and clean the snapshot before any further gate run (STATE next action 0).
   - Labs run kernel `6.1.0-54`, so plain `build.sh` finds no matching tooldir; pass `-T <existing tooldir>`.
 - The c3 disk holds a built qemu_v8 tree in `~/optee-work/optee`. `make check-only CHECK_TESTS=xtest XTEST_ARGS=1001`
   boots it and passes in ≈ 54 s. The snapshot has no `expect`; the a4 check installs it.

@@ -88,6 +88,8 @@ USD comes from provider responses or documented prices — never estimated silen
 | 2026-10-31 | Surplus chat | `deepseek-v4-pro` 1, `kimi-k3` 1 | 98 | 74 | 0.000003 | — | C slice 60 pre-run floor checks (20:54Z; `~/evidence/gate-run-s60-2026-10-31/floor-check.out`) |
 | 2026-10-31/11-01 | Surplus chat | `deepseek-v4-pro` 235, `kimi-k3` 749 | 77551056 | 795505 | 0.140021 | — | C slice 60 gate run (core f11d700, 240 steps, 20:56Z–02:52Z): 984/1,017 calls export-matched (executor $0.046149, lead $0.093872); 33 cost-less replies unbilled; `~/evidence/gate-run-s60-2026-10-31/reconciled.json` |
 | 2026-10-31/11-01 | Surplus chat (not Conflux) | `deepseek-v4-pro` 104, `glm-5.3` 64, `kimi-k3` 76 | — | — | 0.035205 | — | unattributed caller on the shared key in slice 60's window (20:54Z–03:10Z; glm-5.3 is not used by the run; floor-check rows excluded), counted against the weekly cap |
+| 2026-11-01 | Surplus chat | `deepseek-v4-pro` 131, `kimi-k3` 440 | 38283283 | 570667 | 0.092726 | — | C slice 61 gate run (core f11d700 unchanged, ended at step 132 on finish_review_done, 03:41Z–07:31Z): 571/577 calls export-matched (executor $0.031318, lead $0.061408); 6 cost-less replies have no export row and were unbilled; `~/evidence/gate-run-s61-2026-11-01/reconciled.json` |
+| 2026-11-01 | Surplus chat (not Conflux) | `deepseek-v4-pro` 88, `glm-5.3` 28, `kimi-k3` 103 | — | — | 0.028182 | — | unattributed caller on the shared key in slice 61's window (03:39Z–07:45Z; unmatched rows; glm-5.3 is not used by the run), counted against the weekly cap |
 
 C slice 1 rows are reconciled with the export by `python -m conflux.core reconcile` (`~/evidence/core-runs/2026-10-27-c1*/reconciled.json`;
 export total for 2026-10-27: 83 rows, $0.001372).
@@ -100,7 +102,7 @@ charge-bound estimates) are only admission-time bounds. They are replaced by bil
 $0.0108 Jev and $0.0207 rejected-request estimates were billed $0.000006 and $0. Account credit after these runs
 is $9.369476 (`/v1/buyer/me`).
 
-**Metered total: $3.498808** (sum of the USD column, not-Conflux rows included, plus the Jev fair-test decisions at their ≈$0.00028 estimate; the earlier $2.860537 line had fallen behind the rows; slice 55 adds $0.035036, slice 57 $0.006107 (its pending replies settled unbilled, $0), slice 58 $0.017903, slice 59 $0.008424 incl. $0.000749 not Conflux, slice 60 $0.175229 incl. $0.035205 not Conflux)
+**Metered total: $3.619716** (sum of the USD column, not-Conflux rows included, plus the Jev fair-test decisions at their ≈$0.00028 estimate; the earlier $2.860537 line had fallen behind the rows; slice 55 adds $0.035036, slice 57 $0.006107 (its pending replies settled unbilled, $0), slice 58 $0.017903, slice 59 $0.008424 incl. $0.000749 not Conflux, slice 60 $0.175229 incl. $0.035205 not Conflux, slice 61 $0.120908 incl. $0.028182 not Conflux)
 
 ## GCE lab VMs (week 2026-W44 cap $60)
 
@@ -151,8 +153,9 @@ Rate: n2d-standard-8 ≈ $0.338/h running (GCE list price, us-central1) + 100 GB
 | 2026-10-31 | `conflux-dev-lab-g2` | ≈ 17:21:35–18:00:11 (up issued → deleted; core stopped it 17:56:58) | ≈ 0.64 | ≈ 0.23 | C slice 57 gate run (fresh lab from the clean snapshot; ended at step 55 on a provider 403; deleted) |
 | 2026-10-31 | `conflux-dev-lab-s59` | 19:51:55–20:08:56 (up issued → delete issued) | ≈ 0.29 | ≈ 0.10 | C slice 59 lab smoke of sessions beside the review cadence, scripted models ($0 metered; fresh lab from the clean snapshot, deleted) |
 | 2026-10-31/11-01 | `conflux-dev-lab-g3` | ≈ 20:55:00–02:52:14 (up issued → core stopped it), 02:52:25–03:04:49 (grading, deleted) | ≈ 6.16 | ≈ 2.17 | C slice 60 gate run (fresh lab from the clean snapshot, graded incl. re-execution, deleted) |
+| 2026-11-01 | `conflux-dev-lab-g4` | 03:39:36–07:31:55 (up issued → core stopped it), 07:32:23–07:40:59 (grading, deleted) | ≈ 4.02 | ≈ 1.41 | C slice 61 gate run (fresh lab from the clean snapshot, graded incl. re-execution, deleted) |
 
-**GCE lab total: ≤ $30.74** (no lab disk left)
+**GCE lab total: ≤ $32.15** (no lab disk left)
 
 ## GCE outside the labs (week 2026-W44, list price, projected to Mon 2026-11-02T00:00Z)
 
@@ -168,4 +171,4 @@ controller identity cannot read logging, so worker compute is bounded from insta
 | Other project disks (preserved `llmsuper-*`, `routeros-*`) | 168 h | 4.79 |
 | Snapshots (≈ 20 GB) | 168 h | 0.24 |
 
-**W44 GCE total (labs + the above): ≤ $47.90 of $60.**
+**W44 GCE total (labs + the above): ≤ $49.31 of $60.**

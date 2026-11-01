@@ -11,7 +11,48 @@ MISSION-STATUS: ACTIVE
   773b964). Everything accepted so far (a1–a4, b1a, b1b, slice 30's b2) is **reachable with developer-written spec and
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections. Slice 60 is the first run of core to reach G5 + G7 from `task.txt` alone, with no developer
-  help and no false DONE, independently re-executed (n=1). Slice 43's lead-s1 (a demo harness) reached G5 + G7 first, but ended in a false DONE.
+  help and no false DONE, independently re-executed. Slice 61 replicated G5 + G7 (n=2), but ended in a false DONE by the
+  gate. Slices 60 and 61 drew on a contaminated snapshot (a prior run's `optee.o`), so neither shows the driver from
+  `task.txt` alone. Slice 43's lead-s1 (a demo harness) reached G5 + G7 first, but ended in a false DONE.
+  - **Gate reaffirmed (founder, 2026-11-01; 33c99f2 reverted by 82b6d68):** goal (a) includes the Linux boot, so G3 is
+    required. That answers slice 60's open question.
+- **C slice 61 (2026-11-01, gate run, replication, $0.092726 metered + ≈ $1.41 GCE): core f11d700 unchanged ended
+  `unverified`/`finish_review_done` at step 132 (3.83 h). Milestones G2 G4 G5 G6 G7 = 5/7, the same set as slice 60.
+  **False DONE by the gate:** the finish review passed DONE with G1 (no qemu_v8 root) and G3 (no Linux boot) unmet.
+  H61 is replicated only by its narrower pre-registered rule: G5 + G7 met by grader re-execution, and no DONE while
+  G5/G7 was unmet.**
+  - **Why the step:** slice 60's late self-damage (next action 2) was already named by its own step-240 review ("broke
+    the kernel build … the build still fails"). The run had hit the cap 5 steps after the damage, so no detector is
+    needed yet (n=1).
+  - **Grading:**
+    - The grading instruments were fixed first: G5 matches `netbsd.bin`/`netbsd*.img`, and snapshots also pull `/home`
+      boot logs and images.
+    - Re-execution of the run's final boot on copies shows, in one boot:
+      - OP-TEE 4.2.0 "switching to normal world boot" (G6);
+      - NetBSD #8 with OP-TEE's API UID from `smccc_call` (G7).
+    - **Verification failure of the finish review:**
+      - dmesg prints "OP-TEE OS revision 0.4" and "API revision 0.2" against the same boot's OP-TEE 4.2.0 banner, and
+        a malformed OP-TEE UUID.
+      - The step-132 review quoted these without noticing, and took an ioctl that returned the cached value as proof.
+      - Slice 60's three finish reviews had required a TA session.
+  - **New, harness isolation leak (scratch side channel):**
+    - 42 executor commands (steps 13–48, with sudo) read and copied the lead's verify-session scratch upper dir
+      (`/var/tmp/conflux-scratch/…`), which held session 1's TF-A/OP-TEE/U-Boot builds.
+    - The executor also built a TA inside it while that session was still open.
+    - So goal (a)'s firmware came mostly through this channel, not through replayed deliveries. This confounds delivery
+      attribution in both runs; slice 60 is not checked for it.
+  - **Snapshot contamination (G4 provenance, slices 60 and 61):** the clean snapshot carries a prior run's compiled
+    `netbsd-obj/.../GENERIC64/optee.o`.
+    - Slice 60 mined it at steps 11–14.
+    - Slice 61 reconstructed its driver from its disassembly (same symbol set), then deleted it at step 69.
+    - Slice 61's guest disk also overlays a prior run's `llmsuper-netbsd-run/arm64.img`.
+  - **Lead:** 7.8 reviews/h, 445 calls, median latency 31.7 s.
+    - Deliveries: 3/5 sessions delivered, all with replay ok; all 3 arrived 22–46 steps late, behind 6–8 newer reviews.
+    - 0/36 goal lists name a Linux boot.
+  - D1: 13 hits, all false positives; 0 harness faults. No late self-damage.
+  - Billing: 571/577 calls export-matched; 6 cost-less replies unbilled. Not Conflux in the window: $0.028182.
+  - W44 GCE ≤ $49.31 of $60. Lab g4 deleted.
+  - Evidence: `~/evidence/gate-run-s61-2026-11-01/RESULTS.md` (`grade.json`, `reexec/`, `verify_scan.out`).
 - **C slice 60 (2026-10-31/11-01, gate run, $0.140021 metered + ≈ $2.17 GCE): core f11d700 ended `unverified`/`step_cap`.
   There was no false DONE: 3/3 finish reviews said not DONE, correctly. Milestones G2 G4 G5 G6 G7 = 5/7 (slice 50: 4/7).
   G5 and G7 are met for the first time in a core gate run, with no false DONE, and verified by grader re-execution.
@@ -705,17 +746,30 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  1. Replicate and attribute slice 60 (n=1). Run a second gate run of f11d700 unchanged, then a `--no-scratch` control.
-     - Outcomes: G5/G7 again, whether a TA session completes, and whether the deliveries carry the gain.
-     - Fix the grading instruments first: G5 must match `netbsd.bin`/`netbsd.img`; the snapshots must also take boot logs
-       and kernel images outside `/tmp`.
-  2. Late self-damage (slice 60, steps 237–240): before any core change, demo a generic check on the recorded trace. It
-     should flag an edit or rebuild that destroys the artefact of a command that last produced a milestone.
-  3. Stale deliveries (1/5 contradicted the newest review): count across runs before building any guard.
-  4. History growth (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output compaction on
-     the recorded traces before any core change.
-  5. Missing input (founder, non-blocking): is the Linux boot required for goal (a) when `task.txt` does not name it? The
-     gate keeps G3 until it is answered; no slice-60 goal names Linux. Goal (b)'s proof bar is also open: the finish
-     reviews require a TA session, and an attach with OP-TEE answers is G7. The completion gate also needs item E's
-     held-out comparisons and an unmerged promotion PR to `main`.
-  6. Carried from before slice 60: widen slice 52's veto finding before building a fresh-context running review.
+  0. **Verify and clean the lab snapshot before any further gate run** (snapshot contamination, slices 60–61).
+     - Inventory prior-run artefacts on `conflux-optee-baseline-clean-20261021`: at least
+       `netbsd-obj/.../GENERIC64/optee.o` and its `.d` files, `llmsuper-netbsd-run/` (`arm64.img`, `serial-driver.py`,
+       logs) and any other `optee`/driver residue. Check a stock-built object tree against it.
+     - Then produce a clean snapshot without them; this may need the founder if the controller identity cannot create
+       snapshots.
+     - Record the inventory and the new snapshot name in `RESOURCES.md`.
+  1. **Scratch side channel (slice 61; a harness isolation fault).** The executor reads and writes the lead's scratch
+     upper dirs from the root namespace.
+     - Check slice 60's trace for the same channel ($0).
+     - Then fix it structurally, with a regression test that fails on f11d700. For example, keep upper/work dirs on a
+       mount visible only inside the scratch's namespace.
+     - Do this before the next paid gate run.
+  2. **False DONE against the gate (slice 61, step 132).** Before any core change, demo on recorded finish-review states
+     (s61 step 132, s60's three, s43 lead-s1) whether either of these refuses DONE:
+     - a finish review by a different model or family;
+     - a generic check of claimed values against the run's own logs (here, "OS revision 0.4" vs OP-TEE 4.2.0).
+     No gate or Linux text may come from a developer: the finish review gets `task.txt` only.
+  3. **Attribution:** a `--no-scratch` control gate run of the fixed core, after item 1.
+  4. **Stale deliveries:** s60 5/5 and s61 3/3 arrived 22–55 steps late. Count contradictions across runs before
+     building any guard.
+  5. **History growth** (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output
+     compaction on the recorded traces before any core change.
+  6. **Open, non-blocking:**
+     - Goal (b)'s proof bar: is a TA session required, or is an attach with OP-TEE answers (G7) enough?
+     - The completion gate also needs item E's held-out comparisons and an unmerged promotion PR to `main`.
+  7. **Carried from before slice 60:** widen slice 52's veto finding before building a fresh-context running review.

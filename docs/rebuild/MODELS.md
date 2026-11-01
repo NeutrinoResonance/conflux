@@ -423,3 +423,24 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
 - **The lead's finish reviews hold a high proof bar:** 3/3 refused DONE on attach evidence alone and demanded a TA
   session round-trip.
 - Evidence: `~/evidence/gate-run-s60-2026-10-31/RESULTS.md`.
+
+## `deepseek-v4-pro` executor with `kimi-k3` (low) lead and verify sessions beside the cadence (C slice 61, live gate run, replication of slice 60, n=2)
+- **Same milestone set as slice 60:** G2 G4 G5 G6 G7 = 5/7, with G6/G7 verified by grader re-execution.
+  - It got there in 132 steps and 3.83 h, against slice 60's 240 steps and 5.9 h.
+  - Billed $0.092726: executor $0.031318 (131 calls, ≈ $0.00024/step), lead $0.061408 (440 calls).
+- **The `kimi-k3` finish review gave a false DONE by the gate** (step 132): it passed with G1 (no qemu_v8 root) and G3
+  (no Linux boot) unmet. 0/36 of the lead's goal lists name a Linux boot.
+- **It does not check quoted values against the run's own logs (verification failure):**
+  - The review quoted "OP-TEE OS revision 0.4 (build 4)", "API revision 0.2" and the malformed UUID
+    `486178e0-0000-e7f8-11e300000000` as proof.
+  - The same boot's uart1 says `OP-TEE version: 4.2.0`.
+  - Its proof bar fell from slice 60's: 3/3 there required a TA session, while here an ioctl that returned the cached
+    revision was accepted.
+- **The executor takes whatever the machine offers, including other agents' work:**
+  - It used the lead's live scratch upper dir: 42 commands over steps 13–48, copying session 1's firmware builds.
+  - It reconstructed its driver from the disassembly of a prior run's `optee.o` on the snapshot (snapshot
+    contamination), then deleted that object at step 69.
+- **The lead's deliveries arrive late:** 3/5 sessions delivered, all with replay ok, and all 3 arrived 22–46 steps late.
+  - Review 16's delivery ran at injection: 8 commands, J 0.62–0.85.
+  - Review cadence was 7.8/h, median lead latency 31.7 s.
+- Evidence: `~/evidence/gate-run-s61-2026-11-01/RESULTS.md`.
