@@ -15,12 +15,33 @@ MISSION-STATUS: ACTIVE
   gate. Slice 62 shows that false DONE is a spec-derivation gap, not a reviewer-family one. Slice 63: proof criteria derived from
   `task.txt` before the trace stop that false DONE (0/12 vs 3/6), but for goal (b)'s TA-session bar; the derived Linux
   goal is dropped once the reviewer reads the trace. Slice 66: those criteria also reject a run that truly met goal (a)
-  (6/6, both the open and the per-criterion verdict); they over-demand. Slice 67: glm-5.3's short one-shot goal lists (Gl) pass c8 and keep the Linux criterion at s61 when judged per criterion (kimi 4/6, at the derivation ceiling); Slice 68: under core's open finish ask the same Gl lists pass c8 (0/12 false rejects) but the reviewer drops the Linux criterion at s61 in 16/16 L-list reviews (gate reason 0/16; DONE 5/24), so inserting criteria into the open review is not a capability. Slices 60 and 61 drew on a contaminated snapshot (a prior run's `optee.o`), so neither shows the driver from `task.txt` alone. Slice 69 does, on a cleaned lab: G7 by re-execution, but as a loadable module (strict G5 unmet), again with a false DONE. Slice 43's lead-s1 (a demo harness) reached G5 + G7 first, but ended in a false DONE.
+  (6/6, both the open and the per-criterion verdict); they over-demand. Slice 67: glm-5.3's short one-shot goal lists (Gl) pass c8 and keep the Linux criterion at s61 when judged per criterion (kimi 4/6, at the derivation ceiling); Slice 68: under core's open finish ask the same Gl lists pass c8 (0/12 false rejects) but the reviewer drops the Linux criterion at s61 in 16/16 L-list reviews (gate reason 0/16; DONE 5/24), so inserting criteria into the open review is not a capability. Slices 60 and 61 drew on a contaminated snapshot (a prior run's `optee.o`), so neither shows the driver from `task.txt` alone. Slice 69 does, on a cleaned lab: G7 by re-execution, but as a loadable module (strict G5 unmet), again with a false DONE. Slice 43's lead-s1 (a demo harness) reached G5 + G7 first, but ended in a false DONE. Slice 70: no gate run has attempted G3 (the Linux boot), because core's step-1 goal list never requires it (live 0/3). kimi-k3's goal-by-goal review of a list writes it in 4/6 draws, but the running reviews drop it again within 6–12 steps (1/4 chains keep it), so changing who writes the first list is not a capability.
   - **Gate reaffirmed (founder, 2026-11-01; 33c99f2 reverted by 82b6d68):** goal (a) includes the Linux boot, so G3 is
     required. That answers slice 60's open question.
   - **Open founder question (asked 2026-11-01 ~13:00Z, unanswered):** may the finish gate use a per-criterion verdict?
     Slices 67/68 put it in conflict with the open finish ask (MISSION a7322df). Until MISSION records the answer, build
     no per-criterion verdict and no fixed answer shape into core (operator, 2026-11-01).
+    Slice 70 widens the question with evidence. The same revise-or-drop licence (`FINAL_ASK`) removes a Linux goal
+    derived before the trace from the *running* reviews too (3/4 chains by step 12). So the founder's answer decides
+    whether any derived goal can be held against the lead's own rewrites.
+- **C slice 70 (2026-11-01, init goal-list demo, offline, $0.009948 metered + $0 GCE): who writes the first goal
+  list. H70 is falsified: the Linux boot (G3) survives kimi-k3's running reviews to s69 step 19 in 1/4 chains. Build
+  nothing.**
+  - **Why:** in s60, s61 and s69 the step-1 init list (kimi-k3 low, `task.txt` only) set goal (a) as "QEMU + OP-TEE + a
+    NetBSD guest" (0/3 require Linux). No run attempted G3, whatever the finish review did.
+  - **Seam:** s69's running-lead turns were chained at steps 1, 6, 12 and 19; 16/16 exact.
+  - **Step-1 list requires a Linux boot (n=6 each, hand-graded):**
+    - K = core as-is (kimi init): 1/6;
+    - G = glm-5.3 init: 0/6;
+    - GK = glm's list, then kimi's goal-by-goal review: 4/6. The per-goal conversation adds it, not glm.
+  - **Persistence:** kimi running lead seeded with GK1–4, chained over s69's recorded steps 6, 12 and 19:
+    - Linux kept after 6/12/19 in 3, 1 and 1 of 4 chains.
+    - One chain tells the agent "You do NOT need Linux/xtest/rootfs".
+    - The bias was registered in advance: the recorded executor followed s69's own lead. Even so, in GK3 and GK4 the
+      step-6 advice to build qemu_v8 with Linux was dropped by step 12.
+  - Also seen: 3/6 GK lists assume NetBSD already has tee/optee drivers "to enable" (it has none).
+  - Billing: 115/115 export-matched. Not Conflux in the window: $0.001505.
+  - Evidence: `~/evidence/init-goals-demo-2026-11-01/RESULTS.md`.
 - **C slice 69 (2026-11-01, attribution gate run, $0.072634 metered + ≈ $1.56 GCE): fixed core 93d0466 with
   `--lab-clean`, `task.txt` only, slice 61's settings. Ended `unverified`/`finish_review_done` at step 179 (4.27 h).
   G7 is met by grader re-execution with no contamination: the executor's own driver gets OP-TEE's API UID and
@@ -916,7 +937,11 @@ MISSION-STATUS: ACTIVE
      A clean snapshot replacing the fixture needs the founder (no `compute.snapshots.create`).
   1. ~~Scratch side channel~~: fixed in slice 64. First live exercise in slice 69: 0 executor commands touch
      `conflux-scratch`.
-  2. **On hold (open founder question above): no per-criterion verdict in core until MISSION records it.** **False DONE against the gate: hold derived criteria fixed (slice 68).** The open finish review drops Gl's Linux
+  2. **G3 is never attempted (slice 70).** The open review's revise-or-drop licence has now removed a derived Linux
+     goal at the finish review (slices 63 and 68) and in the running reviews (slice 70). Do not try another derivation
+     or init-model variant: that would be the third materially identical failure. The next change of hypothesis needs
+     the founder's answer on holding derived goals (question above). Until then, take item 3.
+  2b. **On hold (open founder question above): no per-criterion verdict in core until MISSION records it.** **False DONE against the gate: hold derived criteria fixed (slice 68).** The open finish review drops Gl's Linux
      criterion 16/16 at s61, but keeps goal (a) correctly at c8 12/12. Per criterion as written, it holds it (slice 67).
      - Next demo: a separate acceptance check beside the open review, which keeps leading (MISSION a7322df). Pre-trace
        criteria are judged as written, by a model other than the lead, and code computes DONE = open DONE ∧ every
