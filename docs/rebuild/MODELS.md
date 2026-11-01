@@ -460,3 +460,16 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
 - **A generic claim-check turn (same model) withdraws 1/5 DONEs,** and that one for a missing PASS line, not for the
   contradiction.
 - Latency (init + finish review): median 136 s (kimi), 133 s (glm). Evidence: `~/evidence/finish-gate-demo-2026-11-01/RESULTS.md`.
+
+## `kimi-k3` / `glm-5.3` deriving proof criteria from `task.txt` before any trace (C slice 63, offline)
+- **Pre-trace derivation finds the Linux boot about half the time** (goal (a) proof requires a normal-world Linux boot
+  or xtest in QEMU; hand-graded, n=6 each). One-shot derivation: glm-5.3 low 4/6, high 3/6; kimi-k3 low 3/6, high 2/6.
+  Planner + other-family critic: glm→kimi 5/6 (draft already 5/6), kimi→glm 3/6 (draft 2/6). The slice 62 finish
+  reviewers, which derive goals after reading the trace, never did (0/28).
+- **Driver values must match the booted OP-TEE (version/UUID):** one-shot kimi-k3 high 3/6, others 0–1/6; glm→kimi
+  pair 4/6.
+- **With those criteria, kimi-k3 low no longer passes slice 61's false DONE** (s61@132: 0/6 in both designs vs 3/6),
+  but the reasons drift after reading the trace: refusals for a TA session only (goal (b)'s bar) are 6/9 (goals replaced) and 3/8 (criteria in data); the reviewer
+  marks the derived Linux goal optional, a "documented deviation", or drops it (FINAL_ASK lets it). Gate reason as a
+  finish blocker at s61: 1/9 refusals (goals replaced by a glm derivation), 3/8 (glm→kimi criteria in the data).
+- Evidence: `~/evidence/proof-criteria-demo-2026-11-01/RESULTS.md`, `~/evidence/criteria-first-demo-2026-11-01/RESULTS.md`.

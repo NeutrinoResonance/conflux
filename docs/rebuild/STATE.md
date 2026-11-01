@@ -12,10 +12,36 @@ MISSION-STATUS: ACTIVE
   help**: it is not progress toward the gate. b3 failed (slice 31). Top priorities: Conflux derives the spec itself
   and produces its own corrections. Slice 60 is the first run of core to reach G5 + G7 from `task.txt` alone, with no developer
   help and no false DONE, independently re-executed. Slice 61 replicated G5 + G7 (n=2), but ended in a false DONE by the
-  gate. Slice 62 shows that false DONE is a spec-derivation gap, not a reviewer-family one. Slices 60 and 61 drew on a
-  contaminated snapshot (a prior run's `optee.o`), so neither shows the driver from `task.txt` alone. Slice 43's lead-s1 (a demo harness) reached G5 + G7 first, but ended in a false DONE.
+  gate. Slice 62 shows that false DONE is a spec-derivation gap, not a reviewer-family one. Slice 63: proof criteria derived from
+  `task.txt` before the trace stop that false DONE (0/12 vs 3/6), but for goal (b)'s TA-session bar; the derived Linux
+  goal is dropped once the reviewer reads the trace. Slices 60 and 61 drew on a contaminated snapshot (a prior run's `optee.o`), so neither shows the driver from `task.txt` alone. Slice 43's lead-s1 (a demo harness) reached G5 + G7 first, but ended in a false DONE.
   - **Gate reaffirmed (founder, 2026-11-01; 33c99f2 reverted by 82b6d68):** goal (a) includes the Linux boot, so G3 is
     required. That answers slice 60's open question.
+- **C slice 63 (2026-11-01, proof-criteria demos, offline, $0.040635 metered + $0 lab GCE): proof criteria that Conflux's
+  other models derive from `task.txt` before reading the trace stop slice 61's false DONE: s61@132 0/6 in each design, vs
+  3/6. But they stop it for the wrong reason. The derived Linux-boot goal rarely survives the trace, and most refusals
+  demand a TA session instead. Both registered rules are inconclusive (DONE conditions met, gate-reason condition not
+  met). Build nothing.**
+  - Two designs were registered by sessions the keeper bug archived mid-work. Their draws were reused (operator note). The
+    resume drew 1 cut-off conversation.
+    - **D1:** a one-shot derivation replaces the finish reviewer's goal list after its k−10 init review.
+    - **D2:** a glm-5.3 planner + kimi-k3 critic write criteria, inserted into the reviewer's data.
+    - Reviewer in both: kimi-k3 low (core's); seam 5/5.
+  - **Derivation** (goal (a) requires a normal-world Linux boot or xtest; hand-graded, n=6; the reference is never sent):
+    - one-shot: glm-5.3 low 4/6, high 3/6; kimi-k3 low 3/6, high 2/6;
+    - glm→kimi pair 5/6 (draft 5/6); kimi→glm 3/6.
+    - The driver's values must match the booted OP-TEE: glm→kimi 4/6, one-shot ≤ 3/6.
+  - **Finish verdicts (DONE):** s61@132 D1 0/6, D2 0/6; s61@127 D1 1/4, D2 0/2; s60 states 0/12.
+  - **Hand audit of the s61 refusals:**
+    - Gate reason (Linux/xtest, or the revision/UUID contradiction, as a finish blocker): D1 1/9, D2 3/8.
+    - Refusals for a TA session only: D1 6/9, D2 3/8.
+    - Linux/xtest named at all: D1 8/16 (incl. s60@240 d2, which drops the Linux-guest xtest baseline), D2 6/14 (slice 62: 0/28).
+    - After reading the trace, the reviewer makes the derived Linux goal optional or a "documented deviation", or drops
+      it. `FINAL_ASK` allows "revise … or drop goals".
+  - Unmeasured: the false-reject cost on a true-DONE state (none exists) and goal (b)'s bar (item 6). So no core build.
+  - Billing: 313/313 calls export-matched (D1 $0.018674, D2 $0.021961). Not Conflux in the joint window: $0.030296.
+  - Evidence: `~/evidence/proof-criteria-demo-2026-11-01/RESULTS.md` (D1 + comparison),
+    `~/evidence/criteria-first-demo-2026-11-01/RESULTS.md` (D2).
 - **C slice 62 (2026-11-01, finish-gate demo, offline, $0.012892 metered + $0 lab GCE): neither a different-family
   finish reviewer nor a generic claim-check turn refuses slice 61's false DONE. The cause is upstream of the reviewer: 0/28
   reviews derive the gate's Linux boot from `task.txt`, and only 1/28 makes the revision contradiction a finish
@@ -783,13 +809,14 @@ MISSION-STATUS: ACTIVE
      - Then fix it structurally, with a regression test that fails on f11d700. For example, keep upper/work dirs on a
        mount visible only inside the scratch's namespace.
      - Do this before the next paid gate run.
-  2. **False DONE against the gate: derive proof criteria (slice 62).** A different-family reviewer and a claim-check
-     turn both fail. Before any core change, demo whether reviewers (or a planner of another family) first derive from
-     `task.txt` alone, before reading the trace, what an expert would require as proof per goal, and then judge
-     against it.
-     - Score on slice 62's states (s61@127/132 must be refused).
-     - The grading reference is whether the criteria include a normal-world boot plus test suite and treat
-       contradictory runtime values as disproof. This reference is never given to the model; no developer gate text.
+  2. **False DONE against the gate: hold the derived criteria fixed (slice 63).** Pre-trace criteria stop s61's false
+     DONE, but the reviewer re-scopes them after reading the trace.
+     - Next demo: the finish verdict judges each pre-trace criterion met or unmet, and may not drop or revise one.
+       Measure on slice 63's states whether the Linux criterion becomes the blocker.
+     - Before any build, measure the false-reject cost on a positive or near-positive state. None exists yet; for
+       example, a recorded run that has met a criterion set, or a held-out task.
+     - The grading reference (normal-world boot + test suite; contradictory values = disproof) is never given to a
+       model.
   3. **Attribution:** a `--no-scratch` control gate run of the fixed core, after item 1.
   4. **Stale deliveries:** s60 5/5 and s61 3/3 arrived 22–55 steps late. Count contradictions across runs before
      building any guard.
