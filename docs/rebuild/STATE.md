@@ -14,9 +14,35 @@ MISSION-STATUS: ACTIVE
   help and no false DONE, independently re-executed. Slice 61 replicated G5 + G7 (n=2), but ended in a false DONE by the
   gate. Slice 62 shows that false DONE is a spec-derivation gap, not a reviewer-family one. Slice 63: proof criteria derived from
   `task.txt` before the trace stop that false DONE (0/12 vs 3/6), but for goal (b)'s TA-session bar; the derived Linux
-  goal is dropped once the reviewer reads the trace. Slices 60 and 61 drew on a contaminated snapshot (a prior run's `optee.o`), so neither shows the driver from `task.txt` alone. Slice 43's lead-s1 (a demo harness) reached G5 + G7 first, but ended in a false DONE.
+  goal is dropped once the reviewer reads the trace. Slice 66: those criteria also reject a run that truly met goal (a)
+  (6/6, both the open and the per-criterion verdict); they over-demand. Slices 60 and 61 drew on a contaminated snapshot (a prior run's `optee.o`), so neither shows the driver from `task.txt` alone. Slice 43's lead-s1 (a demo harness) reached G5 + G7 first, but ended in a false DONE.
   - **Gate reaffirmed (founder, 2026-11-01; 33c99f2 reverted by 82b6d68):** goal (a) includes the Linux boot, so G3 is
     required. That answers slice 60's open question.
+- **C slice 66 (2026-11-01, criteria-verdict demo, offline, $0.104705 metered + $0 GCE): pre-trace GK criteria in the
+  finish reviewer's data reject the first near-positive state. c8's accepted goal-(a) run (OP-TEE build, secure-world +
+  Linux boot, xtest 1001 PASS) is judged not done 6/6, both with core's open finish ask (O) and with a per-criterion
+  MET/UNMET verdict whose DONE is computed by code (S). The registered falsifier fired: the criteria over-demand. Build
+  nothing.**
+  - **Setup:**
+    - kimi-k3 low; core's finish review; GK revised criteria (slice 63 D2) inserted after the task.
+    - Arms: O keeps `FINAL_ASK` (MISSION a7322df). S is a demo-only arm (operator note).
+    - States: c8 a3+a4 rebuilt as one run, with `task.txt` as the task; s61@132/127; s60@229.
+    - Pre-flight is $0. Seam 5/5. The copied `ask` is byte-identical to core's. 6/6 parser cases pass. c8's Linux and
+      xtest PASS lines are visible to the reviewer after clipping.
+  - **c8:**
+    - The reviewer sees the boot and the PASS, yet keeps goal (a) open in every review. It asks for things the gate does
+      not require: the full xtest suite, manifests/sha256s, DTB dumps, an interleaved capture, negative controls.
+    - S: 1 of 23 goal-(a) criterion verdicts is MET.
+  - **s61:**
+    - DONE: O 0/10, S 0/10.
+    - Gate reason: O 2/10 (H66-O falsified). S 9/10 (+1 lenient), but each S reply has 9–14 UNMET blockers, and S says DONE
+      in 0/18 reviews, c8 included. S's numeric edge is refuse-everything behaviour, not discrimination.
+    - S incompletes: 2/18. One is core's own path: an init review with no goal lines turns the finish review into a
+      second init turn (s61@127 d1, 2 calls).
+  - **Failure class now:** the planner + critic derivation inflates proof criteria into audit checklists (8–14 items).
+    It is no longer the reviewer dropping the Linux goal.
+  - Billing: 291/291 export-matched. Not Conflux in the window: $0.006646.
+  - Evidence: `~/evidence/criteria-verdict-demo-2026-11-01/RESULTS.md` (`audit.json`, `preflight.json`).
 - **C slice 65 (2026-11-01, harness fault, $0 metered + ≈ $0.08 GCE): snapshot contamination is closed for gate runs.
   A lab fixture now lists the snapshot's prior-run driver object, and core removes it before the first model call:
   `--lab-clean tests/fixtures/core_loop/optee_lab_residue.txt`.**
@@ -835,12 +861,15 @@ MISSION-STATUS: ACTIVE
      A clean snapshot replacing the fixture needs the founder (no `compute.snapshots.create`).
   1. ~~Scratch side channel~~: fixed in slice 64 (regression test; slice 60 had it too). The next gate run is its first
      lab exercise: check the trace for `conflux-scratch` paths in executor commands.
-  2. **False DONE against the gate: hold the derived criteria fixed (slice 63).** Pre-trace criteria stop s61's false
-     DONE, but the reviewer re-scopes them after reading the trace.
-     - Next demo: the finish verdict judges each pre-trace criterion met or unmet, and may not drop or revise one.
-       Measure on slice 63's states whether the Linux criterion becomes the blocker.
-     - Before any build, measure the false-reject cost on a positive or near-positive state. None exists yet; for
-       example, a recorded run that has met a criterion set, or a held-out task.
+  2. **False DONE against the gate: criteria that pass a true goal (a) (slice 66).** The GK pre-trace criteria reject c8's
+     finished goal (a) 6/6 in both verdict forms, so no reviewer wiring helps until the criteria pass c8.
+     - c8 (a3+a4 rebuilt as one run, `criteria-verdict-demo-2026-11-01/demo.py` `rebuild_c8`) is the acceptance state
+       for any criteria or finish-review change.
+     - Next demo: per-criterion acceptance at c8 alone for each existing derivation (slice 63's one-shot Gl/Kl goals,
+       GK drafts, GK revised). Which source keeps the Linux/xtest requirement without demanding the full suite or
+       documents? Keep the open ask (MISSION a7322df); a structured form only as a demo arm.
+     - The legacy `optee-ctl-runs/lab/` run is another false DONE (no Linux boot; OS revision 0.4), usable as a held-out
+       negative once a seam exists.
      - The grading reference (normal-world boot + test suite; contradictory values = disproof) is never given to a
        model.
   3. **Attribution:** a `--no-scratch` control gate run of the fixed core, after item 1.
