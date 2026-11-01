@@ -410,3 +410,13 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
 - Review wall median 192 s, max 325 s (2/18 over 300 s, as its goal list grows to 8–9 goals).
 - Evidence: `~/evidence/cadence-review-demo-2026-10-31/RESULTS.md`.
 
+## `deepseek-v4-pro` executor with `kimi-k3` (low) lead and verify sessions beside the cadence (C slice 60, live gate run, n=1)
+- **It takes delivered sequences up at once, near-verbatim:** every one of 5 deliveries was run at its injection step,
+  with token Jaccard 0.8–0.94 against the delivered commands. The executor adds comments, so exact matching finds only 1/29.
+- **It runs a stale delivery that contradicts the newest review** (1/5): an OP-TEE/TF-A rebuild, injected the same step a
+  newer review said not to rebuild.
+- **After success it damages its own working state:** in-place edits broke the kernel build at the step cap and removed
+  the only working `netbsd.img`. It had also deleted its proof logs with `rm -f` before re-running.
+- **The lead's finish reviews hold a high proof bar:** 3/3 refused DONE on attach evidence alone and demanded a TA
+  session round-trip.
+- Evidence: `~/evidence/gate-run-s60-2026-10-31/RESULTS.md`.
