@@ -18,8 +18,8 @@ MISSION-STATUS: ACTIVE
     required. That answers slice 60's open question.
 - **C slice 62 (2026-11-01, finish-gate demo, offline, $0.012892 metered + $0 lab GCE): neither a different-family
   finish reviewer nor a generic claim-check turn refuses slice 61's false DONE. The cause is upstream of the reviewer: 0/28
-  reviews derive the gate's Linux boot from `task.txt`, and every one that saw the revision contradiction explained it
-  away.**
+  reviews derive the gate's Linux boot from `task.txt`, and only 1/28 makes the revision contradiction a finish
+  blocker.**
   - Setup: core's own fresh finish review (core 535c2d2 = f11d700's `conflux/`) on 5 recorded states: s61@127/132 and
     s60@154/229/240. All 5 are gate-not-met.
     - Seam 5/5 exact: the recorded init and goal-1 requests, `prompt_chars` + `ask` tail.
@@ -30,7 +30,11 @@ MISSION-STATUS: ACTIVE
     - Pairing rules (two K reviews, or K and G) do not get ≤ 1/6 on both s61 states.
   - **Audit:**
     - No reply asks for a Linux boot or the standard OP-TEE QEMU setup (0/28; slices 47–48: 0/16).
-    - 5 replies note the OP-TEE 4.2.0 vs "OS revision 0.4" mismatch. All 5 call it a decode quirk and keep the claim.
+    - 5 replies note the OP-TEE 4.2.0 vs "OS revision 0.4" mismatch:
+      - glm s61@127 d1 requires a correct 4.2.0 read (else fix the SMC decoding and rebuild) before finishing;
+      - glm d2 says "fix or document";
+      - kimi's 3 claim-check turns call it a decode quirk and keep DONE in 2 of them.
+      - At s61@132 no glm reply names it.
     - The s61@132 rejections ask for proof-bundle hygiene only.
   - Decision: build nothing in core. The failure class is the derivation of proof criteria from `task.txt`, not the
     reviewer's family (next action 2).
