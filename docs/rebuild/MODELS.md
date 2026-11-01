@@ -473,3 +473,23 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   marks the derived Linux goal optional, a "documented deviation", or drops it (FINAL_ASK lets it). Gate reason as a
   finish blocker at s61: 1/9 refusals (goals replaced by a glm derivation), 3/8 (glm→kimi criteria in the data).
 - Evidence: `~/evidence/proof-criteria-demo-2026-11-01/RESULTS.md`, `~/evidence/criteria-first-demo-2026-11-01/RESULTS.md`.
+
+## `kimi-k3` low judging a finished goal (a) against pre-trace criteria (C slice 66, offline)
+- **It rejects a truly finished goal (a) 6/6 in both verdict forms.** The state is c8, the accepted run: OP-TEE build,
+  secure-world + Linux boot, xtest 1001 PASS, all visible to the reviewer after clipping. The criteria are the glm→kimi
+  GK pre-trace set in its data.
+  - It keeps goal (a) open with core's open finish ask (O) and with a per-criterion MET/UNMET verdict (S).
+  - In S, 1/23 goal-(a) criterion verdicts are MET.
+  - Example (S c8 d3): "UNMET A3 — Only the single-case smoke `xtest 1001` was run; no full xtest stdout, … no
+    regression_1000/crypto/6xxx suite confirmation". O c8 d4 writes "`xtest 1001` PASS is proven" and still lists more
+    xtest runs and config documents as open.
+  - The rejections follow the criteria's over-demands: the full xtest suite, manifests/sha256s, DTB dumps, an
+    interleaved capture, negative controls.
+- **At s61 (false-DONE states):**
+  - DONE: O 0/10, S 0/10.
+  - The gate reason as a blocker: O 2/10. S 9/10 (+1 lenient), but each complete S reply has 8–14 UNMET items, so S
+    does not discriminate.
+- **The S form is followed in 16/18 replies.** One wrote `**A1 — UNMET:**`. In one, the init review returned no goals,
+  so the S ask was never sent.
+- Latency: median 32.6 s per call, max 144.8 s; a full review takes 2–12 min. Evidence:
+  `~/evidence/criteria-verdict-demo-2026-11-01/RESULTS.md`.
