@@ -17,6 +17,23 @@ MISSION-STATUS: ACTIVE
   goal is dropped once the reviewer reads the trace. Slices 60 and 61 drew on a contaminated snapshot (a prior run's `optee.o`), so neither shows the driver from `task.txt` alone. Slice 43's lead-s1 (a demo harness) reached G5 + G7 first, but ended in a false DONE.
   - **Gate reaffirmed (founder, 2026-11-01; 33c99f2 reverted by 82b6d68):** goal (a) includes the Linux boot, so G3 is
     required. That answers slice 60's open question.
+- **C slice 65 (2026-11-01, harness fault, $0 metered + ≈ $0.06 GCE): snapshot contamination is closed. Core now
+  removes the snapshot's prior-run driver object on every lab, before the first model call (`core.LAB_CLEAN`).**
+  - The controller cannot create snapshots (`testIamPermissions`: only `compute.snapshots.get`), so the clean is a
+    harness step. It runs after setup and before the egress check; a failure ends the run `clean_failed`. The job's
+    script deletes itself, so the removed path list never reaches `~/.conflux-jobs`.
+  - **Inventory (fresh lab, H65 supported):** the residue is exactly `GENERIC64/optee.{o,d,su}`.
+    - They were built 2026-07-19 from a since-deleted `sys/dev/optee/optee.c`. They are the only `*optee*` names on
+      the disk, and `optee.o` is the only object without a `.depend` target.
+    - The prebuilt kernels have no optee symbols. There are no shell histories anywhere, and the other rebuilds are
+      stock.
+    - `llmsuper-netbsd-run/arm64.img` is the founder's stock NetBSD 10.1 boot validation, with no OP-TEE or driver
+      content: kept. This corrects slice 61's "contaminated guest disk".
+  - **Checks:**
+    - after the clean, a stock `build.sh -u kernel=GENERIC64` passes (rc 0) and finds 0 residue;
+    - core's `LAB_CLEAN` through `lab_shell` on a second fresh lab: files gone, no script left, idempotent;
+    - 3 new tests. One caught a draft that exited 0 when `rm` failed.
+  - Evidence: `~/evidence/snapshot-clean-2026-11-01/RESULTS.md`.
 - **C slice 64 (2026-11-01, harness fault, $0 metered + ≈ $0.001 GCE worker): the scratch side channel is closed.**
   - Upper/work dirs and the private `/tmp` now sit on a sparse ext4 image, loop-mounted only inside the scratch's
     namespace (`SCRATCH_SH new`). The image has no journal and is mounted `noinit_itable,discard`, so its disk use
@@ -808,13 +825,8 @@ MISSION-STATUS: ACTIVE
 - **Known contract violation (PR #1):** `conflux/verifier.py` `_parse_point` still accepts digit scores; pinned by
   strict xfail in `tests/test_letter_scale_contract.py`.
 - **Next action:**
-  0. **Verify and clean the lab snapshot before any further gate run** (snapshot contamination, slices 60–61).
-     - Inventory prior-run artefacts on `conflux-optee-baseline-clean-20261021`: at least
-       `netbsd-obj/.../GENERIC64/optee.o` and its `.d` files, `llmsuper-netbsd-run/` (`arm64.img`, `serial-driver.py`,
-       logs) and any other `optee`/driver residue. Check a stock-built object tree against it.
-     - Then produce a clean snapshot without them; this may need the founder if the controller identity cannot create
-       snapshots.
-     - Record the inventory and the new snapshot name in `RESOURCES.md`.
+  0. ~~Snapshot contamination~~: fixed in slice 65 (`core.LAB_CLEAN`). The next gate run is the first from a clean
+     environment: check its summary for `lab.clean.exit == 0`.
   1. ~~Scratch side channel~~: fixed in slice 64 (regression test; slice 60 had it too). The next gate run is its first
      lab exercise: check the trace for `conflux-scratch` paths in executor commands.
   2. **False DONE against the gate: hold the derived criteria fixed (slice 63).** Pre-trace criteria stop s61's false

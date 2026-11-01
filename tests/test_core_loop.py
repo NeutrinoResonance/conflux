@@ -526,6 +526,7 @@ def fast_poll(monkeypatch):
 def no_sudo_setup(monkeypatch):
     """The local seam has no sudo: lab setup and the egress check succeed trivially unless a test says otherwise."""
     monkeypatch.setattr(core, "LAB_SETUP", "true")
+    monkeypatch.setattr(core, "LAB_CLEAN", "true")
     monkeypatch.setattr(core, "EGRESS_CHECK", "true")
 
 
@@ -1028,13 +1029,42 @@ def test_run_lab_egress_failure_makes_no_model_call_and_kills_the_tunnel(lab, tm
 
 def test_run_lab_sets_up_egress_before_the_first_task(lab, tmp_path, devbox_lab, monkeypatch):
     monkeypatch.setattr(core, "LAB_SETUP", "echo setup >> order.txt")
+    monkeypatch.setattr(core, "LAB_CLEAN", "echo clean >> order.txt")
     monkeypatch.setattr(core, "EGRESS_CHECK", "echo egress >> order.txt")
     chat = Scripted(resp(call("run_shell", {"command": "echo task >> order.txt; echo yes > ok.txt"})),
                     resp(call("finish", {})))
     s = _run_lab(tmp_path, chat)
     assert s["accepted"] == 1 and s["lab"]["egress"]["exit"] == 0
-    assert (tmp_path / "w/order.txt").read_text().split() == ["setup", "egress", "task"]
+    assert (tmp_path / "w/order.txt").read_text().split() == ["setup", "clean", "egress", "task"]
     assert not _alive(_tunnel_pid(tmp_path))
+
+
+def test_run_lab_removes_snapshot_residue_before_the_first_model_call(lab, tmp_path, devbox_lab, monkeypatch):
+    """C slice 65: the snapshot's prior-run driver object is gone before the executor's first command, and the
+    clean job leaves no script naming it in the jobs dir the executor can read."""
+    residue = tmp_path / "obj" / "optee.o"
+    residue.parent.mkdir()
+    residue.write_text("prior run")
+    monkeypatch.setattr(core, "LAB_CLEAN", core.clean_command((str(residue), str(tmp_path / "absent.d")), sudo=""))
+    seen = tmp_path / "seen.txt"
+    chat = Scripted(resp(call("run_shell", {"command": f"ls {residue.parent} > {seen}; "
+                                                       f"cat ~/.conflux-jobs/*/cmd.sh >> {seen}; echo yes > ok.txt"})),
+                    resp(call("finish", {})))
+    s = _run_lab(tmp_path, chat)
+    assert s["accepted"] == 1 and s["lab"]["clean"]["exit"] == 0
+    assert not residue.exists() and str(residue) not in seen.read_text()
+
+
+def test_run_lab_clean_failure_makes_no_model_call(lab, tmp_path, devbox_lab, monkeypatch):
+    stuck = tmp_path / "stuck"
+    (stuck / "optee.o").mkdir(parents=True)  # `rm -f` cannot remove a directory: the residue check must fail
+    monkeypatch.setattr(core, "LAB_CLEAN", core.clean_command((str(stuck / "optee.o"),), sudo=""))
+    monkeypatch.setattr(core, "EGRESS_CHECK", "echo egress >> order.txt")
+    chat = Scripted()
+    s = _run_lab(tmp_path, chat)
+    assert s["lab"]["stopped_reason"] == "clean_failed" and s["runs"] == [] and chat.seen == []
+    assert "egress" not in s["lab"] and not (tmp_path / "w/order.txt").exists()
+    assert devbox_lab() == ["up c2", "stop c2"]
 
 
 def test_egress_proxy_keeps_the_response_after_the_client_half_closes():

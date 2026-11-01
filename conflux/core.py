@@ -362,6 +362,22 @@ LAB_SETUP = (
     f"echo 'Defaults env_keep += \"{_KEEP}\"' > /tmp/conflux-proxy.sudoers && "
     "sudo -n install -m 0440 /tmp/conflux-proxy.sudoers /etc/sudoers.d/conflux-proxy && "
     "{ sudo -n visudo -cf /etc/sudoers.d/conflux-proxy || { sudo -n rm -f /etc/sudoers.d/conflux-proxy; false; }; }")
+# Prior-run residue on the lab snapshot (`conflux-optee-baseline-clean-20261021`; C slice 65 inventory,
+# ~/evidence/snapshot-clean-2026-11-01/RESULTS.md): an earlier agent's compiled driver, whose source is gone. It is
+# environment hygiene, never task input. Missing paths are fine (other disks).
+SNAPSHOT_RESIDUE = tuple(f"/home/darrenhidalgo/netbsd-obj/sys/arch/evbarm/compile/GENERIC64/optee.{x}"
+                         for x in ("o", "d", "su"))
+
+
+def clean_command(paths: tuple[str, ...] = SNAPSHOT_RESIDUE, sudo: str = "sudo -n ") -> str:
+    """Remove `paths`, fail if any is still there, then delete this job's own script, so the root-namespace
+    executor cannot read the removed paths from `~/.conflux-jobs`."""
+    q = " ".join(shlex.quote(p) for p in paths)
+    return (f"{sudo}rm -f -- {q}; for p in {q}; do if {sudo}test -e \"$p\"; then exit 1; fi; done; "
+            "rm -f -- \"$0\"")
+
+
+LAB_CLEAN = clean_command()
 EGRESS_CHECK = (  # waits for the tunnel's listener first
     f"for i in $(seq 30); do (exec 3<>/dev/tcp/127.0.0.1/{LAB_PROXY_PORT}) 2>/dev/null && break; sleep 2; done; "
     "for u in https://github.com https://pypi.org/simple/pip/; do "
@@ -1915,11 +1931,11 @@ def run_lab(tasks: list[Task], chat: Chat, budget: Budget, out: Path, name: str,
             tunnel: Callable[[int], list[str]] | None = None,
             lead_call: Callable[..., tuple[int, object, float]] | None = None, lead_model: str = LEAD,
             scratch: bool = True) -> dict:
-    """Own one lab's lifecycle: up, egress tunnel, smoke, setup + egress check, tasks in order (stop at
-    the first non-accepted one), stop.
+    """Own one lab's lifecycle: up, egress tunnel, smoke, setup + snapshot-residue clean + egress check, tasks in
+    order (stop at the first non-accepted one), stop.
 
     The deadline starts when `devbox-lab up` is issued; the tunnel is killed and `devbox-lab stop`
-    runs on every exit path. A failed egress check ends the run before any model call.
+    runs on every exit path. A failed clean or egress check ends the run before any model call.
     """
     out.mkdir(parents=True, exist_ok=True)
     lab = {"name": name, "workdir": workdir, "hours": hours, "started": _utc()}
@@ -1939,9 +1955,13 @@ def run_lab(tasks: list[Task], chat: Chat, budget: Budget, out: Path, name: str,
                              "{ sudo -n true && echo SUDO_OK || echo SUDO_NO; }", 120)
         if lab["smoke"]["exit"] == 0:
             lab["setup"] = shell(LAB_SETUP, 120)
-            lab["egress"] = shell(EGRESS_CHECK, 300)
+            lab["clean"] = shell(LAB_CLEAN, 120)
+            if lab["clean"]["exit"] == 0:
+                lab["egress"] = shell(EGRESS_CHECK, 300)
         if lab["smoke"]["exit"] != 0:
             lab["stopped_reason"] = "smoke_failed"
+        elif lab["clean"]["exit"] != 0:
+            lab["stopped_reason"] = "clean_failed"
         elif lab["setup"]["exit"] != 0 or lab["egress"]["exit"] != 0:
             lab["stopped_reason"] = "egress_failed"
         else:
