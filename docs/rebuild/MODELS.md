@@ -543,10 +543,11 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
 - **Runs what is delivered, whatever its age:** 14/16 verify-session deliveries have a delivered command matched at
   J ≥ 0.5 within 10 steps. 15/16 were stale: lag 5–57 steps, behind 1–11 newer reviews. Small n: 4 runs.
 - **Does not reconcile the two channels:**
-  - It ran the contradicting part in 5 of the 8 deliveries that contradict the newest review, at J ≥ 0.5. A sixth
-    (s74's SMC-ID header) was adopted with edits, confirmed by reading, but its best match is J 0.49. Of the other 2,
-    one was already superseded and one was moot.
-  - In 2 of those 5 the delivery was right and the review wrong (wiring, header compile), as it was in the s74 case. In
+  - It ran the contradicting part in 4 of the 8 deliveries that contradict the newest review, at J ≥ 0.5. Two more were
+    adopted, confirmed by reading but below the threshold: s74's SMC-ID header (with edits, J 0.49) and s69's step-97
+    boot, which follows the delivery note's instruction rather than a delivered command (J 0.13). Of the other 2, one
+    was already superseded and one was moot.
+  - In 2 of those 4 the delivery was right and the review wrong (wiring, header compile), as it was in the s74 case. In
     1–2 the review was right.
 - **Example (s60, review 11's delivery at step 132, behind 8 newer reviews):**
   - Review 19, injected in the same step, records the spec-conformant `hello_ta` (the step-118 counter patch) as

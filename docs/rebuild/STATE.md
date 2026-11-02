@@ -26,16 +26,18 @@ MISSION-STATUS: ACTIVE
     whether any derived goal can be held against the lead's own rewrites.
 - **C slice 75 (2026-11-02, stale-delivery count, offline, $0 metered + $0 GCE): next-action item 4 closed with
   numbers. H75 (stale deliveries make the executor act against the newest review, harmfully) is supported by its
-  registered rule, narrowly: E∧C 5/16 (bar ≥ 4), H 1 (bar ≥ 1). But stale deliveries are the lead's most useful output,
+  registered rule, at the bar: E∧C 4/16 (bar ≥ 4), H 1 (bar ≥ 1). But stale deliveries are the lead's most useful output,
   so no drop/defer guard.**
   - **Setup:** all 16 injected deliveries of the session-on gate runs, hand-graded against the newest review.
     - Runs: s60 5, s61 3, s69 6, s74 2. s69's "12 deliveries" counted `lead_deliver` events.
     - 15/16 were stale: lag 5–57 steps, 1–11 newer reviews.
     - The executor ran 14/16 (a delivered command at J ≥ 0.5 within 10 steps).
-  - **Contradictions:** 8 deliveries contradict the newest review (+1 borderline). 5 of those were executed at the
-    registered J ≥ 0.5.
-    - Reported separately: s74 D2's header was adopted with edits (confirmed by reading), but its best match is J 0.49.
-    - In 2/5 the delivery was right (s61's opteeattach wiring, s69's header compile), as it was in s74 D2 (the G7 SMC
+  - **Contradictions:** 8 deliveries contradict the newest review (+1 borderline). In 4 of those the contradicting
+    delivered command was executed at the registered J ≥ 0.5.
+    - Reported separately, adopted as confirmed by reading but below the threshold: s74 D2's header (with edits, best
+      J 0.49), and s69 D3's step-97 boot. That boot follows an instruction in the delivery's note, not a delivered
+      command (J 0.13).
+    - In 2/4 the delivery was right (s61's opteeattach wiring, s69's header compile), as it was in s74 D2 (the G7 SMC
       IDs). In 1–2 the review was right.
   - **The one harm (s60 D3):** the step-132 delivery rewrote `hello_ta.c`, reverting the step-118 counter fix that
     review 19, injected the same step, records as done. The executor redid the fix at step 145.
@@ -1080,9 +1082,10 @@ MISSION-STATUS: ACTIVE
          self-correction target, once goal (b)'s bar (item 6) says it is required (s73 attempted none);
        - whether a loadable module counts as G5 (`task.txt` asks for "a NetBSD driver"). s73 meets G5 strictly, so this
          matters only for s69.
-  4. **Stale deliveries (counted, slice 75):** 5/16 executed contradictions (+ s74 D2 below the J threshold), 1 harmful
-     revert (s60 D3), 6/15 stale deliveries feed milestones. Build no drop/defer guard. A guard demo, if ever run, must keep all 6 useful deliveries
-     and still flag s60 D3 on the recorded set. With 1 harm in 4 runs it ranks below work that moves the gate.
+  4. **Stale deliveries (counted, slice 75):** 4/16 executed contradictions (+ s69 D3 and s74 D2 below the J
+     threshold), 1 harmful revert (s60 D3), 6/15 stale deliveries feed milestones. Build no drop/defer guard. A guard
+     demo, if ever run, must keep all 6 useful deliveries and still flag s60 D3 on the recorded set. With 1 harm in 4
+     runs it ranks below work that moves the gate.
   5. **History growth** (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output
      compaction on the recorded traces before any core change.
   6. **Open, non-blocking:**
