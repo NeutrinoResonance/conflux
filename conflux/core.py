@@ -744,7 +744,10 @@ class LocalScratch:
 
 
 def run_checks(checks: list[Check], shell: Shell) -> tuple[str | None, list[dict]]:
-    """("pass" | "fail" | None, results). A check that ran and failed beats a timeout."""
+    """("pass" | "fail" | None, results). A check that ran and failed beats a timeout. No checks is no verdict
+    (C slice 78: an empty list used to "pass", so a no-lead `checks: []` task ended accepted on a bare finish)."""
+    if not checks:
+        return None, []
     results = []
     for c in checks:
         r = shell(c.cmd, c.timeout)

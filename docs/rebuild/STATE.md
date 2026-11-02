@@ -15,7 +15,7 @@ MISSION-STATUS: ACTIVE
   gate. Slice 62 shows that false DONE is a spec-derivation gap, not a reviewer-family one. Slice 63: proof criteria derived from
   `task.txt` before the trace stop that false DONE (0/12 vs 3/6), but for goal (b)'s TA-session bar; the derived Linux
   goal is dropped once the reviewer reads the trace. Slice 66: those criteria also reject a run that truly met goal (a)
-  (6/6, both the open and the per-criterion verdict); they over-demand. Slice 67: glm-5.3's short one-shot goal lists (Gl) pass c8 and keep the Linux criterion at s61 when judged per criterion (kimi 4/6, at the derivation ceiling); Slice 68: under core's open finish ask the same Gl lists pass c8 (0/12 false rejects) but the reviewer drops the Linux criterion at s61 in 16/16 L-list reviews (gate reason 0/16; DONE 5/24), so inserting criteria into the open review is not a capability. Slices 60 and 61 drew on a contaminated snapshot (a prior run's `optee.o`), so neither shows the driver from `task.txt` alone. Slice 69 does, on a cleaned lab: G7 by re-execution, but as a loadable module (strict G5 unmet), again with a false DONE. Slice 43's lead-s1 (a demo harness) reached G5 + G7 first, but ended in a false DONE. Slice 70: no gate run has attempted G3 (the Linux boot), because core's step-1 goal list never requires it (live 0/3). kimi-k3's goal-by-goal review of a list writes it in 4/6 draws, but the running reviews drop it again within 6–12 steps (1/4 chains keep it), so changing who writes the first list is not a capability. Slice 71: s69's TA-session stall was not lost when the finish review cancelled a verify session (0/6 continuations deliver; 1/11 dropped sessions had delivered). It comes from an unchecked claim: `0xffff0006` (BAD_PARAMETERS, from OP-TEE's open-session META check) was misdecoded as ITEM_NOT_FOUND by the executor and repeated by every review. Slice 72: the class recurs (4 wrong, load-bearing value readings in s60/s69, 0 checked by a command). Neither a glm reviewer nor a generic claims turn gets the flag to the executor (0/48 final replies); kimi's claims answer names it in 4/12, but the final ask drops it. Slice 73: the same gate without the lead's verify sessions (`--no-scratch`) reaches 5/7 strict, including the first strict G5 (a kernel rebuilt with the driver), with G5–G7 confirmed by re-execution. So the sessions are not shown to be needed (n=1 per arm). It also ends in a false DONE against the gate (G1/G3; n=3). Slice 74 (pair 2, sessions on) reaches 5/7 strict (first G1). Two session deliveries traceably feed G6 (the firmware tree) and G7 (SMC IDs the session settled by compiling the executor's header: the first 2c positive). So the sessions contribute; they are not shown necessary (s73). False DONE again (n=4).
+  (6/6, both the open and the per-criterion verdict); they over-demand. Slice 67: glm-5.3's short one-shot goal lists (Gl) pass c8 and keep the Linux criterion at s61 when judged per criterion (kimi 4/6, at the derivation ceiling); Slice 68: under core's open finish ask the same Gl lists pass c8 (0/12 false rejects) but the reviewer drops the Linux criterion at s61 in 16/16 L-list reviews (gate reason 0/16; DONE 5/24), so inserting criteria into the open review is not a capability. Slices 60 and 61 drew on a contaminated snapshot (a prior run's `optee.o`), so neither shows the driver from `task.txt` alone. Slice 69 does, on a cleaned lab: G7 by re-execution, but as a loadable module (strict G5 unmet), again with a false DONE. Slice 43's lead-s1 (a demo harness) reached G5 + G7 first, but ended in a false DONE. Slice 70: no gate run has attempted G3 (the Linux boot), because core's step-1 goal list never requires it (live 0/3). kimi-k3's goal-by-goal review of a list writes it in 4/6 draws, but the running reviews drop it again within 6–12 steps (1/4 chains keep it), so changing who writes the first list is not a capability. Slice 71: s69's TA-session stall was not lost when the finish review cancelled a verify session (0/6 continuations deliver; 1/11 dropped sessions had delivered). It comes from an unchecked claim: `0xffff0006` (BAD_PARAMETERS, from OP-TEE's open-session META check) was misdecoded as ITEM_NOT_FOUND by the executor and repeated by every review. Slice 72: the class recurs (4 wrong, load-bearing value readings in s60/s69, 0 checked by a command). Neither a glm reviewer nor a generic claims turn gets the flag to the executor (0/48 final replies); kimi's claims answer names it in 4/12, but the final ask drops it. Slice 73: the same gate without the lead's verify sessions (`--no-scratch`) reaches 5/7 strict, including the first strict G5 (a kernel rebuilt with the driver), with G5–G7 confirmed by re-execution. So the sessions are not shown to be needed (n=1 per arm). It also ends in a false DONE against the gate (G1/G3; n=3). Slice 74 (pair 2, sessions on) reaches 5/7 strict (first G1). Two session deliveries traceably feed G6 (the firmware tree) and G7 (SMC IDs the session settled by compiling the executor's header: the first 2c positive). So the sessions contribute; they are not shown necessary (s73). False DONE again (n=4). Slice 78 (bare pro, no lead, same core and budget) reaches 1/7 strict and false-finishes at step 120, so the lead layer is what moves the task (vs 4–5/7).
   - **Gate reaffirmed (founder, 2026-11-01; 33c99f2 reverted by 82b6d68):** goal (a) includes the Linux boot, so G3 is
     required. That answers slice 60's open question.
   - **Open founder question (asked 2026-11-01 ~13:00Z, unanswered):** may the finish gate use a per-criterion verdict?
@@ -24,6 +24,20 @@ MISSION-STATUS: ACTIVE
     Slice 70 widens the question with evidence. The same revise-or-drop licence (`FINAL_ASK`) removes a Linux goal
     derived before the trace from the *running* reviews too (3/4 chains by step 12). So the founder's answer decides
     whether any derived goal can be held against the lead's own rewrites.
+- **C slice 78 (2026-11-02, bare-DeepSeek gate arm + zero-check harness fix, $0.022094 metered incl. $0.014481 not
+  Conflux + ≈ $0.43 GCE): item E's bare arm on the gate task. H78 (the lead layer moves milestones) is supported by its
+  registered rule: bare pro 1/7 strict (bar ≤ 3; lead arms s69 4, s73 5, s74 5). n=1 per arm.**
+  - **Harness fault fixed first:** `run_checks([])` returned `"pass"`, so a no-lead `checks: []` task ended `accepted` on
+    a bare finish (or at the cap). Now no checks gives no verdict (`unverified`/`check_no_verdict`);
+    `tests/test_core_no_checks.py` fails on 80ad34e. This run took that path: its false finish was not recorded accepted.
+  - **Setup:** core 03c419d (`conflux/` = 93d0466 + the fix), s74's `task.json` and flags without `--lead`, lab g8,
+    `lab.clean` 0. Grader: s74's plus the registered banner/`tee` markers (s74's unmatched console logs now match).
+  - **Outcome:** finish at step 120 of 240 (1.12 h, $0.007613, 120/120 export-matched). G4 only (out-of-tree driver
+    source, never compiled); G2 lenient (32-bit `vexpress-qemu_virt` OP-TEE OS, no TF-A). 9 QEMU boots, all silent
+    timeouts. The finish claims QEMU execution and an embedded UUID that step 117's own output denies.
+  - It never found the qemu_v8 manifest, TF-A, the machine's NetBSD project or the snapshot's NetBSD image, which all
+    three lead arms used. Lead arms cost ≈ 10× the metered spend for 4–5× the milestones.
+  - Evidence: `~/evidence/gate-run-s78-2026-11-02/RESULTS.md`.
 - **C slice 77 (2026-11-02, deterministic value-claim check, offline, $0 metered + $0 GCE): item 2c by code instead of
   a model. H77 is falsified by the registered rule: strict R = 1 (bar ≥ 2), and the check is precision-limited anyway
   (31 false flags in 5 runs, bar ≤ 10). Build nothing.**
@@ -1104,8 +1118,8 @@ MISSION-STATUS: ACTIVE
      - The `--no-scratch` control is done (slice 73). It reached 5/7 strict vs s69's 4/7, so the verify sessions are
        not shown to be needed.
      - Slice 74 (sessions on) settles it by the registered rule: deliveries fed G6 and G7, so keep the sessions; no
-       second `--no-scratch` run. Grader: tracked-file pruning done (s74); add a NetBSD banner marker before the next
-       gate run, and re-execute G6/G7 before deleting the lab.
+       second `--no-scratch` run. Grader: tracked-file pruning (s74) and the banner/`tee` markers (s78) are done;
+       re-execute G6/G7 before deleting the lab.
      - Other gaps open since slice 69, not blocked on the founder:
        - the TA session (open_session `0xffff0006` = BAD_PARAMETERS after 5 kmod generations; see 2c): a
          self-correction target, once goal (b)'s bar (item 6) says it is required (s73 attempted none);
@@ -1120,5 +1134,6 @@ MISSION-STATUS: ACTIVE
      warm cache, full-vs-full control, cap $1. It ranks below work that moves the gate.
   6. **Open, non-blocking:**
      - Goal (b)'s proof bar: is a TA session required, or is an attach with OP-TEE answers (G7) enough?
-     - The completion gate also needs item E's held-out comparisons and an unmerged promotion PR to `main`.
+     - The completion gate also needs item E's held-out comparisons and an unmerged promotion PR to `main`. Slice 78
+       ran the bare-DeepSeek arm on the gate task (1/7 vs lead 4–5/7). Still open: the baseline-tag arm and held-out tasks.
   7. **Carried from before slice 60:** widen slice 52's veto finding before building a fresh-context running review.

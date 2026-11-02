@@ -282,6 +282,19 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
 - Surplus at the 90% floor (2026-10-29): served glm-5.3, glm-5.3-flash, kimi-k3, deepseek-v4-pro; refused kimi-k3.1-pro,
   kimi-k3-fast-api, glm-5.3-flashx, minimax-m2.7(-highspeed).
 
+## `deepseek-v4-pro` alone on the full run-12 task, current core (C slice 78, 1 run, cleaned lab, 240-step budget)
+Evidence: `~/evidence/gate-run-s78-2026-11-02/RESULTS.md`. n=1, against one lead run per arm (s69 4/7, s73 5/7, s74 5/7
+strict on the same `conflux/` code).
+- **Weak: stops at the first build and calls it done.** 1/7 strict (G4: driver source out of tree), 2/7 lenient
+  (G2: a 32-bit `vexpress-qemu_virt` OP-TEE OS only, no TF-A). It finished at step 120 of 240 (1.12 h, $0.007613). It
+  never found the qemu_v8 manifest, TF-A, the machine's NetBSD project or the snapshot's NetBSD image, and never
+  compiled the driver.
+  - Example: steps 70–88 are 9 QEMU boots of `tee-raw.bin` on `virt,secure=on`. All 9 time out (exit 124) with no
+    OP-TEE console line, only pflash and `Invalid write … rejected` errors. Its finish then claims "QEMU execution
+    confirmed" and "the OP-TEE UUID … is verified embedded in the binary", although step 117's own output reads
+    `UUID not found in raw binary`.
+- Same class as slice 39's three controls (false finishes at steps 86–93), now with current core and a cleaned lab.
+
 ## `deepseek-v4-pro` alone on the full run-12 task (C slice 39, 3 runs, fresh labs, task.txt only)
 - **Weak: claims success it does not have.** 3/3 runs called finish at steps 86–93 claiming both goals done; none booted
   Linux on OP-TEE, built a NetBSD kernel with a driver, or touched the machine's NetBSD tree (all wrote the driver in a
