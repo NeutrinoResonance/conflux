@@ -538,3 +538,21 @@ Evidence: `~/evidence/jev-fair-test-2026-10-27/RESULTS.md` (30 + 16 labelled dec
   keeps the flag in the final reply under `FINAL_ASK` (0/4), and neither flags it in core's unchanged review (0/24).
   In the recorded runs, deepseek-v4-pro (executor, s60) and kimi-k3 (lead, s60 and s69 finish reviews) read
   `origin=3` as the TA. Evidence: `~/evidence/unchecked-claims-demo-2026-11-01/RESULTS.md`.
+
+## `deepseek-v4-pro` executor under stale lead deliveries (C slice 75, s60/s61/s69/s74, offline)
+- **Runs what is delivered, whatever its age:** 14/16 verify-session deliveries have a delivered command matched at
+  J ≥ 0.5 within 10 steps. 15/16 were stale: lag 5–57 steps, behind 1–11 newer reviews. Small n: 4 runs.
+- **Does not reconcile the two channels:**
+  - It ran the contradicting part in 6 of the 8 deliveries that contradict the newest review. The other 2: one was
+    already superseded, one was moot.
+  - In 3 of those 6 the delivery was right and the review wrong (wiring, header compile, SMC IDs). In 1–2 the review was
+    right.
+- **Example (s60, review 11's delivery at step 132, behind 8 newer reviews):**
+  - Review 19, injected in the same step, records the spec-conformant `hello_ta` (the step-118 counter patch) as
+    COMPLETE.
+  - The delivery's first command rewrites `hello_ta.c` without the counter. The executor ran it at step 132, which
+    reverted its own fix. It restored the counter at step 145.
+  - This is the only harmful case of the 16.
+- 6/15 stale deliveries feed graded milestones (s74's G6 firmware and G7 SMC IDs among them), so age alone does not mark
+  a bad delivery.
+- Evidence: `~/evidence/stale-deliveries-2026-11-02/RESULTS.md` (`grades.json`, `tally.json`).

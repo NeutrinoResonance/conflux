@@ -24,6 +24,27 @@ MISSION-STATUS: ACTIVE
     Slice 70 widens the question with evidence. The same revise-or-drop licence (`FINAL_ASK`) removes a Linux goal
     derived before the trace from the *running* reviews too (3/4 chains by step 12). So the founder's answer decides
     whether any derived goal can be held against the lead's own rewrites.
+- **C slice 75 (2026-11-02, stale-delivery count, offline, $0 metered + $0 GCE): next-action item 4 closed with
+  numbers. H75 (stale deliveries make the executor act against the newest review, harmfully) is supported by its
+  registered rule, narrowly: E∧C 6/16 (bar ≥ 4), H 1 (bar ≥ 1). But stale deliveries are the lead's most useful output,
+  so no drop/defer guard.**
+  - **Setup:** all 16 injected deliveries of the session-on gate runs, hand-graded against the newest review.
+    - Runs: s60 5, s61 3, s69 6, s74 2. s69's "12 deliveries" counted `lead_deliver` events.
+    - 15/16 were stale: lag 5–57 steps, 1–11 newer reviews.
+    - The executor ran 14/16 (a delivered command at J ≥ 0.5 within 10 steps).
+  - **Contradictions:** 8 deliveries contradict the newest review (+1 borderline), and 6 of those were executed.
+    - In 3/6 the delivery was right: s61's opteeattach wiring, s69's header compile, and s74's G7 SMC IDs.
+    - In 1–2 the review was right.
+  - **The one harm (s60 D3):** the step-132 delivery rewrote `hello_ta.c`, reverting the step-118 counter fix that
+    review 19, injected the same step, records as done. The executor redid the fix at step 145.
+    - Correction: s60 RESULTS' quoted "No OP-TEE/TF-A rebuild" line is from review 20 (injected at step 141), not
+      review 19.
+  - **Why no drop/defer guard:** 6/15 stale deliveries feed milestones (s60: the driver rewrite, the G6 handoff fix and
+    the G7 DTB fix; s61's wiring; s74's G6 firmware and G7 IDs).
+    - Dropping or deferring stale deliveries would lose all 6 to prevent 1 revert that was repaired in 13 steps.
+    - A deterministic "the delivery overwrites a file the executor changed after the snapshot" flag fires on 10/16,
+      including 4 useful deliveries, so it does not discriminate alone.
+  - Evidence: `~/evidence/stale-deliveries-2026-11-02/RESULTS.md` (`grades.json`, `tally.json`, `scan.out`).
 - **C slice 74 (2026-11-02, pair 2 scratch-on gate run + grader fix, $0.072264 metered incl. $0.001359 not Conflux + ≈
   $1.11 GCE): s69's flags, with s73's core frozen. H74 (the verify sessions contribute) is supported by its attribution
   clause, not by its milestone clause. Keep the sessions.**
@@ -1057,8 +1078,9 @@ MISSION-STATUS: ACTIVE
          self-correction target, once goal (b)'s bar (item 6) says it is required (s73 attempted none);
        - whether a loadable module counts as G5 (`task.txt` asks for "a NetBSD driver"). s73 meets G5 strictly, so this
          matters only for s69.
-  4. **Stale deliveries:** s60 5/5 and s61 3/3 arrived 22–55 steps late. Count contradictions across runs before
-     building any guard.
+  4. **Stale deliveries (counted, slice 75):** 6/16 executed contradictions, 1 harmful revert (s60 D3), 6/15 stale
+     deliveries feed milestones. Build no drop/defer guard. A guard demo, if ever run, must keep all 6 useful deliveries
+     and still flag s60 D3 on the recorded set. With 1 harm in 4 runs it ranks below work that moves the gate.
   5. **History growth** (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output
      compaction on the recorded traces before any core change.
   6. **Open, non-blocking:**
