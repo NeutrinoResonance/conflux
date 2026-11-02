@@ -601,3 +601,14 @@ strict on the same `conflux/` code).
 - In a reconstructed workspace with absent lab files, both spend steps inventorying it, and glm loops on README
   rewrites (4/12 chains each reach the 12-call cap). pro finishes in 2–7 calls.
 - Evidence: `~/evidence/stall-takeover-s84-2026-11-02/RESULTS.md`.
+
+## `kimi-k3` / `glm-5.3` (low) / `deepseek-v4-pro` as a fresh-context diagnostic sub-run (C slice 85, offline, s69@169/177, n=6 each)
+- **kimi-k3 low, given only code-selected inputs** (task text, the repeated command and failure line, the output tail,
+  recently written paths) and run_shell on the machine, fixes the stalled open-session parameters in 12/12 chains,
+  in a mean of 11.6 calls at ≈ $0.0014 per chain. It reads `optee_os`'s `tee_api_defines.h`/`entry_std.c`, decodes `0xffff0006` as
+  BAD_PARAMETERS 12/12, and corrects the run's README misdecode in 5/12. In 12/12 it also moves the login to `value.c`.
+  The same model inheriting the conversation: 0/12 (slice 84).
+- **glm-5.3 low** 3/12: 9/12 hit the 20-call cap after following the README's ITEM_NOT_FOUND theory into TA loading.
+- **deepseek-v4-pro fresh** 6/12 (9/12 at the cap while reading OP-TEE's SMC entry path; 1 hit puts the login in
+  `params[0]`); ≈ 3× kimi's cost.
+- Evidence: `~/evidence/fresh-diag-s85-2026-11-02/RESULTS.md`.
