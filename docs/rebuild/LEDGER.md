@@ -115,6 +115,9 @@ USD comes from provider responses or documented prices — never estimated silen
 | 2026-11-02 | Surplus chat (not Conflux) | `deepseek-v4-pro` 21, `kimi-k3` 4 | — | — | 0.001359 | — | unattributed caller on the shared key in slice 74's window (00:27Z–03:36Z; unmatched rows), counted against the weekly cap; `export-window.out` |
 | 2026-11-02 | Surplus chat | `deepseek-v4-pro` 120 | — | — | 0.007613 | — | C slice 78 gate run, bare-DeepSeek arm (no `--lead`; lab g8, 04:58Z–06:07Z): 120/120 calls export-matched (export of 11-02); `~/evidence/gate-run-s78-2026-11-02/run/reconciled.json` |
 | 2026-11-02 | Surplus chat (not Conflux) | `deepseek-v4-pro` 102 | — | — | 0.014481 | — | unattributed caller on the shared key in slice 78's window (04:57Z–06:11Z; unmatched rows), counted against the weekly cap; `export-window.out` |
+| 2026-11-02 | Surplus chat | `glm-5.3` 4 | — | — | 0.000147 | — | C slice 79 pre-run: one criteria derivation ($0.000014) + offline finish check at s74@173 and c8 ($0.000133), billed in the replies; `~/evidence/finish-check-live-s79-2026-11-02/{calls,offline_calls}.jsonl` |
+| 2026-11-02 | Surplus chat | `deepseek-v4-pro` 206, `kimi-k3` 947, `glm-5.3` 5 | — | — | 0.250608 | — | C slice 79 live finish-check gate run (lab g9, 06:35Z–14:36Z; executor $0.091888, lead $0.158517, judge $0.000203): 1,158/1,159 calls export-matched, the step-207 call lost at the deadline has no export row (unbilled); `~/evidence/finish-check-live-s79-2026-11-02/run/reconciled.json` |
+| 2026-11-02 | Surplus chat (not Conflux) | `deepseek-v4-pro` 1,435 | — | — | 0.135621 | — | unattributed caller on the shared key in slice 79's window (06:35Z–14:37Z; unmatched rows), counted against the weekly cap; `export-window.out` |
 
 C slice 1 rows are reconciled with the export by `python -m conflux.core reconcile` (`~/evidence/core-runs/2026-10-27-c1*/reconciled.json`;
 export total for 2026-10-27: 83 rows, $0.001372).
@@ -127,7 +130,7 @@ charge-bound estimates) are only admission-time bounds. They are replaced by bil
 $0.0108 Jev and $0.0207 rejected-request estimates were billed $0.000006 and $0. Account credit after these runs
 is $9.369476 (`/v1/buyer/me`).
 
-**Metered total: $4.199384** (sum of the USD column, not-Conflux rows included, plus the Jev fair-test decisions at their ≈$0.00028 estimate; the earlier $2.860537 line had fallen behind the rows; slice 55 adds $0.035036, slice 57 $0.006107 (its pending replies settled unbilled, $0), slice 58 $0.017903, slice 59 $0.008424 incl. $0.000749 not Conflux, slice 60 $0.175229 incl. $0.035205 not Conflux, slice 61 $0.120908 incl. $0.028182 not Conflux, slice 62 $0.023262 incl. $0.010370 not Conflux, slice 63 $0.070931 incl. $0.030296 not Conflux, slice 66 $0.111351 incl. $0.006646 not Conflux, slice 67 $0.031287 incl. $0.000295 not Conflux, slice 68 $0.036436 incl. $0.001488 not Conflux, slice 69 $0.079304 incl. $0.006670 not Conflux, slice 70 $0.011453 incl. $0.001505 not Conflux, slice 71 $0.001151 incl. $0.000677 not Conflux, slice 72 $0.030469 incl. $0.001209 not Conflux, slice 73 $0.089666 incl. $0.008409 not Conflux; slice 73's calls after 2026-11-02T00:00Z fall in W45; slice 74 $0.072264 incl. $0.001359 not Conflux, all W45; slice 78 $0.022094 incl. $0.014481 not Conflux. W45 metered so far ≤ $0.184024 of $50)
+**Metered total: $4.585760** (sum of the USD column, not-Conflux rows included, plus the Jev fair-test decisions at their ≈$0.00028 estimate; the earlier $2.860537 line had fallen behind the rows; slice 55 adds $0.035036, slice 57 $0.006107 (its pending replies settled unbilled, $0), slice 58 $0.017903, slice 59 $0.008424 incl. $0.000749 not Conflux, slice 60 $0.175229 incl. $0.035205 not Conflux, slice 61 $0.120908 incl. $0.028182 not Conflux, slice 62 $0.023262 incl. $0.010370 not Conflux, slice 63 $0.070931 incl. $0.030296 not Conflux, slice 66 $0.111351 incl. $0.006646 not Conflux, slice 67 $0.031287 incl. $0.000295 not Conflux, slice 68 $0.036436 incl. $0.001488 not Conflux, slice 69 $0.079304 incl. $0.006670 not Conflux, slice 70 $0.011453 incl. $0.001505 not Conflux, slice 71 $0.001151 incl. $0.000677 not Conflux, slice 72 $0.030469 incl. $0.001209 not Conflux, slice 73 $0.089666 incl. $0.008409 not Conflux; slice 73's calls after 2026-11-02T00:00Z fall in W45; slice 74 $0.072264 incl. $0.001359 not Conflux, all W45; slice 78 $0.022094 incl. $0.014481 not Conflux; slice 79 $0.386376 incl. $0.135621 not Conflux. W45 metered so far ≤ $0.570400 of $50)
 
 ## GCE lab VMs (week 2026-W44 cap $60)
 
@@ -186,8 +189,9 @@ Rate: n2d-standard-8 ≈ $0.338/h running (GCE list price, us-central1) + 100 GB
 | 2026-11-01/02 | `conflux-dev-lab-g6` | 19:39:29–23:57:32 (up issued → core stopped it), 23:57:43–00:04:38 (grading, deleted) | ≈ 4.42 | ≈ 1.56 | C slice 73 `--no-scratch` control gate run with `--lab-clean` (fresh lab from the clean snapshot, graded incl. re-execution, deleted); W44 ≈ $1.53, W45 ≈ $0.03 |
 | 2026-11-02 | `conflux-dev-lab-g7` | 00:26:12–03:30:57 (up issued → core stopped it), 03:30:58–03:35:59 (grading, deleted) | ≈ 3.16 | ≈ 1.11 | C slice 74 gate run, pair 2 scratch-on arm, with `--lab-clean` (fresh lab from the clean snapshot, graded from files + harness-captured trace output, deleted); W45 |
 | 2026-11-02 | `conflux-dev-lab-g8` | 04:57:25–06:07:14 (up issued → core stopped it), 06:07:20–06:10:39 (grading, deleted) | ≈ 1.22 | ≈ 0.43 | C slice 78 gate run, bare-DeepSeek arm, with `--lab-clean` (fresh lab from the clean snapshot, graded from files, deleted); W45 |
+| 2026-11-02 | `conflux-dev-lab-g9` | 06:34:20–14:36:25 (up issued → core stopped it at the 8 h lab deadline), 14:36:39–14:46:21 (grading + re-execution, deleted) | ≈ 8.19 | ≈ 2.88 | C slice 79 live finish-check gate run with `--lab-clean` (fresh lab from the clean snapshot, graded incl. re-execution of G6/G7, deleted); W45 |
 
-**GCE lab total: ≤ $35.78** (no lab disk left)
+**GCE lab total: ≤ $38.66** (no lab disk left)
 
 ## GCE outside the labs (week 2026-W44, list price, projected to Mon 2026-11-02T00:00Z)
 
@@ -203,4 +207,4 @@ controller identity cannot read logging, so worker compute is bounded from insta
 | Other project disks (preserved `llmsuper-*`, `routeros-*`) | 168 h | 4.79 |
 | Snapshots (≈ 20 GB) | 168 h | 0.24 |
 
-**W44 GCE total (labs + the above): ≤ $52.48 of $60.** W45 so far: labs g6 ≈ $0.03 + g7 ≈ $1.11 + g8 ≈ $0.43 (plus the controller and disks from Mon 00:00Z, ≈ $2.5/day).
+**W44 GCE total (labs + the above): ≤ $52.48 of $60.** W45 so far: labs g6 ≈ $0.03 + g7 ≈ $1.11 + g8 ≈ $0.43 + g9 ≈ $2.88 (plus the controller and disks from Mon 00:00Z, ≈ $2.5/day).
