@@ -24,6 +24,19 @@ MISSION-STATUS: ACTIVE
     Slice 70 widens the question with evidence. The same revise-or-drop licence (`FINAL_ASK`) removes a Linux goal
     derived before the trace from the *running* reviews too (3/4 chains by step 12). So the founder's answer decides
     whether any derived goal can be held against the lead's own rewrites.
+- **C slice 77 (2026-11-02, deterministic value-claim check, offline, $0 metered + $0 GCE): item 2c by code instead of
+  a model. H77 is falsified by the registered rule: strict R = 1 (bar ≥ 2), and the check is precision-limited anyway
+  (31 false flags in 5 runs, bar ≤ 10). Build nothing.**
+  - **Check (no model):** it pairs adjacent ALL_CAPS symbols and numeric literals in executor turns and lead replies,
+    resolves each symbol against literal `#define`s/enums in the run-12 `optee_os` proxy tree, and flags a value mismatch.
+  - **Results:**
+    - It flags s69's `0xffff0006` = ITEM_NOT_FOUND at step 162.
+    - It flags s60's `origin=3` = TRUSTED_APP only at 232 (at 231 the `3` was bound to the wrong symbol).
+    - It misses s69's prose "TA side". The all-zero buffer is out of class by construction.
+    - New true flag: s60 211, lead `0xFFFF0006` = BAD_FORMAT.
+  - **Noise:** 3 true vs 31 false flags. Most false flags are adjacency that is not a claim (struct values, code, log
+    labels, misaligned lists), plus suffix matches bound to the wrong namespace. Only 32/2,045 pairs are consistent.
+  - Evidence: `~/evidence/value-claims-check-2026-11-02/RESULTS.md` (`check.py`, `scan.json`, `grades.json`).
 - **C slice 76 (2026-11-02, history-growth bound, offline, $0 metered + $0 GCE): next-action item 5. H76 (a generic
   compaction of tool outputs older than 20 steps saves ≥ 10% of a gate run's wall clock) is inconclusive offline. The
   valid bound (all executor model time after step K) is 16–45% of wall clock in 5/5 runs, so it cannot close the item.
@@ -1084,6 +1097,9 @@ MISSION-STATUS: ACTIVE
      settled by the executor itself.
      Slice 74: the first positive. A session settled the SMC IDs by command and the executor used them. The revision
      misdecode ("0.4") went unchecked, and the run's own check confirmed it.
+     Slice 77: a deterministic symbol↔value lookup (no model) is falsified (strict R 1/4, 31 false flags in 5 runs).
+     Both routes are now closed, the model-side one (71–72) and the code-side one (77). Build no claim checker; keep only
+     the live count of session settling commands in gate runs.
   3. **Attribution:**
      - The `--no-scratch` control is done (slice 73). It reached 5/7 strict vs s69's 4/7, so the verify sessions are
        not shown to be needed.
