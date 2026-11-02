@@ -3,7 +3,7 @@
 Keep this short and current. One entry per decision; newest first. Full detail per slice lives in each entry's
 evidence `RESULTS.md` and in the PR that landed it (`git log`); measured model behaviour in `MODELS.md`.
 
-MISSION-STATUS: ACTIVE
+MISSION-STATUS: PAUSED (founder 2026-11-02: pause the project to evaluate DeepSeek dsh-superagent on the test task; no RESUME-AFTER — resume only on founder instruction)
 
 - **Goal:** work item C (minimal replacement core) aimed at the completion gate. The completion run's only task input is
   `run12/task.txt` verbatim. The sub-goal fixtures (`optee_goal_a/b.json`: decomposition, locations, commands, flags,
