@@ -24,6 +24,19 @@ MISSION-STATUS: ACTIVE
     Slice 70 widens the question with evidence. The same revise-or-drop licence (`FINAL_ASK`) removes a Linux goal
     derived before the trace from the *running* reviews too (3/4 chains by step 12). So the founder's answer decides
     whether any derived goal can be held against the lead's own rewrites.
+- **C slice 76 (2026-11-02, history-growth bound, offline, $0 metered + $0 GCE): next-action item 5. H76 (a generic
+  compaction of tool outputs older than 20 steps saves ≥ 10% of a gate run's wall clock) is inconclusive offline. The
+  valid bound (all executor model time after step K) is 16–45% of wall clock in 5/5 runs, so it cannot close the item.
+  Build nothing.**
+  - **Setup:** s60 s61 s69 s73 s74 traces; tool results rebuilt with core's `_tool_result`; chars → tokens calibrated
+    per run (R² 0.995–0.9998). The latency OLS is exploratory only (provider load and cache state confound it).
+  - **Size:** K=20 removes 34–43% of the late prompt (80–134k of 235–315k tokens). The money upside is small: the
+    bound is ≤ $0.59 of lab time per run, and executor spend is $0.020–0.046 per run.
+  - **Cache cost:** a sliding stub breaks the prompt cache at every step (91–226 breaks per run). Estimated uncached
+    prompt tokens rise 7–9× at K=20. Any replay must test a prefix-stable (block) compaction beside the sliding one.
+  - Exploratory: latency follows output tokens (6–17 s per 1k) more than prompt size (0.01–0.26 s per 1k). The implied
+    saving is 1–19% of wall clock, ≥ 10% only in s61 (R² 0.36).
+  - Evidence: `~/evidence/history-growth-2026-11-02/RESULTS.md` (`scan.py`, `scan.json`).
 - **C slice 75 (2026-11-02, stale-delivery count, offline, $0 metered + $0 GCE): next-action item 4 closed with
   numbers. H75 (stale deliveries make the executor act against the newest review, harmfully) is supported by its
   registered rule, at the bar: E∧C 4/16 (bar ≥ 4), H 1 (bar ≥ 1). But stale deliveries are the lead's most useful output,
@@ -1086,8 +1099,9 @@ MISSION-STATUS: ACTIVE
      threshold), 1 harmful revert (s60 D3), 6/15 stale deliveries feed milestones. Build no drop/defer guard. A guard
      demo, if ever run, must keep all 6 useful deliveries and still flag s60 D3 on the recorded set. With 1 harm in 4
      runs it ranks below work that moves the gate.
-  5. **History growth** (prompts to ~390k tokens, latency 1.5–3× after step 120): measure a generic old-output
-     compaction on the recorded traces before any core change.
+  5. **History growth (slice 76: inconclusive offline):** the valid bound is 16–45% of wall clock, ≤ $0.59 of lab time
+     per run. Only a causal paired replay can settle it: late recorded states, full vs block and sliding compaction,
+     warm cache, full-vs-full control, cap $1. It ranks below work that moves the gate.
   6. **Open, non-blocking:**
      - Goal (b)'s proof bar: is a TA session required, or is an attach with OP-TEE answers (G7) enough?
      - The completion gate also needs item E's held-out comparisons and an unmerged promotion PR to `main`.
