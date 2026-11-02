@@ -593,3 +593,11 @@ strict on the same `conflux/` code).
 - **kimi-k3 lead, first reviews:** substitutes NetBSD for Linux before the executor commits (s73@2, s69@8, s74@15:
   "a firmware-only target to avoid building linux/buildroot").
 - Evidence: `~/evidence/decider-route-demo-2026-11-02/RESULTS.md`.
+
+## `kimi-k3` / `glm-5.3` (low) taking over a stalled executor conversation (C slice 84, offline, s69@162/169/177, n=4 each)
+- **kimi-k3 low and glm-5.3 low, taking over pro's stalled conversation** at s69@162/169/177 (after the `0xffff0006`
+  boots): they edit the driver in 0/12 chains each and do not read OP-TEE's source. Like pro (0/12, 12/12 finish), they package proof
+  and finish in 8/12 chains each; the other 4 each hit the 12-call cap. They also repeat the conversation's misdecode: ITEM_NOT_FOUND in K 6/8 and G 8/8 final reports.
+- In a reconstructed workspace with absent lab files, both spend steps inventorying it, and glm loops on README
+  rewrites (4/12 chains each reach the 12-call cap). pro finishes in 2–7 calls.
+- Evidence: `~/evidence/stall-takeover-s84-2026-11-02/RESULTS.md`.
