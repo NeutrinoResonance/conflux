@@ -15,7 +15,7 @@ MISSION-STATUS: ACTIVE
   gate. Slice 62 shows that false DONE is a spec-derivation gap, not a reviewer-family one. Slice 63: proof criteria derived from
   `task.txt` before the trace stop that false DONE (0/12 vs 3/6), but for goal (b)'s TA-session bar; the derived Linux
   goal is dropped once the reviewer reads the trace. Slice 66: those criteria also reject a run that truly met goal (a)
-  (6/6, both the open and the per-criterion verdict); they over-demand. Slice 67: glm-5.3's short one-shot goal lists (Gl) pass c8 and keep the Linux criterion at s61 when judged per criterion (kimi 4/6, at the derivation ceiling); Slice 68: under core's open finish ask the same Gl lists pass c8 (0/12 false rejects) but the reviewer drops the Linux criterion at s61 in 16/16 L-list reviews (gate reason 0/16; DONE 5/24), so inserting criteria into the open review is not a capability. Slices 60 and 61 drew on a contaminated snapshot (a prior run's `optee.o`), so neither shows the driver from `task.txt` alone. Slice 69 does, on a cleaned lab: G7 by re-execution, but as a loadable module (strict G5 unmet), again with a false DONE. Slice 43's lead-s1 (a demo harness) reached G5 + G7 first, but ended in a false DONE. Slice 70: no gate run has attempted G3 (the Linux boot), because core's step-1 goal list never requires it (live 0/3). kimi-k3's goal-by-goal review of a list writes it in 4/6 draws, but the running reviews drop it again within 6–12 steps (1/4 chains keep it), so changing who writes the first list is not a capability. Slice 71: s69's TA-session stall was not lost when the finish review cancelled a verify session (0/6 continuations deliver; 1/11 dropped sessions had delivered). It comes from an unchecked claim: `0xffff0006` (BAD_PARAMETERS, from OP-TEE's open-session META check) was misdecoded as ITEM_NOT_FOUND by the executor and repeated by every review. Slice 72: the class recurs (4 wrong, load-bearing value readings in s60/s69, 0 checked by a command). Neither a glm reviewer nor a generic claims turn gets the flag to the executor (0/48 final replies); kimi's claims answer names it in 4/12, but the final ask drops it. Slice 73: the same gate without the lead's verify sessions (`--no-scratch`) reaches 5/7 strict, including the first strict G5 (a kernel rebuilt with the driver), with G5–G7 confirmed by re-execution. So the sessions are not shown to be needed (n=1 per arm). It also ends in a false DONE against the gate (G1/G3; n=3). Slice 74 (pair 2, sessions on) reaches 5/7 strict (first G1). Two session deliveries traceably feed G6 (the firmware tree) and G7 (SMC IDs the session settled by compiling the executor's header: the first 2c positive). So the sessions contribute; they are not shown necessary (s73). False DONE again (n=4). Slice 78 (bare pro, no lead, same core and budget) reaches 1/7 strict and false-finishes at step 120, so the lead layer is what moves the task (vs 4–5/7).
+  (6/6, both the open and the per-criterion verdict); they over-demand. Slice 67: glm-5.3's short one-shot goal lists (Gl) pass c8 and keep the Linux criterion at s61 when judged per criterion (kimi 4/6, at the derivation ceiling); Slice 68: under core's open finish ask the same Gl lists pass c8 (0/12 false rejects) but the reviewer drops the Linux criterion at s61 in 16/16 L-list reviews (gate reason 0/16; DONE 5/24), so inserting criteria into the open review is not a capability. Slices 60 and 61 drew on a contaminated snapshot (a prior run's `optee.o`), so neither shows the driver from `task.txt` alone. Slice 69 does, on a cleaned lab: G7 by re-execution, but as a loadable module (strict G5 unmet), again with a false DONE. Slice 43's lead-s1 (a demo harness) reached G5 + G7 first, but ended in a false DONE. Slice 70: no gate run has attempted G3 (the Linux boot), because core's step-1 goal list never requires it (live 0/3). kimi-k3's goal-by-goal review of a list writes it in 4/6 draws, but the running reviews drop it again within 6–12 steps (1/4 chains keep it), so changing who writes the first list is not a capability. Slice 71: s69's TA-session stall was not lost when the finish review cancelled a verify session (0/6 continuations deliver; 1/11 dropped sessions had delivered). It comes from an unchecked claim: `0xffff0006` (BAD_PARAMETERS, from OP-TEE's open-session META check) was misdecoded as ITEM_NOT_FOUND by the executor and repeated by every review. Slice 72: the class recurs (4 wrong, load-bearing value readings in s60/s69, 0 checked by a command). Neither a glm reviewer nor a generic claims turn gets the flag to the executor (0/48 final replies); kimi's claims answer names it in 4/12, but the final ask drops it. Slice 73: the same gate without the lead's verify sessions (`--no-scratch`) reaches 5/7 strict, including the first strict G5 (a kernel rebuilt with the driver), with G5–G7 confirmed by re-execution. So the sessions are not shown to be needed (n=1 per arm). It also ends in a false DONE against the gate (G1/G3; n=3). Slice 74 (pair 2, sessions on) reaches 5/7 strict (first G1). Two session deliveries traceably feed G6 (the firmware tree) and G7 (SMC IDs the session settled by compiling the executor's header: the first 2c positive). So the sessions contribute; they are not shown necessary (s73). False DONE again (n=4). Slice 78 (bare pro, no lead, same core and budget) reaches 1/7 strict and false-finishes at step 120, so the lead layer is what moves the task (vs 4–5/7). Slice 79 (live demo, not core): a separate per-criterion finish check (glm-5.3) on criteria derived from `task.txt` refused all 5 open DONEs for the Linux/xtest criterion. That is the first lead run with no false DONE, at 5/7 strict with G5–G7 re-executed. But G3 was still never attempted: the running lead's revise-or-drop licence outranked the refusal.
   - **Gate reaffirmed (founder, 2026-11-01; 33c99f2 reverted by 82b6d68):** goal (a) includes the Linux boot, so G3 is
     required. That answers slice 60's open question.
   - **Open founder question (asked 2026-11-01 ~13:00Z, unanswered):** may the finish gate use a per-criterion verdict?
@@ -24,6 +24,32 @@ MISSION-STATUS: ACTIVE
     Slice 70 widens the question with evidence. The same revise-or-drop licence (`FINAL_ASK`) removes a Linux goal
     derived before the trace from the *running* reviews too (3/4 chains by step 12). So the founder's answer decides
     whether any derived goal can be held against the lead's own rewrites.
+- **C slice 79 (2026-11-02, live finish-check demo, $0.386376 metered incl. $0.135621 not Conflux + ≈ $2.88 GCE): a
+  per-criterion finish check beside the open finish review, run live from a frozen, patched core (never merged; founder
+  hold). H79 (refusing the false DONE makes the run attempt G3) is falsified by its registered rule. Build nothing.**
+  - **Setup:**
+    - Core 500ad31 + `patch.diff`, run from a frozen copy. When the open review says DONE, glm-5.3 low judges each
+      criterion with slice 66's `S_ASK`. Any UNMET sends its reply to the executor.
+    - The criteria are one glm-5.3 low draw from `task.txt` (slice 63's `DERIVE_ASK`), G1–G8 with L = G4 (Linux +
+      xtest). G6/G7 ask for a TA session.
+    - Otherwise s74's flags, with 320 steps, $2.00, 8 h and lab g9.
+  - **Offline first:** at s74@173 the check refused, but only for G6/G7. It counted G4 MET by substitution ("no
+    Linux+xtest guest was used"). c8's goal-(a) criteria were all MET.
+  - **Live:** ended `lab_deadline` at step 207 (7.98 h).
+    - The open review refused 16 finishes. It said DONE 5× (steps 171–206), and the check refused all 5, each for G4.
+    - In the 36 steps that followed there was **no Linux build or boot**. The open finish reviews called the Linux check
+      "optional", "only if the TA session is done", or a scope limit to disclose. The running lead marked goals
+      "rescinded" and treated TA work as violations.
+    - So the correction reached the executor 5×, and the lead's licence won: slice 68's drop, now live.
+    - Finish reviews ran on the executor's thread: 1.22 h of the 8 h.
+  - **Milestones:** G2 G4 G5 G6 G7 = 5/7 strict, no G1/G3. Strict G5: an OPTEE64 kernel built with an in-tree
+    `sys/arch/arm/optee` driver.
+    - G6/G7 were re-executed before the lab was deleted: OP-TEE 4.4.0-dev → NetBSD OPTEE64, `optee0 at simplebus0`, the
+      API UID.
+    - **No false DONE** (lead runs before: 4/4).
+    - Unchecked (2c class, grading reference): OP-TEE 4.4.0 is printed as "revision 4.0".
+  - Billing: 1,158/1,159 export-matched (one call lost at the deadline, unbilled). Provenance: clean 0, scratch 0.
+  - Evidence: `~/evidence/finish-check-live-s79-2026-11-02/RESULTS.md`.
 - **C slice 78 (2026-11-02, bare-DeepSeek gate arm + zero-check harness fix, $0.022094 metered incl. $0.014481 not
   Conflux + ≈ $0.43 GCE): item E's bare arm on the gate task. H78 (the lead layer moves milestones) is supported by its
   registered rule: bare pro 1/7 strict (bar ≤ 3; lead arms s69 4, s73 5, s74 5). n=1 per arm.**
@@ -1090,6 +1116,9 @@ MISSION-STATUS: ACTIVE
      or init-model variant: that would be the third materially identical failure. The next change of hypothesis needs
      the founder's answer on holding derived goals (question above); slice 72 shows the same final-ask drop for flagged
      claims. Until then, take item 3.
+     Slice 79 adds live evidence: a per-criterion check that refuses every false DONE (5/5, for Linux/xtest)
+     still gets no G3 attempt, because the running lead's licence outranks it. So holding a derived criterion at the
+     finish alone is not enough; the founder question now covers the running reviews too.
   2b. **On hold (open founder question above): no per-criterion verdict in core until MISSION records it.** **False DONE against the gate: hold derived criteria fixed (slice 68).** The open finish review drops Gl's Linux
      criterion 16/16 at s61, but keeps goal (a) correctly at c8 12/12. Per criterion as written, it holds it (slice 67).
      - Next demo: a separate acceptance check beside the open review, which keeps leading (MISSION a7322df). Pre-trace
