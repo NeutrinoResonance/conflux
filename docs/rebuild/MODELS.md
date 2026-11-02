@@ -571,3 +571,14 @@ strict on the same `conflux/` code).
 - 6/15 stale deliveries feed graded milestones (s74's G6 firmware and G7 SMC IDs among them), so age alone does not mark
   a bad delivery.
 - Evidence: `~/evidence/stale-deliveries-2026-11-02/RESULTS.md` (`grades.json`, `tally.json`).
+
+## `deepseek-v4-pro` / `kimi-k3` / `glm-5.3` (low) as the executor after a refused finish (C slice 80, offline, s79@172/176/186, n=6 each)
+- **Setup:** exact recorded executor prompts (365–391k tokens) right after a per-criterion check named an unmet Linux +
+  xtest boot. One next-step draw per model.
+- **No family acts on it:** pro 0/18, kimi-k3 1/18 (borderline), glm-5.3 2/18. All three write "honest scope" READMEs,
+  proof diffs or finish instead.
+- **pro re-calls `finish` at once in 10/18** (6/6 at step 186). kimi does so in 3/18, glm in 0/18.
+- At 186, kimi and glm take the same refusal's TA-session item (4/6, 6/6). That item continues the NetBSD work already
+  in the trace; pro takes it 0/6.
+- Latency at ~370k tokens: 27–190 s per draw. Cost per draw: pro $0.0013, kimi-k3 $0.0009, glm $0.0006.
+- Evidence: `~/evidence/correction-takeover-s80-2026-11-02/RESULTS.md`.
