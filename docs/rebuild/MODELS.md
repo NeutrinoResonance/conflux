@@ -582,3 +582,14 @@ strict on the same `conflux/` code).
   in the trace; pro takes it 0/6.
 - Latency at ~370k tokens: 27–190 s per draw. Cost per draw: pro $0.0013, kimi-k3 $0.0009, glm $0.0006.
 - Evidence: `~/evidence/correction-takeover-s80-2026-11-02/RESULTS.md`.
+
+## `deepseek-v4-pro` + `glm-5.3` as the legacy decider panel at core's early route states (C slice 83, offline, n=4 per state)
+- **Follows the context's framing:** on `DECIDER_PROMPT` with `task.txt` as the goal, the panel picks the full upstream
+  qemu_v8 stack in 2/20 draws (pro member 2/20, glm member 0/17), core's pro executor in 1/20. All hits are at s73@6,
+  before any route commitment. Run 12's same pair kept the stack whole when its context had no NetBSD-as-BL33 steer.
+- **glm-5.3 (provider-default effort) excludes Linux outright** once the manifest is synced: "NOT linux/buildroot",
+  "skipping linux/buildroot/qemu" (s74, 4/7 answers). It also timed out at 1800 s on both attempts in 3/20 members
+  (s74, 44–60k-char prompts).
+- **kimi-k3 lead, first reviews:** substitutes NetBSD for Linux before the executor commits (s73@2, s69@8, s74@15:
+  "a firmware-only target to avoid building linux/buildroot").
+- Evidence: `~/evidence/decider-route-demo-2026-11-02/RESULTS.md`.
